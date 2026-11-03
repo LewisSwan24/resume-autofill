@@ -1,0 +1,379 @@
+/* Options page styles: compact, neutral, no UI library. */
+:root {
+  --raf-bg: #f4f5f7;
+  --raf-card: #fff;
+  --raf-border: #d9dde3;
+  --raf-text: #1f2430;
+  --raf-muted: #6b7280;
+  --raf-accent: #2563eb;
+  --raf-danger: #c62828;
+  --raf-ok: #1b7f3b;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--raf-bg);
+  color: var(--raf-text);
+  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+h1 {
+  margin: 0;
+  font-size: 16px;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.raf-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--raf-card);
+  border-bottom: 1px solid var(--raf-border);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.raf-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--raf-muted);
+  min-height: 1em;
+}
+.raf-status.is-saved {
+  color: var(--raf-ok);
+}
+.raf-status.is-invalid,
+.raf-status.is-error {
+  color: var(--raf-danger);
+}
+
+.raf-body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 16px 32px;
+  align-items: start;
+}
+.raf-body-single {
+  grid-template-columns: minmax(0, 560px);
+}
+
+.raf-side,
+.raf-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.raf-card {
+  background: var(--raf-card);
+  border: 1px solid var(--raf-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.raf-pad {
+  padding: 16px;
+}
+
+.raf-muted {
+  color: var(--raf-muted);
+}
+.raf-error {
+  color: var(--raf-danger);
+}
+.raf-ok {
+  color: var(--raf-ok);
+}
+
+/* ------------------------------------------------------------- controls */
+
+input[type='text'],
+input[type='number'],
+input[type='date'],
+input[type='month'],
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--raf-border);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+textarea {
+  resize: vertical;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--raf-accent) 40%, transparent);
+  border-color: var(--raf-accent);
+}
+input:disabled,
+select:disabled {
+  background: #f0f1f3;
+  color: var(--raf-muted);
+}
+
+button,
+.raf-button {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--raf-border);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled),
+.raf-button:hover {
+  border-color: var(--raf-accent);
+  color: var(--raf-accent);
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+button.raf-primary {
+  background: var(--raf-accent);
+  border-color: var(--raf-accent);
+  color: #fff;
+}
+button.raf-primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(1.08);
+}
+button.raf-danger,
+.raf-danger {
+  color: var(--raf-danger);
+}
+button.raf-danger:hover:not(:disabled) {
+  border-color: var(--raf-danger);
+  color: var(--raf-danger);
+}
+
+.raf-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.raf-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- resume list */
+
+.raf-resumes {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.raf-resume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+}
+.raf-resume.is-selected {
+  border-color: var(--raf-accent);
+  background: color-mix(in srgb, var(--raf-accent) 8%, #fff);
+}
+.raf-resume-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.raf-badge {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #eceff3;
+  color: var(--raf-muted);
+  font-size: 11px;
+}
+.raf-badge-active {
+  background: #fff4d6;
+  color: #8a5a00;
+}
+.raf-new {
+  display: flex;
+  gap: 6px;
+}
+.raf-new select {
+  flex: 1;
+}
+
+.raf-side .raf-field {
+  margin-bottom: 6px;
+}
+
+/* ------------------------------------------------------------- editor header */
+
+.raf-resume-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.raf-grow {
+  flex: 1 1 200px;
+}
+.raf-actions {
+  margin-left: auto;
+}
+
+.raf-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.raf-tabs button {
+  border-radius: 14px;
+  padding: 2px 10px;
+}
+.raf-tabs button.is-selected {
+  background: var(--raf-accent);
+  border-color: var(--raf-accent);
+  color: #fff;
+}
+.raf-count {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 12%);
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------- fields */
+
+.raf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px 12px;
+}
+.raf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.raf-wide {
+  grid-column: 1 / -1;
+}
+.raf-label {
+  font-size: 12px;
+  color: var(--raf-muted);
+  padding: 0;
+}
+.raf-invalid input,
+.raf-invalid select,
+.raf-invalid textarea {
+  border-color: var(--raf-danger);
+}
+.raf-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.raf-region {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------- repeatable entries */
+
+.raf-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.raf-entry {
+  border: 1px solid var(--raf-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafbfc;
+}
+.raf-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.raf-entry-summary {
+  flex: 1;
+  color: var(--raf-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.raf-entry-actions {
+  display: flex;
+  gap: 4px;
+}
+.raf-entry-actions button {
+  padding: 1px 8px;
+}
+.raf-add {
+  align-self: flex-start;
+}
+
+/* ------------------------------------------------------------- attachments */
+
+.raf-attachments {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.raf-attach {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.raf-attach-actions {
+  display: flex;
+  gap: 6px;
+}
+.raf-attach-error {
+  grid-column: 2 / -1;
+}
+
+@media (max-width: 760px) {
+  .raf-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

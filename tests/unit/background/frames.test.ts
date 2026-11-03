@@ -1,0 +1,108 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { FrameTimeoutError, collectFrameReports, listFrameIds, withTimeout } from '../../../src/background/frames';
+import type { FillReport } from '../../../src/engine/types';
+import { emptyCounts } from '../../../src/fill/report';
+
+const rep = (url: string): FillReport => ({ url, startedAt: 1, finishedAt: 2, fields: [], counts: emptyCounts() });
+
+describe('listFrameIds', () => {
+  it('puts the top frame first, sorts the rest and drops frames that failed to load', async () => {
+    const ids = await listFrameIds(1, async () => [
+      { frameId: 5 },
+      { frameId: 2, errorOccurred: true },
+      { frameId: 0 },
+      { frameId: 3 },
+      { frameId: 3 },
+    ]);
+    expect(ids).toEqual([0, 3, 5]);
+  });
+
+  it('falls back to the top frame when the frame list is unavailable', async () => {
+    expect(await listFrameIds(1, async () => undefined)).toEqual([0]);
+    expect(await listFrameIds(1, async () => null)).toEqual([0]);
+    expect(await listFrameIds(1, async () => Promise.reject(new Error('no tab')))).toEqual([0]);
+  });
+
+  it('reads webNavigation.getAllFrames by default', async () => {
+    const spy = vi
+      .spyOn(fakeBrowser.webNavigation, 'getAllFrames')
+      .mockResolvedValue([{ frameId: 1 }, { frameId: 0 }] as never);
+    expect(await listFrameIds(42)).toEqual([0, 1]);
+    expect(spy).toHaveBeenCalledWith({ tabId: 42 });
+    spy.mockRestore();
+  });
+});
+
+describe('collectFrameReports', () => {
+  it('asks frames one after another in the given order', async () => {
+    const log: string[] = [];
+    const send = async (frameId: number) => {
+      log.push(`start ${frameId}`);
+      await new Promise((r) => setTimeout(r, frameId === 0 ? 20 : 1));
+      log.push(`end ${frameId}`);
+      return rep(`f${frameId}`);
+    };
+    const parts = await collectFrameReports([0, 2, 5], send);
+    expect(log).toEqual(['start 0', 'end 0', 'start 2', 'end 2', 'start 5', 'end 5']);
+    expect(parts.map((p) => p.frameId)).toEqual([0, 2, 5]);
+  });
+
+  it('skips frames that reject (no content script) or answer garbage, and reports why', async () => {
+    const skipped: number[] = [];
+    const parts = await collectFrameReports(
+      [0, 1, 2, 3],
+      async (frameId) => {
+        if (frameId === 1) throw new Error('Could not establish connection. Receiving end does not exist.');
+        if (frameId === 2) return undefined;
+        return rep(`f${frameId}`);
+      },
+      { onSkip: (id) => skipped.push(id) },
+    );
+    expect(parts.map((p) => p.frameId)).toEqual([0, 3]);
+    expect(skipped).toEqual([1, 2]);
+  });
+
+  it('survives a synchronous throw inside send', async () => {
+    const parts = await collectFrameReports([0, 1], (frameId) => {
+      if (frameId === 0) throw new Error('boom');
+      return Promise.resolve(rep('ok'));
+    });
+    expect(parts.map((p) => p.frameId)).toEqual([1]);
+  });
+
+  describe('timeout', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('gives up on a silent frame after the per-frame timeout and continues', async () => {
+      const skipped: unknown[] = [];
+      const pending = collectFrameReports(
+        [0, 1],
+        (frameId) => (frameId === 0 ? new Promise(() => undefined) : Promise.resolve(rep('f1'))),
+        { onSkip: (_id, reason) => skipped.push(reason) },
+      );
+      await vi.advanceTimersByTimeAsync(29_999);
+      let settled = false;
+      void pending.then(() => (settled = true));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const parts = await pending;
+      expect(parts.map((p) => p.frameId)).toEqual([1]);
+      expect(skipped[0]).toBeInstanceOf(FrameTimeoutError);
+    });
+  });
+});
+
+describe('withTimeout', () => {
+  it('passes the value through and clears its timer', async () => {
+    vi.useFakeTimers();
+    try {
+      await expect(withTimeout(Promise.resolve(7), 1000)).resolves.toBe(7);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

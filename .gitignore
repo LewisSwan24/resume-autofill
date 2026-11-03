@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.output/
+test-results/
+playwright-report/
+*.log
+# Competitor extension code: local study only, never commit
+research/offerlink-raw/
+research/offerlink-pretty/
+research/tools/
+# Captured live pages may contain personal data
+fixtures/captured/**/private/
+.env
+
+# WXT / test artefacts
+.wxt/
+fixtures/synthetic/dist/
+fixtures/captured/
+
+# In-page driver test harness bundle (tests/drivers/harness)
+tests/drivers/harness/dist/

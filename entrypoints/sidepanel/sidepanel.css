@@ -1,0 +1,316 @@
+/*
+ * Side panel styles.
+ * Every colour, font, radius, spacing, shadow and size lives in a `--raf-*` custom property defined once
+ * in `:root` below (neutral placeholders; a design system replaces the values only). Rules below must not
+ * contain literal colours, font names, lengths (other than 0) or shadows.
+ * Names shared with the options page: bg, card, border, text, muted, accent, danger, ok.
+ */
+:root {
+  /* colour */
+  --raf-bg: #f4f5f7;
+  --raf-card: #fff;
+  --raf-border: #d9dde3;
+  --raf-text: #1f2430;
+  --raf-muted: #6b7280;
+  --raf-accent: #2563eb;
+  --raf-danger: #c62828;
+  --raf-ok: #1b7f3b;
+  --raf-warning: #b26a00;
+  --raf-on-accent: #fff;
+  --raf-input-bg: #fff;
+  --raf-row-hover-bg: #eef2fb;
+  --raf-row-actions-bg: #fafbfc;
+  /* share of the tone colour mixed into chip / pressed-filter backgrounds */
+  --raf-tint: 14%;
+  --raf-focus-ring-alpha: 40%;
+  --raf-disabled-opacity: 0.5;
+  --raf-secondary-opacity: 0.7;
+  --raf-hover-brightness: 1.08;
+
+  /* typography */
+  --raf-font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --raf-font-size: 13px;
+  --raf-font-size-sm: 11px;
+  --raf-font-size-lg: 16px;
+  --raf-line-height: 1.45;
+  --raf-weight-strong: 600;
+
+  /* shape and spacing */
+  --raf-radius-sm: 4px;
+  --raf-radius-md: 6px;
+  --raf-radius-pill: 999px;
+  --raf-border-width: 1px;
+  --raf-focus-ring-width: 2px;
+  --raf-space-1: 4px;
+  --raf-space-2: 8px;
+  --raf-space-3: 12px;
+  --raf-space-4: 16px;
+  --raf-shadow-header: 0 1px 2px rgb(0 0 0 / 6%);
+
+  /* sizes */
+  --raf-cell-pad-y: 6px;
+  --raf-cell-pad-x: 6px;
+  --raf-col-label-min-width: 6em;
+  --raf-col-confidence-width: 4.5em;
+  --raf-icon-button-size: 22px;
+  --raf-edit-input-basis: 8em;
+  --raf-z-header: 2;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--raf-bg);
+  color: var(--raf-text);
+  font: var(--raf-font-size) / var(--raf-line-height) var(--raf-font);
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--raf-font-size-lg);
+}
+
+.raf-muted {
+  color: var(--raf-muted);
+}
+.raf-error {
+  color: var(--raf-danger);
+}
+.raf-ok {
+  color: var(--raf-ok);
+}
+.raf-pad {
+  padding: var(--raf-space-4);
+}
+
+/* ------------------------------------------------------------- controls */
+
+select,
+input[type='text'] {
+  width: 100%;
+  min-width: 0;
+  padding: var(--raf-space-1) var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-border);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-input-bg);
+  color: inherit;
+  font: inherit;
+}
+select:focus,
+input:focus,
+button:focus-visible,
+.raf-row-data:focus-visible {
+  outline: var(--raf-focus-ring-width) solid color-mix(in srgb, var(--raf-accent) var(--raf-focus-ring-alpha), transparent);
+  border-color: var(--raf-accent);
+}
+
+button {
+  display: inline-block;
+  padding: var(--raf-space-1) var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-border);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  border-color: var(--raf-accent);
+  color: var(--raf-accent);
+}
+button:disabled {
+  cursor: default;
+  opacity: var(--raf-disabled-opacity);
+}
+button.raf-primary {
+  background: var(--raf-accent);
+  border-color: var(--raf-accent);
+  color: var(--raf-on-accent);
+}
+button.raf-primary:hover:not(:disabled) {
+  color: var(--raf-on-accent);
+  filter: brightness(var(--raf-hover-brightness));
+}
+
+/* ------------------------------------------------------------- layout */
+
+.raf-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--raf-z-header);
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-3) var(--raf-space-4);
+  background: var(--raf-card);
+  border-bottom: var(--raf-border-width) solid var(--raf-border);
+  box-shadow: var(--raf-shadow-header);
+}
+.raf-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-3) var(--raf-space-2) var(--raf-space-4);
+}
+.raf-summary {
+  margin: 0;
+  padding: 0 var(--raf-space-1);
+}
+.raf-empty {
+  text-align: center;
+}
+
+.raf-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-1);
+  min-width: 0;
+}
+.raf-label {
+  font-size: var(--raf-font-size-sm);
+  color: var(--raf-muted);
+}
+
+/* ------------------------------------------------------------- filters */
+
+.raf-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raf-space-1);
+}
+.raf-filter {
+  border-radius: var(--raf-radius-pill);
+  padding: 0 var(--raf-space-2);
+}
+.raf-filter[aria-pressed='true'] {
+  background: var(--raf-accent);
+  border-color: var(--raf-accent);
+  color: var(--raf-on-accent);
+}
+.raf-filter-success[aria-pressed='true'] {
+  background: var(--raf-ok);
+  border-color: var(--raf-ok);
+}
+.raf-filter-warning[aria-pressed='true'] {
+  background: var(--raf-warning);
+  border-color: var(--raf-warning);
+}
+.raf-filter-danger[aria-pressed='true'] {
+  background: var(--raf-danger);
+  border-color: var(--raf-danger);
+}
+.raf-filter-muted[aria-pressed='true'] {
+  background: var(--raf-muted);
+  border-color: var(--raf-muted);
+}
+.raf-count {
+  margin-left: var(--raf-space-1);
+  font-size: var(--raf-font-size-sm);
+  opacity: var(--raf-secondary-opacity);
+}
+
+/* ------------------------------------------------------------- table */
+
+.raf-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  background: var(--raf-card);
+  border: var(--raf-border-width) solid var(--raf-border);
+  border-radius: var(--raf-radius-md);
+}
+.raf-table th {
+  white-space: nowrap;
+  text-align: left;
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-weight-strong);
+  color: var(--raf-muted);
+}
+.raf-table th,
+.raf-table td {
+  padding: var(--raf-cell-pad-y) var(--raf-cell-pad-x);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.raf-row-data {
+  cursor: pointer;
+  border-top: var(--raf-border-width) solid var(--raf-border);
+}
+.raf-row-data:hover {
+  background: var(--raf-row-hover-bg);
+}
+.raf-row-actions {
+  background: var(--raf-row-actions-bg);
+}
+.raf-table .raf-cell-label {
+  min-width: var(--raf-col-label-min-width);
+  font-weight: var(--raf-weight-strong);
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.raf-source {
+  margin-top: var(--raf-space-1);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height);
+}
+.raf-cell-confidence {
+  width: var(--raf-col-confidence-width);
+  white-space: nowrap;
+}
+.raf-cell-status {
+  width: 1%;
+  white-space: nowrap;
+}
+.raf-icon-button {
+  min-width: var(--raf-icon-button-size);
+  height: var(--raf-icon-button-size);
+  padding: 0;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* ------------------------------------------------------------- status chips */
+
+.raf-chip {
+  display: inline-block;
+  padding: 0 var(--raf-space-2);
+  border-radius: var(--raf-radius-pill);
+  font-size: var(--raf-font-size-sm);
+  white-space: nowrap;
+  --raf-chip-color: var(--raf-muted);
+  color: var(--raf-chip-color);
+  background: color-mix(in srgb, var(--raf-chip-color) var(--raf-tint), transparent);
+}
+.raf-chip-success {
+  --raf-chip-color: var(--raf-ok);
+}
+.raf-chip-warning {
+  --raf-chip-color: var(--raf-warning);
+}
+.raf-chip-danger {
+  --raf-chip-color: var(--raf-danger);
+}
+.raf-chip-muted {
+  --raf-chip-color: var(--raf-muted);
+}
+
+/* ------------------------------------------------------------- action row */
+
+.raf-candidates,
+.raf-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--raf-space-1);
+}
+.raf-candidates + .raf-edit {
+  margin-top: var(--raf-space-1);
+}
+.raf-edit input {
+  flex: 1 1 var(--raf-edit-input-basis);
+}

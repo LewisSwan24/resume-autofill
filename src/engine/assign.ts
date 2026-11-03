@@ -1,0 +1,80 @@
+// Global assignment: within one scope (repeated card, or section for ungrouped fields) a field key goes
+// to at most one control. Greedy by descending confidence; losers fall back to their next candidate.
+import type { FieldScores, ScoredCandidate } from './classify';
+import type { Classification, FieldContext, FieldKey, SectionKey } from './types';
+
+/**
+ * Keys that may legitimately be mapped by several controls of one scope:
+ * contact.email (confirm-email field) and education.degree (forms ask for both 学历 and 学位).
+ */
+export const ALLOW_DUPLICATE_KEYS: ReadonlySet<FieldKey> = new Set(['contact.email', 'education.degree']);
+
+/** Confidence ceiling of a fallback assignment (the best key went to another control). */
+const FALLBACK_CAP = 0.7;
+
+/** Candidates below this never become a classification's key. */
+const DEFAULT_MIN_CONFIDENCE = 0.5;
+
+/** Scope in which keys must be unique. */
+export function scopeKey(ctx: FieldContext, section: SectionKey | null): string {
+  return ctx.group ? `g:${ctx.group.key}#${ctx.group.index}` : `s:${section ?? ''}`;
+}
+
+const topThree = (cands: ScoredCandidate[]) =>
+  cands.slice(0, 3).map((c) => ({ fieldKey: c.fieldKey, confidence: c.confidence }));
+
+export function assign(
+  contexts: FieldContext[],
+  scores: FieldScores[],
+  sections: (SectionKey | null)[],
+  minConfidence: number = DEFAULT_MIN_CONFIDENCE,
+): Classification[] {
+  const out: Classification[] = contexts.map((_, i) => {
+    const s = scores[i]!;
+    const section = sections[i] ?? null;
+    if (s.neverFill) return { fieldKey: null, confidence: 1, section, candidates: [], reason: 'never_fill' };
+    return { fieldKey: null, confidence: s.candidates[0]?.confidence ?? 0, section, candidates: topThree(s.candidates) };
+  });
+
+  interface Claim {
+    index: number;
+    cand: ScoredCandidate;
+    scope: string;
+  }
+  const claims: Claim[] = [];
+  contexts.forEach((ctx, index) => {
+    const s = scores[index]!;
+    if (s.neverFill) return;
+    const scope = scopeKey(ctx, sections[index] ?? null);
+    for (const cand of s.candidates) if (cand.confidence >= minConfidence) claims.push({ index, cand, scope });
+  });
+
+  // Highest confidence first, then stronger evidence, then document order. Because every control
+  // lists its candidates by descending confidence, the first claim a control wins is its best free one.
+  claims.sort(
+    (a, b) => b.cand.confidence - a.cand.confidence ||
+      b.cand.score - a.cand.score ||
+      b.cand.weight - a.cand.weight ||
+      a.index - b.index,
+  );
+
+  const assigned = new Set<number>();
+  const taken = new Map<string, Set<FieldKey>>();
+  for (const { index, cand, scope } of claims) {
+    if (assigned.has(index)) continue;
+    let keys = taken.get(scope);
+    if (!keys) taken.set(scope, (keys = new Set()));
+    if (keys.has(cand.fieldKey) && !ALLOW_DUPLICATE_KEYS.has(cand.fieldKey)) continue;
+    keys.add(cand.fieldKey);
+    assigned.add(index);
+    out[index]!.fieldKey = cand.fieldKey;
+    // A control that lost its best key settles for a weaker guess: never above the review band.
+    out[index]!.confidence = cand === scores[index]!.candidates[0] ? cand.confidence : Math.min(cand.confidence, FALLBACK_CAP);
+  }
+  // Controls that had plausible candidates but lost every one of them to a better control.
+  for (const claim of claims) {
+    const c = out[claim.index]!;
+    if (!assigned.has(claim.index) && !c.reason) c.reason = 'key_taken';
+  }
+  return out;
+}

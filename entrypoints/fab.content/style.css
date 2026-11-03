@@ -1,0 +1,434 @@
+/*
+ * FAB + summary card styles. Injected into the closed shadow root only (`cssInjectionMode: 'ui'`).
+ *
+ * Design-system contract: every colour, font, radius, spacing, shadow, z-index and size is a
+ * `--raf-*` custom property declared ONCE in the `:host` block below. The values are neutral
+ * placeholders; swap them (or override from the design system) without touching the rules.
+ *
+ * Geometry contract (relied on by e2e): the host box is exactly the FAB button while the card is
+ * closed or open, because the card is absolutely positioned relative to the button wrapper.
+ * So the main button's centre == the host's bounding-box centre. Click the host's centre.
+ */
+:host {
+  /* Reset everything inheritable from the page (we do not use WXT's reset: see index.tsx). */
+  all: initial;
+
+  /* ---- colour ---- */
+  --raf-color-bg: #f6f7f9;
+  --raf-color-surface: #ffffff;
+  --raf-color-surface-hover: #f0f2f5;
+  --raf-color-text: #1f2329;
+  --raf-color-text-muted: #6b7280;
+  --raf-color-primary: #2f6fed;
+  --raf-color-primary-hover: #245bd0;
+  --raf-color-primary-text: #ffffff;
+  --raf-color-border: #e1e4ea;
+  --raf-color-success: #1a9d5b;
+  --raf-color-warning: #c77a00;
+  --raf-color-danger: #d23a3a;
+  --raf-color-focus: #7aa5ff;
+  /* Share of a semantic colour mixed into transparent for soft chip/tag backgrounds. */
+  --raf-tint-strength: 14%;
+  --raf-opacity-muted: 0.72;
+  --raf-opacity-disabled: 0.85;
+
+  /* ---- typography ---- */
+  --raf-font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --raf-font-size-xs: 11px;
+  --raf-font-size-sm: 12px;
+  --raf-font-size-md: 14px;
+  --raf-font-weight-regular: 400;
+  --raf-font-weight-medium: 600;
+  --raf-line-height: 1.4;
+
+  /* ---- shape ---- */
+  --raf-radius-sm: 6px;
+  --raf-radius-md: 10px;
+  --raf-radius-lg: 14px;
+  --raf-radius-pill: 999px;
+  --raf-border-width: 1px;
+  --raf-focus-ring-width: 2px;
+  --raf-focus-ring-offset: 2px;
+
+  /* ---- spacing (4px scale) ---- */
+  --raf-space-1: 4px;
+  --raf-space-2: 8px;
+  --raf-space-3: 12px;
+  --raf-space-4: 16px;
+  --raf-space-5: 20px;
+  --raf-space-6: 24px;
+
+  /* ---- elevation ---- */
+  --raf-shadow-1: 0 1px 2px rgb(16 24 40 / 12%), 0 1px 3px rgb(16 24 40 / 10%);
+  --raf-shadow-2: 0 8px 24px rgb(16 24 40 / 18%), 0 2px 6px rgb(16 24 40 / 12%);
+
+  /* ---- layer + placement + sizes ---- */
+  --raf-z-index: 2147483647;
+  --raf-fab-offset-x: 24px;
+  --raf-fab-offset-y: 24px;
+  --raf-fab-height: 44px;
+  --raf-icon-size: 28px;
+  --raf-glyph-size: 16px;
+  --raf-spinner-width: 2px;
+  --raf-card-width: 320px;
+  --raf-card-max-height: 70vh;
+  --raf-card-list-max-height: 220px;
+  --raf-card-gap: 8px;
+  --raf-tap-size: 28px;
+  --raf-motion-duration: 140ms;
+  --raf-spinner-duration: 800ms;
+
+  /* ---- host placement (important: beats page styles targeting unknown elements) ---- */
+  display: block !important;
+  position: fixed !important;
+  right: var(--raf-fab-offset-x) !important;
+  bottom: var(--raf-fab-offset-y) !important;
+  z-index: var(--raf-z-index) !important;
+  width: max-content !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.raf-root {
+  position: relative;
+  display: block;
+  color: var(--raf-color-text);
+  font-family: var(--raf-font-sans);
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-regular);
+  line-height: var(--raf-line-height);
+  text-align: start;
+  -webkit-font-smoothing: antialiased;
+}
+
+.raf-root *,
+.raf-root *::before,
+.raf-root *::after {
+  box-sizing: border-box;
+}
+
+.raf-root button {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.raf-root button:focus-visible {
+  outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
+  outline-offset: var(--raf-focus-ring-offset);
+}
+
+/* ------------------------------------------------------------------ FAB pill */
+
+.raf-fab {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-2);
+  height: var(--raf-fab-height);
+  padding: 0 var(--raf-space-4) 0 var(--raf-space-2);
+  border: 0;
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
+  box-shadow: var(--raf-shadow-2);
+  white-space: nowrap;
+  transition: background-color var(--raf-motion-duration) ease, opacity var(--raf-motion-duration) ease;
+}
+
+.raf-fab:hover:not(:disabled) {
+  background: var(--raf-color-primary-hover);
+}
+
+.raf-fab:disabled {
+  cursor: progress;
+  opacity: var(--raf-opacity-disabled);
+}
+
+/* Nothing detected: stay visible but recede. */
+.raf-fab[data-muted='true'] {
+  opacity: var(--raf-opacity-muted);
+}
+
+.raf-fab[data-muted='true']:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.raf-fab__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--raf-icon-size);
+  height: var(--raf-icon-size);
+  border-radius: var(--raf-radius-pill);
+  background: color-mix(in srgb, var(--raf-color-primary-text) 22%, transparent);
+}
+
+.raf-fab__glyph {
+  width: var(--raf-glyph-size);
+  height: var(--raf-glyph-size);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.raf-spinner {
+  width: var(--raf-glyph-size);
+  height: var(--raf-glyph-size);
+  border: var(--raf-spinner-width) solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: var(--raf-radius-pill);
+  animation: raf-spin var(--raf-spinner-duration) linear infinite;
+}
+
+@keyframes raf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.raf-fab__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.raf-fab__title {
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-medium);
+  line-height: var(--raf-line-height);
+}
+
+.raf-fab__sub {
+  font-size: var(--raf-font-size-xs);
+  line-height: var(--raf-line-height);
+  opacity: var(--raf-opacity-muted);
+}
+
+/* ------------------------------------------------------------------ card */
+
+.raf-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--raf-card-gap));
+  display: flex;
+  flex-direction: column;
+  width: var(--raf-card-width);
+  max-height: var(--raf-card-max-height);
+  overflow: hidden;
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-lg);
+  background: var(--raf-color-surface);
+  box-shadow: var(--raf-shadow-2);
+}
+
+.raf-card[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--raf-color-danger) 45%, var(--raf-color-border));
+}
+
+.raf-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-3) var(--raf-space-3) var(--raf-space-2) var(--raf-space-4);
+}
+
+.raf-card__title {
+  margin: 0;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-medium);
+}
+
+.raf-icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--raf-tap-size);
+  height: var(--raf-tap-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--raf-radius-sm);
+  background: transparent;
+  color: var(--raf-color-text-muted);
+}
+
+.raf-icon-button:hover {
+  background: var(--raf-color-surface-hover);
+  color: var(--raf-color-text);
+}
+
+.raf-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--raf-space-1) var(--raf-space-2);
+  padding: 0 var(--raf-space-4) var(--raf-space-3);
+  font-size: var(--raf-font-size-sm);
+}
+
+.raf-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raf-space-1);
+  font-weight: var(--raf-font-weight-medium);
+  white-space: nowrap;
+}
+
+.raf-stat[data-tone='success'] {
+  color: var(--raf-color-success);
+}
+
+.raf-stat[data-tone='warning'] {
+  color: var(--raf-color-warning);
+}
+
+.raf-stat[data-tone='danger'] {
+  color: var(--raf-color-danger);
+}
+
+.raf-stat[data-tone='muted'] {
+  color: var(--raf-color-text-muted);
+  font-weight: var(--raf-font-weight-regular);
+}
+
+.raf-stat__sep {
+  color: var(--raf-color-text-muted);
+}
+
+.raf-card__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: var(--raf-border-width) solid var(--raf-color-border);
+  background: var(--raf-color-bg);
+}
+
+.raf-card__message {
+  margin: 0;
+  padding: var(--raf-space-3) var(--raf-space-4);
+  font-size: var(--raf-font-size-sm);
+  color: var(--raf-color-text-muted);
+}
+
+.raf-card__message[data-tone='danger'] {
+  color: var(--raf-color-danger);
+}
+
+.raf-card__list-title {
+  margin: 0;
+  padding: var(--raf-space-2) var(--raf-space-4) var(--raf-space-1);
+  font-size: var(--raf-font-size-xs);
+  font-weight: var(--raf-font-weight-medium);
+  color: var(--raf-color-text-muted);
+}
+
+.raf-list {
+  max-height: var(--raf-card-list-max-height);
+  margin: 0;
+  padding: 0 var(--raf-space-2) var(--raf-space-2);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.raf-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+  width: 100%;
+  padding: var(--raf-space-1) var(--raf-space-2);
+  min-height: var(--raf-tap-size);
+  border: 0;
+  border-radius: var(--raf-radius-sm);
+  background: transparent;
+  font-size: var(--raf-font-size-sm);
+}
+
+.raf-item:hover {
+  background: var(--raf-color-surface-hover);
+}
+
+.raf-item__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raf-item__label[data-empty='true'] {
+  color: var(--raf-color-text-muted);
+  font-style: italic;
+}
+
+.raf-tag {
+  flex: none;
+  padding: 0 var(--raf-space-2);
+  border-radius: var(--raf-radius-pill);
+  font-size: var(--raf-font-size-xs);
+  line-height: calc(var(--raf-font-size-xs) * 1.6);
+  color: var(--raf-color-text-muted);
+  background: color-mix(in srgb, var(--raf-color-text-muted) var(--raf-tint-strength), transparent);
+}
+
+.raf-tag[data-tone='warning'] {
+  color: var(--raf-color-warning);
+  background: color-mix(in srgb, var(--raf-color-warning) var(--raf-tint-strength), transparent);
+}
+
+.raf-tag[data-tone='danger'] {
+  color: var(--raf-color-danger);
+  background: color-mix(in srgb, var(--raf-color-danger) var(--raf-tint-strength), transparent);
+}
+
+.raf-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-3) var(--raf-space-4);
+  border-top: var(--raf-border-width) solid var(--raf-color-border);
+  background: var(--raf-color-surface);
+}
+
+.raf-button {
+  flex: 1 1 auto;
+  padding: var(--raf-space-2) var(--raf-space-3);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  background: var(--raf-color-surface);
+  color: var(--raf-color-text);
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-medium);
+  text-align: center;
+  transition: background-color var(--raf-motion-duration) ease;
+}
+
+.raf-button:hover {
+  background: var(--raf-color-surface-hover);
+}
+
+.raf-button[data-variant='primary'] {
+  border-color: transparent;
+  background: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
+}
+
+.raf-button[data-variant='primary']:hover {
+  background: var(--raf-color-primary-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raf-spinner {
+    animation-duration: calc(var(--raf-spinner-duration) * 3);
+  }
+
+  .raf-fab,
+  .raf-button {
+    transition: none;
+  }
+}

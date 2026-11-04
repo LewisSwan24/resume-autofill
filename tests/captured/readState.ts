@@ -8,6 +8,8 @@ export type Locators = Record<string, string>;
 
 /** A selector with this prefix only has to match some element: see `CapturedField.exists`. */
 const EXISTS_PREFIX = 'exists:';
+/** A selector with this prefix reads the text of everything it matches: see `__entries`. */
+const ENTRIES_PREFIX = 'entries:';
 
 export function locatorsOf(expected: CapturedExpected): Locators {
   const out: Locators = {};
@@ -15,6 +17,7 @@ export function locatorsOf(expected: CapturedExpected): Locators {
   for (const [label, g] of Object.entries(expected.__knownGaps ?? {})) out[label] = g.selector;
   for (const [label, r] of Object.entries(expected.__review ?? {})) out[label] = r.selector;
   for (const [label, r] of Object.entries(expected.__leaveEmpty ?? {})) out[label] = r.selector;
+  for (const [label, e] of Object.entries(expected.__entries ?? {})) out[label] = `${ENTRIES_PREFIX}${e.selector}`;
   return out;
 }
 
@@ -104,6 +107,11 @@ export function inspectInPage(locators: Locators): Inspection {
   for (const [label, selector] of Object.entries(locators)) {
     if (selector.startsWith('exists:')) {
       readings[label] = queryAll(selector.slice('exists:'.length)).length > 0;
+      coverage[label] = [];
+      continue;
+    }
+    if (selector.startsWith('entries:')) {
+      readings[label] = queryAll(selector.slice('entries:'.length)).map((el) => squash(el.textContent));
       coverage[label] = [];
       continue;
     }

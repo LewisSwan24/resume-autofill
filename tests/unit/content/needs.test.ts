@@ -97,3 +97,15 @@ describe('frame handlers: needs()', () => {
     expect(computeNeeds).toHaveBeenCalledWith(document, idFor);
   });
 });
+
+describe('computeFrameNeeds, a section filled through an editor', () => {
+  it('asks for the entries of a section with no fields on the page yet', () => {
+    document.body.innerHTML = `<div data-ui="careers-page-content">
+      <div data-ui="education"><p>Education</p><button type="button" data-ui="add-section">+ Add</button><ul></ul></div>
+    </div>`;
+    const needs = computeFrameNeeds(document);
+    expect(needs.repeatSections).toContain('education');
+    expect(needs.fieldKeys).toEqual(expect.arrayContaining(['education.school', 'education.degree', 'education.startDate']));
+    expect(needs.fieldKeys).not.toContain('work.company');
+  });
+});

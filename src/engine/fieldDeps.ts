@@ -113,6 +113,8 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'contact.addressCity': ['contact.addressCountry', 'contact.addressProvince'],
   // A short form means different things in different countries (placeSpellings in the dictionary).
   'contact.addressProvince': ['contact.addressCountry'],
+  // Several places share a code, and the country of the address settles which one.
+  'contact.phoneCountryCode': ['contact.addressCountry'],
   'contact.phoneFull': ['contact.phone', 'contact.phoneCountryCode'],
   'contact.addressFull': ADDRESS_KEYS,
   'education.endDate': ['education.current'],

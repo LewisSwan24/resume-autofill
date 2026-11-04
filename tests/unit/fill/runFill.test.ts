@@ -157,3 +157,76 @@ describe('a form in several steps', () => {
     expect(page.submitted()).toBe(0);
   });
 });
+
+describe('runFill on a page that keeps the file it already holds', () => {
+  const en = createSampleProfile().resumes.find((r) => r.id === 'sample-en')!;
+  const name = files['sample-resume-en']!.name;
+
+  /** The page, with `held` as the file it shows it has. It takes no new file of that name. */
+  function mountHolding(held: string | null, marker = 'data-ui="careers-page-content"'): { box: HTMLInputElement; changes: () => number } {
+    document.body.innerHTML = `<main ${marker}><form><div>
+      <label for="cv">Resume</label>
+      ${held ? `<a aria-label="view ${held}"></a><button type="button" aria-label="delete ${held}"></button>` : ''}
+      <input id="cv" data-ui="resume" type="file">
+    </div></form></main>`;
+    const box = document.getElementById('cv') as HTMLInputElement;
+    let changes = 0;
+    box.addEventListener('change', () => changes++);
+    return { box, changes: () => changes };
+  }
+
+  const row = (report: { fields: { label: string; outcome: string; note?: string; value?: string }[] }) =>
+    report.fields.find((f) => f.label === 'Resume');
+
+  it('asks instead of reporting filled when the page already holds a file of that name', async () => {
+    const { box, changes } = mountHolding(name);
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)).toMatchObject({ outcome: 'needs_review', note: 'same_file_held', value: name });
+    expect(box.files?.length ?? 0).toBe(0);
+    expect(changes()).toBe(0);
+  });
+
+  it('sends a file of another name, which the page does take', async () => {
+    const { box } = mountHolding('Older-Resume.pdf');
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)).toMatchObject({ outcome: 'filled', value: name });
+    expect(row(report)?.note).toBeUndefined();
+    expect(box.files?.[0]?.name).toBe(name);
+  });
+
+  it('sends the file when the page holds none', async () => {
+    const { box } = mountHolding(null);
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)?.outcome).toBe('filled');
+    expect(box.files?.[0]?.name).toBe(name);
+  });
+
+  it('looks only at the box being filled, not at another file box on the page', async () => {
+    document.body.innerHTML = `<main data-ui="careers-page-content"><form>
+      <div><label for="a">Resume</label><input id="a" data-ui="resume" type="file"></div>
+      <div><label for="b">Resume</label><button type="button" aria-label="delete ${name}"></button><input id="b" type="file"></div>
+    </form></main>`;
+    const { report } = await runFill(document, { resume: en, files });
+    const boxes = ['a', 'b'].map((id) => document.getElementById(id) as HTMLInputElement);
+    expect(boxes[0]!.files?.[0]?.name).toBe(name);
+    expect(boxes[1]!.files?.length ?? 0).toBe(0);
+    // One resume file goes to one box, so the second box is not a candidate at all.
+    expect(report.fields.filter((f) => f.label === 'Resume').map((f) => f.outcome).sort()).toEqual(['filled', 'unmatched']);
+  });
+
+  it('still fills the rest of the page after holding a file back, and counts it for review', async () => {
+    mountHolding(name);
+    document.querySelector('form')!.insertAdjacentHTML('beforeend', '<div><label for="em">Email</label><input id="em" type="email"></div>');
+    const { report } = await runFill(document, { resume: en, files });
+    expect((document.getElementById('em') as HTMLInputElement).value).toBe(en.contact.email);
+    expect(report.counts.needs_review).toBe(1);
+    expect(report.counts.filled).toBe(1);
+  });
+
+  it('leaves a page without this adapter as it was', async () => {
+    const { box } = mountHolding(name, 'class="some-other-site"');
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)?.outcome).toBe('filled');
+    expect(box.files?.[0]?.name).toBe(name);
+  });
+});

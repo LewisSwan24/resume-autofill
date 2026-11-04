@@ -289,6 +289,7 @@ export const en: Record<MessageKey, string> = {
   'panel.editLabel': 'New value',
   'panel.editInput': 'New value for "{label}"',
   'panel.editHelp': 'Saves straight to this field on the page.',
+  'panel.note.sameFileHeld': 'The page already has a file with the same name, and it may be an older version. To replace it, delete it on the page and fill again.',
   'panel.save': 'Save',
   'panel.locate': 'Locate this field',
   'panel.applied': 'Updated',

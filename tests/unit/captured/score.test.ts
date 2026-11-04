@@ -378,3 +378,48 @@ describe('listSamples and recordScore', () => {
     expect(rows.map((r) => [r.mode, r.correct]).sort()).toEqual([['extension', 3], ['harness', 1]]);
   });
 });
+
+describe('scoreSample, entries saved into a list', () => {
+  const __entries = { Education: { selector: '.saved', section: 'education', shows: [['Later Uni', 'July 2024'], ['Earlier Uni']] } };
+  const fieldsNone = { fields: {}, __entries };
+  const page = (saved: string[]): Inspection => ({ ...emptyPage, readings: { Education: saved } });
+  const score = (saved: string[], rows: Partial<FieldReport>[] = []) =>
+    scoreSample({ ats: 'x', name: 'y', expected: expected(fieldsNone) }, 'harness', emptyPage, page(saved), report(rows));
+
+  it('counts every text an entry has to show', () => {
+    const s = score(['School Later Uni Period July 2024', 'School Earlier Uni']);
+    expect([s.fields, s.correct]).toEqual([3, 3]);
+    expect(scoreProblems(s, expected(fieldsNone))).toEqual([]);
+  });
+
+  it('calls an entry that never appeared missing', () => {
+    const s = score(['School Later Uni Period July 2024']);
+    expect(s.correct).toBe(2);
+    expect(s.missing).toEqual(['Education 2: Earlier Uni']);
+  });
+
+  it('calls text in the wrong entry wrong, so the order on the page counts', () => {
+    const s = score(['School Earlier Uni', 'School Later Uni Period July 2024']);
+    expect(s.wrong.map((w) => w.label)).toEqual(['Education 1: Later Uni', 'Education 1: July 2024', 'Education 2: Earlier Uni']);
+  });
+
+  it('calls an entry too many wrong, because a run must not add duplicates', () => {
+    const s = score(['Later Uni July 2024', 'Earlier Uni', 'Earlier Uni']);
+    expect(s.wrong.map((w) => w.label)).toEqual(['Education: 3 entries, expected 2']);
+  });
+
+  it('calls a failed section row a false report when the entries are all there', () => {
+    const s = score(['Later Uni July 2024', 'Earlier Uni'], [{ fieldId: 'section:education', label: 'Update', outcome: 'action_failed' }]);
+    expect(s.falselyFailed).toEqual(['section:education: reported action_failed']);
+  });
+
+  it('leaves the failure of another section to that section', () => {
+    const s = score(['Later Uni July 2024', 'Earlier Uni'], [{ fieldId: 'section:work', label: 'Update', outcome: 'action_failed' }]);
+    expect(s.falselyFailed).toEqual([]);
+  });
+
+  it('says nothing about a section row on a sample with no entries', () => {
+    const s = scoreSample({ ats: 'x', name: 'y', expected: expected() }, 'harness', emptyPage, emptyPage, report([{ fieldId: 'section:work', label: 'Add', outcome: 'action_failed' }]));
+    expect(s.falselyFailed).toEqual([]);
+  });
+});

@@ -59,6 +59,7 @@ export function patchReportField(report: FillReport, frameId: number, updated: F
     };
     const source = updated.source ?? f.source;
     if (source !== undefined) next.source = source;
+    if (f.note && updated.outcome !== 'filled') next.note = f.note;
     return next;
   });
   return { ...report, fields, counts: countOutcomes(fields) };

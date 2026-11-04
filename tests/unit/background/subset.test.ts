@@ -48,6 +48,15 @@ describe('a state picked from a list', () => {
   });
 });
 
+describe('a phone code picked from a list', () => {
+  it('goes with the country, which settles a code several places share', () => {
+    const out = buildResumeSubset(en, needs({ fieldKeys: ['contact.phoneCountryCode'] }));
+    expect(out.contact.phoneCountryCode).toBe(en.contact.phoneCountryCode);
+    expect(out.contact.address.country).toBe(en.contact.address.country);
+    expect(out.contact.address.street).toBe('');
+  });
+});
+
 describe('the choice of how to answer a gender question', () => {
   const chosen = { ...en, diversity: { ...en.diversity, genderAnswer: 'from_resume' as const } };
 

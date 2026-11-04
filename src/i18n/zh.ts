@@ -287,6 +287,7 @@ export const zh = {
   'panel.editLabel': '新值',
   'panel.editInput': '“{label}”的新值',
   'panel.editHelp': '会直接写入页面上的这个字段。',
+  'panel.note.sameFileHeld': '页面上已有同名文件，它可能是旧版本。要换的话，先在页面上删掉，再填写一次。',
   'panel.save': '保存',
   'panel.locate': '定位到该字段',
   'panel.applied': '已更新',

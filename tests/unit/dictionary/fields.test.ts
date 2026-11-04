@@ -1,3 +1,4 @@
+import { scanDocument } from '../../../src/engine/scan';
 import { describe, expect, it } from 'vitest';
 import {
   FIELD_SYNONYMS, NEVER_FILL, allSynonyms, isExactOnlySynonym, isExcluded, isNeverFill,
@@ -191,5 +192,31 @@ describe('synonym sanity vs similarity', () => {
   it('"Surname" is closer to familyName than to givenName', () => {
     const best = (key: string) => Math.max(...allSynonyms(key).map((s) => labelSimilarity('Surname', s)));
     expect(best('basics.familyName')).toBeGreaterThan(best('basics.givenName'));
+  });
+});
+
+describe('questions that lost their fuzzy match to the small-words check', () => {
+  const scoreOf = (label: string) => {
+    document.body.innerHTML = `<label for="q">${label}</label><select id="q"><option>Yes</option><option>No</option></select>`;
+    const { classifications } = scanDocument(document);
+    return classifications[0]!;
+  };
+
+  it('a salary expectation stays a question for the applicant: it could be either end of a range', () => {
+    const c = scoreOf('What are your salary expectations?');
+    expect(c.fieldKey).toMatch(/^jobIntention\.salaryM(in|ax)$/);
+    expect(c.confidence).toBeLessThan(0.75);
+    expect(c.confidence).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it.each(['Do you have full legal working rights within this country?', 'What are your current work rights in this country?'])('"%s" is about work rights', (label) => {
+    expect(scoreOf(label).fieldKey).toBe('workRights.hasFullWorkRights');
+  });
+
+  it('a question about work rights and sponsorship at once goes to the applicant', () => {
+    const c = scoreOf('Do you have full legal working rights within this country and do not require further visa sponsorship now or in the future?');
+    expect(c.fieldKey).toMatch(/^workRights\./);
+    expect(c.confidence).toBeLessThan(0.75);
+    expect(c.confidence).toBeGreaterThanOrEqual(0.5);
   });
 });

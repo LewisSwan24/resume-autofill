@@ -1,5 +1,6 @@
 // Evidence: every piece of text that may tell us what a control is for (labels, aria, placeholders,
 // table headers, nearby text, name/id), plus the "required" flag. Pure DOM reads, no side effects.
+import { isVisible } from './visibility';
 import { isAddButtonText, isDeleteText, isNeverFill, normalizeLabel, resolveCode } from '../dictionary';
 import {
   ANSWER_BUTTON_SELECTOR,
@@ -251,6 +252,8 @@ function nearbyText(c: Ctx): string | null {
       if (s.nodeType !== 1) continue;
       const sib = s as Element;
       if (SKIP_NEARBY_TAGS.has(sib.tagName.toUpperCase()) || sib.matches('[role=button]')) continue;
+      // The message of the field before, shown or waiting to be.
+      if (sib.matches('[role=alert]') || !isVisible(sib)) continue;
       if (containsField(sib)) return null;
       if (isHeadingLike(sib)) continue;
       const raw = textWithoutControls(sib);
@@ -308,7 +311,7 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     if (text) out.push({ source, text, weight: opts.weight ?? EVIDENCE_WEIGHTS[source] });
   };
 
-  push('label-for', control.questionText, { label: true });
+  push('label-for', control.fixedLabel ?? control.questionText, { label: true });
   // label[for] → control (or inner input of a library widget)
   if (c.ids.size > 0) {
     for (const l of Array.from(c.root.querySelectorAll('label[for]'))) {
@@ -412,7 +415,7 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     labelClassRequired ||
     (labelOwned && c.el.closest('.is-required') !== null);
 
-  return { evidence, required };
+  return { evidence: control.fixedLabel ? evidence.slice(0, 1) : evidence, required };
 }
 
 export function collectEvidence(control: Control): Evidence[] {

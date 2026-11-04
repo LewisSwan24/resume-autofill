@@ -1,8 +1,9 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
+import { formatByPattern, isDatePattern } from './dateFormat';
 import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, matchOption, namesOtherState, placeOptions, placeSpellings } from '../dictionary';
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
 import type { GenderAnswer, Locale, Region, Resume } from '../schema';
-import type { FieldKeyDef } from '../schema/fieldKeys';
+import { getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
 import type { Control, FieldKey, OptionInfo, SectionKey } from './types';
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -103,6 +104,14 @@ export function entryCount(resume: Resume, section: SectionKey, hasInternshipSec
   const module = section === 'internship' ? 'work' : section;
   if (!ARRAY_MODULES.has(module)) return 0;
   return sectionEntries(resume, module as ArrayModule, section, hasInternshipSection).length;
+}
+
+/** A field of an array entry as a page would show it: an enum by its label. Empty when it holds no text. */
+export function entryFieldText(module: string, field: string, entry: unknown, locale: Locale): string {
+  const raw = (entry as Record<string, unknown>)[field];
+  if (typeof raw !== 'string' || raw.trim() === '') return '';
+  const def = getFieldKeyDef(`${module}.${field}` as FieldKey);
+  return def?.type === 'enum' ? optionLabel(domainFor(def), raw, locale) : raw;
 }
 
 function ageOf(birthDate: string, now: Date): number | null {
@@ -396,8 +405,10 @@ export function toIntent(
       return { kind: 'text', text: regionText(region, locale) };
     }
     case 'date': {
-      if (typeof raw !== 'string') return null;
-      return isTextLike(control) ? { kind: 'text', text: raw } : null;
+      if (typeof raw !== 'string' || !isTextLike(control)) return null;
+      const pattern = control.el.getAttribute('placeholder');
+      const date = pattern && isDatePattern(pattern) ? parseDate(raw) : null;
+      return { kind: 'text', text: date ? formatByPattern(pattern!, date) : raw };
     }
     default: {
       // text, longtext, number
@@ -406,6 +417,17 @@ export function toIntent(
       if (def.key === 'contact.addressCity' && opts.home && hasPickList(control) && !control.multiple) {
         const home = opts.home;
         return { kind: 'choice', display: text, query: text, match: (options) => matchPlace(text, home, options) };
+      }
+      if (def.key === 'contact.phoneCountryCode' && hasPickList(control) && !control.multiple) {
+        const country = opts.home?.country ?? '';
+        const match: OptionMatcher = (options) => {
+          const m = matchOption(null, text, options);
+          if (m.status !== 'ambiguous' || !country) return m;
+          // +61 is also two islands, and +1 is two countries: the applicant's own country settles it.
+          const own = matchOption(null, country, m.candidates.map((i) => options[i]!));
+          return own.status === 'matched' ? { ...own, index: m.candidates[own.index]! } : m;
+        };
+        return { kind: 'choice', display: text, query: text, match };
       }
       if (def.key === 'contact.addressProvince' && hasPickList(control) && !control.multiple) {
         const spellings = placeSpellings(text, opts.home?.country ?? '');

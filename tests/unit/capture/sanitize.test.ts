@@ -230,8 +230,9 @@ function makeHar(): HarFile {
   };
 }
 
-function sidecarStore() {
+function sidecarStore(extra: Record<string, string> = {}) {
   const files: Record<string, string> = {
+    ...extra,
     'js-sidecar': `const a="jane@corp.example";const id=19000000001;const c={"csrfToken":"${TOKEN}"};`,
     'png-sidecar': 'jane@corp.example-is-not-text-here',
   };
@@ -369,6 +370,56 @@ describe('sanitizeHar', () => {
     const store = sidecarStore();
     sanitizeHar(har, new Scrubber({ terms: ['Jane Doe'] }), store.io);
     expect(auditHar(har, store.io, { terms: ['Jane Doe'] })).toEqual([]);
+  });
+});
+
+describe('sanitizeHar, prefetched files', () => {
+  const entry = (url: string, purpose: string | null, file: string, size: number) => ({
+    request: {
+      method: 'GET',
+      url,
+      headers: purpose ? [{ name: 'sec-purpose', value: purpose }] : [],
+      cookies: [],
+      queryString: [],
+    },
+    response: {
+      status: 200,
+      headers: [],
+      cookies: [],
+      content: { mimeType: 'application/javascript', _file: file, size },
+    },
+  });
+  const CHUNK = 'https://cdn.example/chunk.js';
+  const OTHER = 'https://cdn.example/other.js';
+
+  // A prefetch is recorded with an empty body. Replaying it serves an empty script and the page hangs.
+  it('forgets a prefetch recorded with no body, so replay serves the real load', () => {
+    const har = { log: { entries: [entry(CHUNK, 'prefetch', 'empty.js', 0), entry(CHUNK, null, 'real.js', 10)] } };
+    const store = sidecarStore({ 'empty.js': '', 'real.js': 'load(1234)' });
+    sanitizeHar(har, new Scrubber(), store.io);
+    expect(har.log.entries.map((e) => e.response.content._file)).toEqual(['real.js']);
+    expect(store.files).not.toHaveProperty(['empty.js']);
+  });
+
+  // Nothing is better than an empty script: an aborted load fails where a test can see it.
+  it('forgets a prefetch that was never really loaded', () => {
+    const har = { log: { entries: [entry(OTHER, 'prefetch', 'empty.js', 0)] } };
+    sanitizeHar(har, new Scrubber(), sidecarStore({ 'empty.js': '' }).io);
+    expect(har.log.entries).toEqual([]);
+  });
+
+  it('keeps a prefetch that did record its body', () => {
+    const har = { log: { entries: [entry(CHUNK, 'prefetch', 'real.js', 10)] } };
+    sanitizeHar(har, new Scrubber(), sidecarStore({ 'real.js': 'load(1234)' }).io);
+    expect(har.log.entries).toHaveLength(1);
+  });
+
+  it('keeps an ordinary response that really is empty, and the file it shares', () => {
+    const har = { log: { entries: [entry(CHUNK, 'prefetch', 'empty.js', 0), entry(OTHER, null, 'empty.js', 0)] } };
+    const store = sidecarStore({ 'empty.js': '' });
+    sanitizeHar(har, new Scrubber(), store.io);
+    expect(har.log.entries.map((e) => e.request.url)).toEqual([OTHER]);
+    expect(store.files).toHaveProperty(['empty.js']);
   });
 });
 

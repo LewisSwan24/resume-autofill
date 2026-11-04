@@ -397,6 +397,22 @@ function scrubContent(c: HarContent, scrub: Scrubber, io: SidecarIo): void {
   c.size = Buffer.byteLength(c.text);
 }
 
+/**
+ * A prefetch is recorded with an empty body. Replayed, it answers the page's real request for the
+ * same file with an empty script, and the page hangs with no error. Without the entry, the real
+ * load is what replay finds, or the request is aborted where a test can see it.
+ */
+function dropEmptyPrefetches(har: HarFile, io: SidecarIo): void {
+  const isEmptyPrefetch = ({ request, response }: HarEntry) =>
+    !response.content.size && request.headers.some((h) => /^(sec-)?purpose$/i.test(h.name) && /prefetch/i.test(h.value));
+  const dropped = har.log.entries.filter(isEmptyPrefetch);
+  har.log.entries = har.log.entries.filter((e) => !isEmptyPrefetch(e));
+  const inUse = new Set(har.log.entries.map((e) => e.response.content._file));
+  for (const file of new Set(dropped.map((e) => e.response.content._file))) {
+    if (file && !inUse.has(file)) io.remove(file);
+  }
+}
+
 export function sanitizeHar(har: HarFile, scrub: Scrubber, io: SidecarIo): void {
   for (const page of har.log.pages ?? []) {
     if (page.title) page.title = scrub.text(page.title, { phones: 'all' });
@@ -408,6 +424,7 @@ export function sanitizeHar(har: HarFile, scrub: Scrubber, io: SidecarIo): void 
     io.remove(file);
     return false;
   });
+  dropEmptyPrefetches(har, io);
   for (const { request, response } of har.log.entries) {
     request.url = scrub.text(request.url);
     request.headers = scrubPairs(request.headers.filter((h) => !SENSITIVE_HEADER.test(h.name)), scrub);

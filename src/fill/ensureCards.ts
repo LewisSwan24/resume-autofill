@@ -35,6 +35,8 @@ export interface EnsureCardsOptions {
   timeoutMs?: number;
   /** Safety cap on clicks per section. Default 12. */
   maxAdds?: number;
+  /** Sections something else looks after. */
+  skip?: ReadonlySet<SectionKey>;
 }
 
 const ADD_BUTTON_SELECTOR = 'button, a, [role=button], input[type=button], .ant-btn, .el-button';
@@ -130,7 +132,7 @@ function sectionStates(doc: Document, resume: Resume, idFor?: (el: HTMLElement) 
  * Click without ever letting a stray form submit through: for the duration of the click a capture-phase
  * `submit` listener on the window cancels the event and keeps every page listener from seeing it.
  */
-function clickAdd(el: HTMLElement): void {
+export function clickAdd(el: HTMLElement): void {
   const target: EventTarget = el.ownerDocument.defaultView ?? el.ownerDocument;
   const block = (e: Event): void => {
     e.preventDefault();
@@ -166,7 +168,7 @@ export async function ensureCards(
   const results: SectionGrowth[] = [];
   const fieldCount = () => doc.querySelectorAll(FIELD_SELECTOR).length;
 
-  const initial = sectionStates(doc, resume, opts.idFor).filter((s) => s.need > s.have);
+  const initial = sectionStates(doc, resume, opts.idFor).filter((s) => s.need > s.have && !opts.skip?.has(s.section));
   for (const first of initial) {
     const result: SectionGrowth = { section: first.section, have: first.have, need: first.need, added: 0, status: 'ok' };
     results.push(result);

@@ -30,6 +30,9 @@ type Draft = Omit<Control, 'id'> & { inputs?: HTMLInputElement[] };
 const EXCLUDED_INPUT_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image']);
 const NATIVE_SELECTOR = 'input, select, textarea, [contenteditable]';
 const DISABLED_SELECTOR = '[disabled], [aria-disabled="true"]';
+/** Phone widgets that keep the country with the number: intl-tel-input and react-phone-number-input. */
+export const PHONE_WITH_CODE_SELECTOR = '.iti, .PhoneInput';
+
 const PAGE_CHROME_SELECTOR = 'nav, header, footer, [role=navigation], [role=banner], [role=contentinfo]';
 
 const groupMembers = new WeakMap<Control, HTMLInputElement[]>();
@@ -199,6 +202,8 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
     if (isDisabledEl(el) || !isVisible(el)) continue;
     // A language switcher or site search: part of the page around the form.
     if (el.closest(PAGE_CHROME_SELECTOR) && !el.closest('form')) continue;
+    // The country picker of a phone box follows the number written in the box.
+    if (el.closest(PHONE_WITH_CODE_SELECTOR)) continue;
     const draft: Draft = { el, kind: 'select', lib: 'aria' };
     if (isAriaMultiple(el)) draft.multiple = true;
     candidates.set(el, draft);
@@ -263,8 +268,8 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
           inputType: type,
           dateGranularity: type === 'month' ? 'month' : 'day',
         });
-      } else if (el.getAttribute('aria-hidden') !== 'true') {
-        // aria-hidden: a companion a widget renders for validation, not a field of its own.
+      } else if (!el.closest('[aria-hidden="true"]')) {
+        // aria-hidden: a companion a widget renders for validation, or a trap for robots. Not a field either way.
         candidates.set(el, { el, kind: 'text', lib: 'native', inputType: type });
       }
     } else if (el instanceof HTMLSelectElement) {
@@ -339,6 +344,12 @@ export function discover(root: Document | ShadowRoot, opts: DiscoverOptions = {}
     const control: Control = { id: opts.idFor ? opts.idFor(rest.el) : `c${++counter}`, ...rest };
     const question = adapter ? questionTextOf(rest.el, adapter) : null;
     if (question) control.questionText = question;
+    const fixed = adapter?.labels?.find((l) => rest.el.matches(l.control));
+    if (fixed) control.fixedLabel = fixed.label;
+    for (const editor of adapter?.editors ?? []) {
+      const root = rest.el.closest(editor.root);
+      if (root) control.fixedSection = { title: editor.title, root };
+    }
     if (inputs) groupMembers.set(control, inputs);
     return control;
   });

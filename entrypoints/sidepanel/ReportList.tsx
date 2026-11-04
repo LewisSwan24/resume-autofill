@@ -97,6 +97,8 @@ function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport 
             <IconButton icon="search" label={t('panel.locate')} onClick={() => onFocus(field)} />
           </div>
 
+          {field.note === 'same_file_held' ? <p className="raf-help raf-field-note">{t('panel.note.sameFileHeld')}</p> : null}
+
           {percent !== null ? (
             <div className="raf-confidence">
               <span className="raf-help">{t('panel.confidence')}</span>

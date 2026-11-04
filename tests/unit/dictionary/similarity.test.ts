@@ -77,3 +77,51 @@ describe('labelSimilarity', () => {
     }
   });
 });
+
+describe('whole questions that only share their small words', () => {
+  it.each([
+    ['How many years of professional experience do you have working in this industry?', 'Have you served in the Australian Defence Force'],
+    ['How comfortable are you with AI-assisted development tools in engineering workflows?', 'Are you of Aboriginal or Torres Strait Islander origin'],
+    ['Are you currently located in the country?', 'Are you a veteran'],
+    ['If you were referred to this role, please enter the name of the employee', 'How do you know this referee'],
+    ['How many years of experience do you have leading engineering teams?', 'Years of experience'],
+    ['Which location are you applying for?', 'Are you willing to relocate'],
+    ['Which location are you applying for?', 'Role applying for'],
+  ])('"%s" is nothing like "%s"', (a, b) => {
+    expect(labelSimilarity(a, b)).toBeLessThan(0.45);
+  });
+
+  it.each([
+    ['Educaton', 'Education'],
+    ['Emial address', 'Email address'],
+    ['Phone numbr', 'Phone number'],
+    ['Years of experiense', 'Years of experience'],
+    ['Do you need visa sponsorship to work here', 'Do you require visa sponsorship to work'],
+  ])('still sees "%s" as close to "%s"', (a, b) => {
+    expect(labelSimilarity(a, b)).toBeGreaterThanOrEqual(0.45);
+  });
+
+  it('leaves Chinese alone, which has no small words to split on', () => {
+    expect(labelSimilarity('毕业学校名称', '毕业院校名称')).toBeGreaterThanOrEqual(0.45);
+  });
+});
+
+describe('a long phrase inside a much longer question', () => {
+  const long = 'Do you have full legal working rights within this country and do not require further visa sponsorship now or in the future?';
+
+  it('says what the question touches on, but never enough to fill it', () => {
+    const sim = labelSimilarity(long, 'Full legal working rights');
+    expect(sim).toBeGreaterThanOrEqual(0.5);
+    expect(sim).toBeLessThan(0.75);
+  });
+
+  it('needs three words that say something', () => {
+    expect(labelSimilarity(long, 'Working rights')).toBeLessThan(0.45);
+    expect(labelSimilarity(long, 'Do you have')).toBeLessThan(0.45);
+  });
+
+  it('needs them in that order and next to each other', () => {
+    expect(labelSimilarity(long, 'Rights full working legal')).toBeLessThan(0.45);
+  });
+});
+

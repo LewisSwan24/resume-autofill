@@ -1,6 +1,7 @@
 // `frame:needs`: what this frame could fill, computed by the same scan runFill uses but without any resume.
 // The background answers with a minimal resume subset (see background/subset.ts), so everything listed
 // here must cover what a fill run may touch, and nothing more.
+import { resolveAdapter } from '../adapters/resolve';
 import { FILL_THRESHOLD, REVIEW_THRESHOLD } from '../engine/classify';
 import {
   REPEAT_SECTIONS,
@@ -49,6 +50,13 @@ export function computeFrameNeeds(doc: Document, idFor?: (el: HTMLElement) => st
   }
   for (const b of findAddButtons(doc)) {
     if (b.section && REPEATED.has(b.section)) sections.add(b.section);
+  }
+
+  // Fields that are not on the page until an editor opens.
+  for (const editor of resolveAdapter(doc)?.editors ?? []) {
+    if (!doc.querySelector(editor.root)) continue;
+    sections.add(editor.section);
+    for (const key of editor.fields) fieldKeys.add(key);
   }
 
   return { fieldKeys: [...fieldKeys], repeatSections: [...sections], attachmentKeys: [...attachmentKeys] };

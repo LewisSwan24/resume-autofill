@@ -287,15 +287,27 @@ function settleBareLabels(contexts: FieldContext[], scores: FieldScores[], secti
   }
 }
 
+/** The widget always takes the number with its code, and any other box that says so by example or in words. */
+function takesDialCode(el: HTMLElement): boolean {
+  if (el.closest('.PhoneInput')) return true;
+  return (el.getAttribute('placeholder') ?? '').trim().startsWith('+') || /country code/i.test(el.getAttribute('aria-label') ?? '');
+}
+
 /** Classification of every control: sections, scores, then one global assignment (see assign.ts). */
 export function classifyAll(contexts: FieldContext[]): Classification[] {
   const sections = contexts.map(classifySection);
   // An inferred section is reported but never fed back into scoring (it would confirm its own guess).
   const scores = contexts.map((ctx, i) => scoreField(ctx, sections[i]!.inferred ? null : sections[i]!.section));
   settleBareLabels(contexts, scores, sections);
-  return assign(
+  const assigned = assign(
     contexts,
     scores,
     sections.map((s) => s.section),
+  );
+  // Given a bare number, such a widget guesses the country.
+  return assigned.map((cls, i) =>
+    cls.fieldKey === 'contact.phone' && takesDialCode(contexts[i]!.control.el)
+      ? { ...cls, fieldKey: 'contact.phoneFull' as const }
+      : cls,
   );
 }

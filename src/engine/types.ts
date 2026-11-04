@@ -37,6 +37,10 @@ export interface Control {
   dateGranularity?: 'day' | 'month' | 'year';
   /** A question an adapter found outside any label. */
   questionText?: string;
+  /** From an adapter: what this control is for, whatever else the page says about it. */
+  fixedLabel?: string;
+  /** From an adapter: the section this control is in, for a page whose heading the engine cannot see. */
+  fixedSection?: { title: string; root: Element };
   /** Parts of a search box, named by an adapter. */
   search?: { within: string; option: string; picked?: string };
   /** Parts of a search-and-pick control, named by an adapter. */
@@ -136,6 +140,8 @@ export interface FieldReport {
   /** Resume path, e.g. "education[1].school". */
   source?: string;
   candidates?: { label: string; value?: string; fieldKey?: FieldKey }[];
+  /** Why this row needs the user, when the outcome does not say. */
+  note?: 'same_file_held';
 }
 
 export interface FillReport {

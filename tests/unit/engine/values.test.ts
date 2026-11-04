@@ -289,6 +289,30 @@ describe('toIntent', () => {
     });
   });
 
+  describe('a phone code on a pick list', () => {
+    const code = (raw: string, country: string, ...labels: string[]) =>
+      picked(toIntent(def('contact.phoneCountryCode'), raw, control('select'), 'en-AU', { home: { country } as Region }), opts(...labels));
+    const shared = ['Australia +61', 'Christmas Island +61', 'Cocos (Keeling) Islands +61', 'New Zealand +64'];
+
+    it('takes the one code that fits', () => {
+      expect(code('+64', 'Australia', ...shared)).toBe('New Zealand +64');
+    });
+
+    it('lets the country of the address settle a code several places share', () => {
+      expect(code('+61', 'Australia', ...shared)).toBe('Australia +61');
+      expect(code('+1', 'Canada', 'United States +1', 'Canada +1')).toBe('Canada +1');
+    });
+
+    it('asks when the address says nothing about those places', () => {
+      expect(code('+61', 'New Zealand', ...shared)).toBe('ambiguous');
+      expect(code('+61', '', ...shared)).toBe('ambiguous');
+    });
+
+    it('takes nothing when no option has the code', () => {
+      expect(code('+86', 'China', ...shared)).toBe('none');
+    });
+  });
+
   describe('a state on a pick list', () => {
     const state = (home: Region, ...labels: string[]) =>
       picked(toIntent(def('contact.addressProvince'), home.province!, control('select'), 'en-AU', { home }), opts(...labels));

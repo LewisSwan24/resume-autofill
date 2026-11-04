@@ -201,6 +201,17 @@ describe('Side panel – report list', () => {
     }
   });
 
+  it('says why a file was held back, and only on that row', async () => {
+    const report = makeReport([
+      field('held', 'needs_review', { label: 'Resume', value: 'Resume.pdf', note: 'same_file_held' }),
+      field('other', 'needs_review', { label: 'Photo', value: 'photo.png' }),
+    ]);
+    await renderPanel({ report });
+    await screen.findByText('Resume');
+    expect(rowOf('Resume').querySelector('.raf-field-note')?.textContent).toMatch(/同名|same name/);
+    expect(rowOf('Photo').querySelector('.raf-field-note')).toBeNull();
+  });
+
   it('shows no confidence for a filled row without a numeric confidence', async () => {
     await renderPanel({ report: makeReport([field('x', 'filled', { label: 'No score', value: 'v', confidence: undefined as never })]) });
     await screen.findByText('No score');

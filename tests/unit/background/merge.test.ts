@@ -76,6 +76,12 @@ describe('mergeFrameReports', () => {
 });
 
 describe('patchReportField', () => {
+  it('keeps the reason a row needs the user until the row is filled', () => {
+    const held = mergeFrameReports([{ frameId: 0, report: report('u', [field('c1', 'needs_review', { note: 'same_file_held' })]) }]);
+    expect(patchReportField(held, 0, field('c1', 'action_failed')).fields[0]!.note).toBe('same_file_held');
+    expect(patchReportField(held, 0, field('c1', 'filled')).fields[0]!.note).toBeUndefined();
+  });
+
   const base = mergeFrameReports([
     { frameId: 0, report: report('u', [field('c1', 'needs_review', { candidates: [{ label: 'A' }], source: 'basics.email' })]) },
     { frameId: 4, report: report('u', [field('c1', 'unmatched')]) },

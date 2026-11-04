@@ -242,7 +242,7 @@ export function findGroup(el: Element, sectionRoot: Element | null, sectionTitle
 
 export function buildFieldContext(control: Control): FieldContext {
   const { evidence, required } = analyzeControl(control);
-  const section = resolveSection(control.el);
+  const section = control.fixedSection ?? resolveSection(control.el);
   const group = findGroup(control.el, section?.root ?? null, section?.title ?? null);
   return {
     control,

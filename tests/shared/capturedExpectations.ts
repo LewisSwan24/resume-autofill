@@ -25,6 +25,8 @@ export interface CapturedField {
   control?: string;
   /** Checked on the static snapshot: the classification this control must get. */
   fieldKey?: string;
+  /** Not a field of its own: the page changes it when another one is filled. It must show this, with no report row. */
+  follows?: true;
 }
 
 export interface LocatedEntry {
@@ -61,6 +63,8 @@ export interface CapturedExpected {
   /** Must equal the number of wrong guesses, as with `__knownGapsMax`. */
   __wrongGuessesMax?: number;
   fields: Record<string, CapturedField>;
+  /** Entries a page keeps in a list once saved, in the order shown. Each has to show all its texts. */
+  __entries?: Record<string, { selector: string; section: string; shows: string[][] }>;
 }
 
 export interface CapturedSample {
@@ -171,7 +175,7 @@ function rowsOf(report: FillReport, label: string, fieldKey?: string): FillRepor
 export function verdictSelectors(expected: CapturedExpected): string[] {
   const of = (f: CapturedField): string[] => {
     if (f.control) return [f.control];
-    return f.exists ? [] : [f.selector];
+    return f.exists || f.follows ? [] : [f.selector];
   };
   return [
     ...Object.values(expected.fields).flatMap(of),
@@ -215,11 +219,37 @@ export function scoreSample(
     if (matches(field, actual)) {
       correct++;
       const rows = rowsOf(report, label, field.fieldKey);
+      if (field.follows) continue;
       if (rows.length === 0) falselyFailed.push(`${label}: no report row`);
       else if (!rows.some((r) => r.outcome === 'filled')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}`);
     } else if (isEmptyReading(actual)) missing.push(label);
     else wrong.push({ label, expected: field.contains ? `contains ${field.contains}` : field.expect, actual });
     if (!field.exists && (after.coverage[label] ?? []).length === 0) stale.push(label);
+  }
+
+  let entryTexts = 0;
+  for (const [label, { section, shows }] of Object.entries(expected.__entries ?? {})) {
+    const reading = after.readings[label];
+    const saved = Array.isArray(reading) ? reading : [];
+    let right = true;
+    if (saved.length > shows.length) {
+      wrong.push({ label: `${label}: ${saved.length} entries, expected ${shows.length}`, expected: shows.length, actual: String(saved.length) });
+      right = false;
+    }
+    shows.forEach((texts, i) => {
+      for (const text of texts) {
+        entryTexts++;
+        const name = `${label} ${i + 1}: ${text}`;
+        if (saved[i]?.includes(text)) correct++;
+        else {
+          right = false;
+          if (saved[i] === undefined) missing.push(name);
+          else wrong.push({ label: name, expected: `contains ${text}`, actual: saved[i] });
+        }
+      }
+    });
+    const row = report.fields.find((f) => f.fieldId === `section:${section}` && f.outcome === 'action_failed');
+    if (right && row) falselyFailed.push(`${row.fieldId}: reported ${row.outcome}`);
   }
 
   const covered = new Set(Object.keys(checked).flatMap((label) => after.coverage[label] ?? []));
@@ -264,7 +294,7 @@ export function scoreSample(
   return {
     sample: `${sample.ats}/${sample.name}`,
     mode,
-    fields: Object.keys(checked).length,
+    fields: Object.keys(checked).length + entryTexts,
     liveFields: liveFields.length,
     correct,
     missing,

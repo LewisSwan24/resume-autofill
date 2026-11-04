@@ -227,7 +227,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'workRights.hasFullWorkRights': s(
     '是否拥有完整工作权利|是否有工作权利|是否有合法工作资格|是否可以合法工作|完整工作权利|是否有完整工作权利|是否有权在澳工作',
-    'Full work rights|Do you have full work rights|Do you have the right to work|Right to work in Australia|Legally authorised to work|Legally authorized to work|Unrestricted work rights|Eligible to work|Authorised to work|Authorized to work',
+    'Full work rights|Full legal working rights|Current work rights in this country|Current work rights in Australia|Do you have full work rights|Do you have the right to work|Right to work in Australia|Legally authorised to work|Legally authorized to work|Unrestricted work rights|Eligible to work|Authorised to work|Authorized to work',
   ),
 
   // ------------------------------------------------------------ job intention
@@ -250,12 +250,12 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'jobIntention.salaryMin': s(
     '最低薪资|最低期望薪资|期望薪资下限|薪资下限|最低月薪|期望薪资|期望月薪|薪资期望|期望年薪',
-    'Minimum salary|Min salary|Salary from|Salary range from|Expected salary|Minimum expected salary|Lowest salary|Salary expectation|Desired salary',
+    'Minimum salary|Min salary|Salary from|Salary range from|Expected salary|Minimum expected salary|Lowest salary|Salary expectation|Salary expectations|Desired salary',
     '最高|上限|maximum|max|highest|upper',
   ),
   'jobIntention.salaryMax': s(
     '最高薪资|薪资上限|期望薪资上限|最高月薪|最高期望薪资|薪资最高',
-    'Maximum salary|Max salary|Salary to|Salary range to|Maximum expected salary|Highest salary|Upper salary',
+    'Salary expectations|Maximum salary|Max salary|Salary to|Salary range to|Maximum expected salary|Highest salary|Upper salary',
   ),
   'jobIntention.salaryCurrency': s(
     '币种|货币|薪资币种|货币类型|薪资货币',
@@ -308,7 +308,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   // ------------------------------------------------------------ free text + files
   'misc.selfIntroduction': s(
     '自我评价|自我介绍|个人简介|个人介绍|自我描述|个人总结|个人优势|个人陈述|个人特点|自荐|自荐信|个人评价',
-    'Tell us about yourself|About you|About me|Introduce yourself|Personal statement|Professional summary|Personal summary|Cover letter|Bio|Short bio|Describe yourself|Self introduction|Self-introduction|Self assessment',
+    'Tell us about yourself|About you|About me|Introduce yourself|Personal statement|Professional summary|Personal summary|Bio|Short bio|Describe yourself|Self introduction|Self-introduction|Self assessment',
   ),
   'misc.hobbies': s(
     '兴趣爱好|爱好|兴趣|特长爱好|兴趣特长|业余爱好|个人爱好|爱好特长',

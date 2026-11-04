@@ -77,6 +77,33 @@ const hostedForm = (extra = ''): string => `<form>
     ${extra}
   </ul></form>`;
 
+describe('the job board adapter', () => {
+  const board = `
+    <div><label for="email">Email</label><input id="email" type="text"></div>
+    <div><label for="home">Country</label><input id="home" role="combobox" aria-expanded="false" type="text"></div>
+    <fieldset class="phone-input">
+      <div class="phone-input__country"><label id="c-label" for="country">Country</label>
+        <input id="country" role="combobox" aria-expanded="false" aria-labelledby="c-label" type="text"></div>
+      <div class="phone-input__phone"><label for="phone">Phone</label><input id="phone" type="tel"></div>
+    </fieldset>`;
+
+  it('is found on the board and on a page that embeds its form', () => {
+    document.body.innerHTML = '';
+    expect(resolveAdapter(document, ADAPTERS, 'https://job-boards.greenhouse.io/acme/jobs/1')?.id).toBe('greenhouse');
+    document.body.innerHTML = board;
+    expect(resolveAdapter(document, ADAPTERS, 'https://careers.acme.example/job')?.id).toBe('greenhouse');
+  });
+
+  it('reads the country beside the phone as the phone code, not as where the applicant lives', () => {
+    document.body.innerHTML = board;
+    const { contexts, classifications } = scanDocument(document);
+    const of = (id: string) => classifications[contexts.findIndex((c) => c.control.el.id === id)]!;
+    expect(of('country').fieldKey).toBe('contact.phoneCountryCode');
+    expect(of('country').confidence).toBeGreaterThan(0.75);
+    expect(of('home').fieldKey).toBe('contact.addressCountry');
+  });
+});
+
 describe('the wizard adapter', () => {
   const step = (extra = ''): string => `<div data-automation-id="applyFlowPage">
     <div data-automation-id="formField-legalName--firstName"><label for="g">Given Name</label><input type="text" id="g"></div>
@@ -189,5 +216,31 @@ describe('the hosted form adapter', () => {
     const { contexts } = scanDocument(document);
     expect(contexts[0]!.evidence.some((e) => e.source === 'label-for')).toBe(false);
     expect(contexts[0]!.control.lib).toBe('native');
+  });
+});
+
+describe('workable', () => {
+  it('reads the summary at the top of the form as the profile, and the one in an editor as the job', () => {
+    document.body.innerHTML = `<div data-ui="careers-page-content">
+      <label><span>Summary (Optional)</span><textarea data-ui="summary" name="summary"></textarea></label>
+      <label><span>Headline (Optional)</span><input name="headline" /></label>
+      <div data-ui="experience"><p>Experience</p><ul><li><div data-ui="editor">
+        <label><span>Summary (Optional)</span><textarea name="summary"></textarea></label>
+      </div></li></ul></div>
+    </div>`;
+    const { contexts, classifications } = scanDocument(document);
+    const keyOf = (selector: string) => {
+      const el = document.querySelector(selector);
+      return classifications[contexts.findIndex((c) => c.control.el === el)]?.fieldKey;
+    };
+    expect(keyOf('textarea[data-ui="summary"]')).toBe('misc.selfIntroduction');
+    expect(keyOf('[data-ui="editor"] textarea')).toBe('work.description');
+    expect(keyOf('input[name="headline"]')).toBeUndefined();
+  });
+
+  it('is found by its host, and on a company domain by its marker', () => {
+    expect(resolveAdapter(document, ADAPTERS, 'https://apply.workable.com/acme/j/ABC/apply/')?.id).toBe('workable');
+    document.body.innerHTML = '<div data-ui="careers-page-content"></div>';
+    expect(resolveAdapter(document, ADAPTERS, 'https://careers.acme.test/j/ABC/apply/')?.id).toBe('workable');
   });
 });

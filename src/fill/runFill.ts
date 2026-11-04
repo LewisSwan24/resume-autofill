@@ -1,15 +1,18 @@
 // runFill: scan → grow cards → re-scan → plan → execute steps one by one → merged report.
 import { resolveAdapter } from '../adapters/resolve';
+import type { HeldFile } from '../adapters/types';
 import { registerAllDrivers } from '../drivers';
-import { executeStep, intentDisplay } from '../drivers/execute';
+import { intentDisplay } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
 import { waitFor } from '../drivers/wait';
-import { planFill } from '../engine/plan';
+import { planFill, type FillStep } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
 import type { Control, FieldReport, FillReport } from '../engine/types';
 import { isVisible } from '../engine/visibility';
 import type { Resume } from '../schema';
 import { ensureCards, type SectionGrowth } from './ensureCards';
+import { fillEntryEditors } from './entryEditors';
+import { runStep } from './runStep';
 import { applyHighlights } from './highlight';
 import { countOutcomes } from './report';
 
@@ -58,6 +61,28 @@ async function waitForUploadRead(doc: Document, busy: string, justUploaded: bool
   await waitFor(() => (showing() ? null : true), { timeout: UPLOAD_READ_MS, root: doc });
 }
 
+/** Looks in the largest box around this input that holds no other file input, so another slot's file does not count. */
+function holdsFile(input: Element, held: HeldFile, name: string): boolean {
+  let box: Element = input;
+  while (box.parentElement && box.parentElement.querySelectorAll('input[type="file"]').length === 1) box = box.parentElement;
+  return Array.from(box.querySelectorAll(held.selector)).some((el) => el.getAttribute(held.attribute) === held.prefix + name);
+}
+
+/** The file stays out: the page would keep its own copy, which may be older, and we would report it as filled. */
+function heldFileReport(step: FillStep): FieldReport {
+  return {
+    fieldId: step.fieldId,
+    label: step.label,
+    fieldKey: step.fieldKey,
+    section: step.section ?? null,
+    outcome: 'needs_review',
+    confidence: step.confidence,
+    value: intentDisplay(step.intent),
+    note: 'same_file_held',
+    ...(step.source !== undefined ? { source: step.source } : {}),
+  };
+}
+
 /** Section-level failure rows: an add button was clicked but no card appeared. */
 function growthReports(growth: SectionGrowth[]): FieldReport[] {
   return growth
@@ -81,16 +106,19 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const startedAt = Date.now();
   const idFor = opts.idFor ?? makeIdFor();
   const { resume, files } = payload;
+  const adapter = resolveAdapter(doc);
 
   // Growing sections is best effort: when it throws, carry on with the cards the page already has.
   let growth: SectionGrowth[] = [];
   try {
-    growth = await ensureCards(doc, resume, { idFor });
+    growth = await ensureCards(doc, resume, { idFor, skip: new Set(adapter?.editors?.map((e) => e.section)) });
   } catch (error) {
     console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
   }
   const scan: ScanResult = scanDocument(doc, idFor);
-  const plan = planFill(scan.contexts, scan.classifications, resume, files);
+  // An editor that is open now is someone's own typing, not a card to fill. See fillEntryEditors.
+  const free = scan.contexts.flatMap((ctx, i) => (ctx.control.fixedSection ? [] : [{ ctx, cls: scan.classifications[i]! }]));
+  const plan = planFill(free.map((f) => f.ctx), free.map((f) => f.cls), resume, files);
 
   const controls = new Map<string, Control>();
   for (const ctx of scan.contexts) controls.set(ctx.control.id, ctx.control);
@@ -98,43 +126,31 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const results: FieldReport[] = [...plan.reports];
   // Files first: many forms read an uploaded resume and write over their fields with what they find.
   const steps = [...plan.steps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
-  const uploadBusy = resolveAdapter(doc)?.uploadBusy;
+  const uploadBusy = adapter?.uploadBusy;
   let uploaded = false;
   let read = false;
   for (const step of steps) {
+    const box = controls.get(step.fieldId)?.el;
+    if (step.intent.kind === 'file' && box && adapter?.heldFile && holdsFile(box, adapter.heldFile, step.intent.file.name)) {
+      results.push(heldFileReport(step));
+      continue;
+    }
     if (uploadBusy && !read && step.intent.kind !== 'file') {
       read = true;
       await waitForUploadRead(doc, uploadBusy, uploaded);
     }
     if (step.intent.kind === 'file') uploaded = true;
-    const control = controls.get(step.fieldId);
-    if (!control) {
-      results.push({
-        fieldId: step.fieldId,
-        label: step.label,
-        fieldKey: step.fieldKey,
-        section: step.section ?? null,
-        outcome: 'no_control',
-        confidence: step.confidence,
-      });
-      continue;
-    }
-    try {
-      results.push(await executeStep(step, control, doc));
-    } catch (error) {
-      // executeStep reports its own failures; this is the last line of defence for the rest of the run.
-      console.warn('[runFill] step failed unexpectedly', step.fieldId, error);
-      results.push({
-        fieldId: step.fieldId,
-        label: step.label,
-        fieldKey: step.fieldKey,
-        section: step.section ?? null,
-        outcome: 'action_failed',
-        confidence: step.confidence,
-        value: intentDisplay(step.intent),
-        ...(step.source !== undefined ? { source: step.source } : {}),
-      });
-    }
+    results.push(await runStep(step, controls, doc));
+  }
+
+  // After the rest of the page: on a page with `uploadBusy`, the upload has been read by now, and it may list entries.
+  const editorRun = adapter?.editors?.length
+    ? await fillEntryEditors(doc, adapter.editors, { resume, files, idFor })
+    : null;
+  if (editorRun) {
+    results.push(...editorRun.results);
+    growth = growth.concat(editorRun.growth);
+    for (const [id, control] of editorRun.controls) controls.set(id, control);
   }
 
   // Document order of the controls; section-level rows last.

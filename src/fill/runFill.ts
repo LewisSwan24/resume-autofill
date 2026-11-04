@@ -1,10 +1,13 @@
 // runFill: scan → grow cards → re-scan → plan → execute steps one by one → merged report.
+import { resolveAdapter } from '../adapters/resolve';
 import { registerAllDrivers } from '../drivers';
 import { executeStep, intentDisplay } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
+import { waitFor } from '../drivers/wait';
 import { planFill } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
 import type { Control, FieldReport, FillReport } from '../engine/types';
+import { isVisible } from '../engine/visibility';
 import type { Resume } from '../schema';
 import { ensureCards, type SectionGrowth } from './ensureCards';
 import { applyHighlights } from './highlight';
@@ -37,6 +40,22 @@ function makeIdFor(): (el: HTMLElement) => string {
     if (!id) ids.set(el, (id = `c${++n}`));
     return id;
   };
+}
+
+const UPLOAD_READ_MS = 15_000;
+const UPLOAD_SIGN_MS = 300;
+
+/**
+ * Let a page finish reading an upload, since it may write over fields when it does. Gives up after a
+ * while. Just after an upload of ours, the sign that it is reading may still be on its way.
+ */
+async function waitForUploadRead(doc: Document, busy: string, justUploaded: boolean): Promise<void> {
+  const showing = (): boolean => {
+    const el = doc.querySelector(busy);
+    return !!el && isVisible(el);
+  };
+  if (justUploaded) await waitFor(() => (showing() ? true : null), { timeout: UPLOAD_SIGN_MS, root: doc });
+  await waitFor(() => (showing() ? null : true), { timeout: UPLOAD_READ_MS, root: doc });
 }
 
 /** Section-level failure rows: an add button was clicked but no card appeared. */
@@ -79,7 +98,15 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const results: FieldReport[] = [...plan.reports];
   // Files first: many forms read an uploaded resume and write over their fields with what they find.
   const steps = [...plan.steps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
+  const uploadBusy = resolveAdapter(doc)?.uploadBusy;
+  let uploaded = false;
+  let read = false;
   for (const step of steps) {
+    if (uploadBusy && !read && step.intent.kind !== 'file') {
+      read = true;
+      await waitForUploadRead(doc, uploadBusy, uploaded);
+    }
+    if (step.intent.kind === 'file') uploaded = true;
     const control = controls.get(step.fieldId);
     if (!control) {
       results.push({

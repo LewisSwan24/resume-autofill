@@ -162,6 +162,141 @@ test('answer buttons: no match presses nothing', async () => {
   expect((await fixtureState(page)).workedHere).toBe('');
 });
 
+/** Add plain markup to the page; widgets below wire it up with `page.evaluate`. */
+const add = (html: string) =>
+  page.evaluate((h) => {
+    const box = document.createElement('div');
+    box.innerHTML = h;
+    document.body.append(box);
+  }, html);
+
+test('a click that does nothing is not a fill, even when the old value looks like the new one', async () => {
+  await add(`<label for="g">Gender</label>
+    <div class="x__control"><span class="x__single-value">Male</span><input id="g" role="combobox" aria-controls="g-list"></div>
+    <ul id="g-list" role="listbox" hidden><li role="option">Male</li><li role="option">Female</li></ul>`);
+  await page.evaluate(() => {
+    document.getElementById('g')!.addEventListener('mousedown', () => document.getElementById('g-list')!.removeAttribute('hidden'));
+  });
+  const r = await execIntent(page, 'Gender', choice('Female'));
+  expect(r.outcome).toBe('action_failed');
+  expect(r.observed).toBe('Male');
+});
+
+test('typed text that equals the option is not a fill while the click did nothing', async () => {
+  await add(`<label for="t">Town</label><input id="t" role="combobox" aria-controls="t-list">
+    <ul id="t-list" role="listbox" style="margin:0;padding:0"></ul>`);
+  await page.evaluate(() => {
+    document.getElementById('t')!.addEventListener('input', () => {
+      document.getElementById('t-list')!.innerHTML = '<li role="option">Brisbane</li>';
+    });
+  });
+  const r = await execIntent(page, 'Town', choice('Brisbane'));
+  expect(r.outcome).toBe('action_failed');
+  await expect(page.locator('#t')).toHaveValue('');
+});
+
+test('a value the widget takes back on leaving the field is not a fill', async () => {
+  await add(`<label for="r">Hometown</label><input id="r" role="combobox" aria-controls="r-list" value="Sydney">
+    <ul id="r-list" role="listbox" hidden><li role="option">Brisbane</li></ul>`);
+  await page.evaluate(() => {
+    const input = document.getElementById('r') as HTMLInputElement;
+    const list = document.getElementById('r-list')!;
+    input.addEventListener('mousedown', () => list.removeAttribute('hidden'));
+    list.addEventListener('click', () => {
+      input.value = 'Brisbane';
+      list.setAttribute('hidden', '');
+    });
+    input.addEventListener('blur', () => {
+      input.value = 'Sydney';
+    });
+  });
+  const r = await execIntent(page, 'Hometown', choice('Brisbane'));
+  expect(r.outcome).not.toBe('filled');
+  await expect(page.locator('#r')).toHaveValue('Sydney');
+});
+
+test('a list that belongs to another control is left alone', async () => {
+  await add(`<label id="o-label">Office</label><button type="button" id="o" role="combobox" aria-labelledby="o-label" aria-controls="o-gone">Select</button>`);
+  await page.evaluate(() => {
+    const w = window as unknown as { foreignClicks: number };
+    w.foreignClicks = 0;
+    document.getElementById('o')!.addEventListener('click', () => {
+      const list = document.createElement('ul');
+      list.setAttribute('role', 'listbox');
+      list.innerHTML = '<li role="option">Sydney</li>';
+      list.addEventListener('click', () => w.foreignClicks++);
+      setTimeout(() => document.body.append(list), 30);
+    });
+  });
+  const r = await execIntent(page, 'Office', choice('Sydney'));
+  expect(r.outcome).not.toBe('filled');
+  expect(await page.evaluate(() => (window as unknown as { foreignClicks: number }).foreignClicks)).toBe(0);
+});
+
+test('an empty list that is always in the page does not count as open', async () => {
+  await add(`<label for="e">Faculty</label><input id="e" role="combobox" aria-controls="e-list">
+    <ul id="e-list" role="listbox" style="margin:0;padding:0"></ul>`);
+  await page.evaluate(() => {
+    const w = window as unknown as { escapes: number };
+    w.escapes = 0;
+    const input = document.getElementById('e') as HTMLInputElement;
+    const list = document.getElementById('e-list')!;
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') w.escapes++;
+    });
+    input.addEventListener('mousedown', () => {
+      list.innerHTML = '<li role="option">Science</li>';
+    });
+    list.addEventListener('click', () => {
+      input.value = 'Science';
+      list.innerHTML = '';
+    });
+  });
+  const r = await execIntent(page, 'Faculty', choice('Science'));
+  expect(r.outcome).toBe('filled');
+  expect(await page.evaluate(() => (window as unknown as { escapes: number }).escapes)).toBe(0);
+});
+
+test('a prompt on a button is not a value', async () => {
+  await add(`<label id="p-label">Where from</label><button type="button" id="p" role="combobox" aria-labelledby="p-label">Pick a country</button>`);
+  const r = await execIntent(page, 'Where from', choice('Canada'));
+  expect(r.outcome).not.toBe('filled');
+  expect(r.observed ?? null).toBeNull();
+});
+
+test('a button with no type inside a form never submits it', async () => {
+  await add(`<form id="sf" action="/submitted">
+    <label for="q-rel">Would you relocate for this role?</label>
+    <div><button id="rel-yes" aria-pressed="false">Yes</button><button aria-pressed="false">No</button><input type="checkbox" name="q-rel" style="display:none"></div>
+    <label id="s-label">Start month</label><button id="s" role="combobox" aria-labelledby="s-label" aria-controls="s-list">Select</button>
+    <ul id="s-list" role="listbox" hidden><li role="option">March</li></ul>
+  </form>`);
+  await page.evaluate(() => {
+    const w = window as unknown as { submits: number; stillHere: boolean };
+    w.submits = 0;
+    w.stillHere = true;
+    document.getElementById('sf')!.addEventListener('submit', () => w.submits++);
+    const yes = document.getElementById('rel-yes')!;
+    yes.addEventListener('click', () => yes.setAttribute('aria-pressed', 'true'));
+    const trigger = document.getElementById('s')!;
+    const list = document.getElementById('s-list')!;
+    trigger.addEventListener('click', () => list.removeAttribute('hidden'));
+    list.addEventListener('click', () => {
+      trigger.textContent = 'March';
+      list.setAttribute('hidden', '');
+    });
+  });
+  const answered = await execIntent(page, 'Would you relocate for this role?', choice('Yes'));
+  const picked = await execIntent(page, 'Start month', choice('March'));
+  expect(answered.outcome).toBe('filled');
+  expect(picked.outcome).toBe('filled');
+  const state = await page.evaluate(() => {
+    const w = window as unknown as { submits: number; stillHere: boolean };
+    return { submits: w.submits, stillHere: w.stillHere };
+  });
+  expect(state).toEqual({ submits: 0, stillHere: true });
+});
+
 test('button combobox: no match closes the list', async () => {
   const r = await execIntent(page, 'Employment type', choice('Casual'));
   expect(r.outcome).toBe('no_option');

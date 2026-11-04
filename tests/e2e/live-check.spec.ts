@@ -107,20 +107,31 @@ test('a GraphQL read gets through, since some forms load that way, and a mutatio
   const guard = await guardWrites(context);
   const page = await context.newPage();
   await page.goto(`${base}/apply`);
-  const post = (path: string, body: string) =>
+  const send = (method: string, path: string, body: string) =>
     page.evaluate(
-      ([p, b]) => fetch(p!, { method: 'POST', headers: { 'content-type': 'application/json' }, body: b }).then(() => true, () => false),
-      [path, body],
+      ([m, p, b]) => fetch(p!, { method: m!, headers: { 'content-type': 'application/json' }, body: b }).then(() => true, () => false),
+      [method, path, body],
     );
-  expect(await post('/read', JSON.stringify({ operationName: 'Form', query: 'query Form($id: ID!) { form(id: $id) { title } }' }))).toBe(true);
-  expect(await post('/read-short', JSON.stringify({ query: '{ form { title } }' }))).toBe(true);
-  expect(await post('/write', JSON.stringify({ operationName: 'Save', query: 'mutation Save { save(text: "query") { id } }' }))).toBe(false);
-  expect(await post('/both', JSON.stringify({ query: 'query A { a } mutation B { b }' }))).toBe(false);
-  expect(await post('/batch', JSON.stringify([{ query: 'mutation Save { save { id } }' }]))).toBe(false);
-  expect(await post('/not-json', 'query=1')).toBe(false);
-  expect(seen.filter((r) => r.method === 'POST').map((r) => r.path)).toEqual(['/read', '/read-short']);
-  const mine = guard.blocked().map((b) => b.path).filter((p) => p !== '/beacon' && p !== '/autosave');
-  expect(mine.sort()).toEqual(['/batch', '/both', '/not-json', '/write']);
+  const post = (path: string, body: string) => send('POST', path, body);
+  expect(await post('/graphql', JSON.stringify({ operationName: 'Form', query: 'query Form($id: ID!) { form(id: $id) { title } }' }))).toBe(true);
+  expect(await post('/api/non-user-graphql?op=Short', JSON.stringify({ query: '{ form { title } }' }))).toBe(true);
+
+  const stopped: [string, string, string][] = [
+    ['POST', '/graphql/save', JSON.stringify({ operationName: 'Save', query: 'mutation Save { save(text: "query") { id } }' })],
+    ['POST', '/graphql/both', JSON.stringify({ query: 'query A { a } mutation B { b }' })],
+    ['POST', '/graphql/batch', JSON.stringify([{ query: 'mutation Save { save { id } }' }])],
+    ['POST', '/graphql/text', 'query=1'],
+    ['POST', '/graphql/string', JSON.stringify({ operationName: 'B', query: 'query A { f(s: "#") } mutation B { del }' })],
+    ['POST', '/graphql/cr', JSON.stringify({ query: 'query A { f } #\r mutation B { del }' })],
+    ['DELETE', '/graphql/application', JSON.stringify({ query: '{}' })],
+    ['PUT', '/graphql/application', JSON.stringify({ query: '{}' })],
+    ['POST', '/api/application/draft', JSON.stringify({ query: 'query about visa', email: 'a@b.example' })],
+  ];
+  for (const [method, path, body] of stopped) expect(await send(method, path, body), `${method} ${path}`).toBe(false);
+
+  const reached = seen.filter((r) => r.method !== 'GET').map((r) => r.path);
+  expect(reached).toEqual(['/graphql', '/api/non-user-graphql?op=Short']);
+  expect(guard.blocked().map((b) => b.path)).toEqual(expect.arrayContaining(stopped.map(([, path]) => path)));
 });
 
 test('query strings are left out of the log, since they can hold what was typed', async ({ context }) => {

@@ -14,7 +14,7 @@ export type ControlKind =
   | 'richtext'
   | 'cascader';
 
-export type UiLib = 'native' | 'antd' | 'element' | 'aria';
+export type UiLib = 'native' | 'antd' | 'element' | 'aria' | 'search';
 
 export interface OptionInfo {
   label: string;
@@ -35,6 +35,10 @@ export interface Control {
   /** Statically known options (native select / radio group / checkbox group). */
   options?: OptionInfo[];
   dateGranularity?: 'day' | 'month' | 'year';
+  /** A question an adapter found outside any label. */
+  questionText?: string;
+  /** Parts of a search box, named by an adapter. */
+  search?: { within: string; option: string; picked?: string };
 }
 
 export type EvidenceSource =

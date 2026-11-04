@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { registerDriver, unregisterDriver } from '../../../src/drivers/registry';
 import { executeStep, type FillStep } from '../../../src/drivers/execute';
 import type { Driver, DriverContext, FillResult } from '../../../src/drivers/types';
@@ -10,6 +10,9 @@ afterEach(() => {
 });
 
 const el = document.createElement('div');
+beforeEach(() => {
+  document.body.append(el);
+});
 const control: Control = { id: 'c1', el, kind: 'text', lib: 'native' };
 
 const step = (over: Partial<FillStep> = {}): FillStep => ({
@@ -45,6 +48,23 @@ const run = (d: Driver, s = step(), timeoutMs?: number, graceMs = 20) =>
 
 describe('executeStep', () => {
   // Seen on a real page: text typed into a custom select is wiped by the widget a moment later.
+  it('does not report filled for a control that is no longer on the page', async () => {
+    const gone = document.createElement('input');
+    const r = await executeStep(step(), { ...control, el: gone }, document, {
+      resolveDriver: () => scripted([{ ok: true, observed: 'a@b.co' }], 'a@b.co'),
+    });
+    expect(r.outcome).toBe('action_failed');
+  });
+
+  it('a file box may leave the page once it has its file', async () => {
+    const gone = document.createElement('input');
+    const file = { kind: 'file' as const, file: { name: 'cv.pdf', type: 'application/pdf', dataUrl: 'data:,' } };
+    const r = await executeStep(step({ intent: file }), { ...control, kind: 'file', el: gone }, document, {
+      resolveDriver: () => scripted([{ ok: true, observed: 'cv.pdf' }], 'cv.pdf'),
+    });
+    expect(r.outcome).toBe('filled');
+  });
+
   it('does not report filled when the driver says ok but the page reads back empty', async () => {
     const r = await run(scripted([{ ok: true, observed: 'x' }], ''));
     expect(r.outcome).toBe('action_failed');

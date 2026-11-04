@@ -4,7 +4,7 @@ import type { Control, OptionInfo } from '../../../src/engine/types';
 import {
   entryCount, optionLabel, resolveValue, sectionEntries, toIntent, type RawValue,
 } from '../../../src/engine/values';
-import { ResumeSchema, createSampleProfile, type Resume } from '../../../src/schema';
+import { ResumeSchema, createSampleProfile, type Region, type Resume } from '../../../src/schema';
 import { getFieldKeyDef } from '../../../src/schema/fieldKeys';
 
 const profile = createSampleProfile();
@@ -181,8 +181,133 @@ describe('toIntent', () => {
     const pick = (...labels: string[]) => picked(intent('basics.currentLocation', region, control('select'), 'en-AU'), opts(...labels));
     expect(pick('Brisbane, Queensland, Australia', 'Brisbane, California, United States')).toBe('Brisbane, Queensland, Australia');
     expect(pick('Brisbane, QLD, Australia', 'Brisbane, WA, Australia')).toBe('Brisbane, QLD, Australia');
-    expect(pick('Brisbane, Ontario, Canada', 'Brisbane, California, United States')).toBe('ambiguous');
+    expect(pick('Brisbane QLD, Australia', 'Melbourne VIC, Australia')).toBe('Brisbane QLD, Australia');
+    expect(pick('Brisbane QLD')).toBe('Brisbane QLD');
+    expect(pick('Brisbane')).toBe('Brisbane');
     expect(pick('Brisbane, QLD, Australia', 'Brisbane, QLD 4000, Australia')).toBe('ambiguous');
+    // Places elsewhere are not this place, even when one is all the search found.
+    expect(pick('Brisbane, Ontario, Canada', 'Brisbane, California, United States')).toBe('none');
+    expect(pick('Brisbane CA, United States')).toBe('none');
+    // A longer name is another place.
+    expect(pick('Brisbane City QLD, Australia')).toBe('none');
+    expect(pick('Sydney NSW, Australia')).toBe('none');
+  });
+
+  describe('a gender question that lets you decline', () => {
+    const answer = (genderAnswer: 'prefer_not_to_say' | 'from_resume', c: Control, ...labels: string[]) =>
+      picked(toIntent(def('basics.gender'), 'male', c, 'en-AU', { genderAnswer }), opts(...labels));
+    const declinable = ['Male', 'Female', 'Prefer not to say'];
+
+    it('declines when that is the chosen answer', () => {
+      expect(answer('prefer_not_to_say', control('select'), ...declinable)).toBe('Prefer not to say');
+      expect(answer('prefer_not_to_say', control('radio'), ...declinable)).toBe('Prefer not to say');
+    });
+
+    it('answers from the resume when that is the chosen answer', () => {
+      expect(answer('from_resume', control('select'), ...declinable)).toBe('Male');
+    });
+
+    it('answers from the resume when the question offers no way to decline', () => {
+      expect(answer('prefer_not_to_say', control('select'), 'Male', 'Female')).toBe('Male');
+      expect(answer('prefer_not_to_say', control('select'), '男', '女')).toBe('男');
+    });
+
+    it.each([
+      'Decline to self-identify', "I don't wish to answer", 'Prefer not to disclose', 'Decline to state',
+      'Do not wish to disclose', 'Prefer not to respond', '不愿透露', '保密', '不便透露', '不方便透露', '不透露', '不想透露',
+      '拒绝回答', '不愿回答', '不愿说明',
+    ])(
+      'reads "%s" as declining',
+      (decline) => {
+        expect(answer('prefer_not_to_say', control('select'), 'Male', 'Female', decline)).toBe(decline);
+      },
+    );
+
+    it('does not pick between two ways of declining', () => {
+      expect(answer('prefer_not_to_say', control('select'), 'Male', 'Prefer not to say', 'Decline to self-identify')).toBe('ambiguous');
+    });
+
+    it('declines in a checkbox group too', () => {
+      const c = control('checkbox', { multiple: true, options: opts(...declinable) });
+      const i = toIntent(def('basics.gender'), 'male', c, 'en-AU', { genderAnswer: 'prefer_not_to_say' });
+      if (i?.kind !== 'multi') throw new Error(`not a multi: ${JSON.stringify(i)}`);
+      const m = i.items[0]!.match(opts(...declinable));
+      expect(m.status === 'matched' && declinable[m.index]).toBe('Prefer not to say');
+    });
+
+    it('searches for the way to decline, not for the answer it is keeping back', () => {
+      const i = toIntent(def('basics.gender'), 'male', control('select'), 'en-AU', { genderAnswer: 'prefer_not_to_say' });
+      expect(i).toMatchObject({ kind: 'choice', query: 'Prefer not to say' });
+    });
+
+    it('says what it will write when the options are known', () => {
+      const c = control('select', { options: opts(...declinable) });
+      const i = toIntent(def('basics.gender'), 'male', c, 'en-AU', { genderAnswer: 'prefer_not_to_say' });
+      expect(i).toMatchObject({ kind: 'choice', display: 'Prefer not to say' });
+    });
+
+    it('leaves other questions alone', () => {
+      const c = control('select');
+      const i = toIntent(def('basics.maritalStatus'), 'single', c, 'en-AU', { genderAnswer: 'prefer_not_to_say' });
+      expect(picked(i, opts('Single', 'Married', 'Prefer not to say'))).toBe('Single');
+    });
+  });
+
+  describe('a place that does not fit the address', () => {
+    const place = (home: Region, name: string, ...labels: string[]) =>
+      picked(toIntent(def('contact.addressCity'), name, control('select'), 'en-AU', { home }), opts(...labels));
+    const au = (province: string, city: string): Region => ({ country: 'Australia', province, city });
+
+    it('is refused when it names another state of the same country', () => {
+      expect(place(au('VIC', 'Richmond'), 'Richmond', 'Richmond, New South Wales, AUS')).toBe('none');
+      expect(place(au('WA', 'Perth'), 'Perth', 'Perth, Tasmania, AUS')).toBe('none');
+      expect(place(au('VIC', 'Richmond'), 'Richmond', 'Richmond, NSW, Australia')).toBe('none');
+      expect(place(au('VIC', 'Richmond'), 'Richmond', 'Richmond, New South Wales, AUS', 'Richmond, Victoria, AUS')).toBe('Richmond, Victoria, AUS');
+    });
+
+    it('is not refused because the name of the town looks like a state', () => {
+      expect(place(au('WA', 'Victoria Park'), 'Victoria Park', 'Victoria Park, WA, AUS')).toBe('Victoria Park, WA, AUS');
+    });
+
+    it('is refused when it only starts the same', () => {
+      expect(place(au('NSW', 'Newcastle'), 'Newcastle', 'Newcastle West, IE')).toBe('none');
+      expect(place(au('VIC', 'Melbourne'), 'Melbourne', 'Melbourne Beach, FL')).toBe('none');
+    });
+
+    it('is taken from a plain list by its exact name', () => {
+      expect(place(au('QLD', 'Brisbane'), 'Brisbane', 'Sydney', 'Brisbane')).toBe('Brisbane');
+    });
+
+    it('does not read Australian state short forms into another country', () => {
+      const home: Region = { country: 'United States', province: 'WA', city: 'Albany' };
+      expect(place(home, 'Albany', 'Albany, Western Australia')).toBe('none');
+      expect(place(home, 'Albany', 'Albany, WA, USA')).toBe('Albany, WA, USA');
+    });
+
+    it('is not guessed at when there is no country or state to check it against', () => {
+      expect(place({ city: 'Brisbane' } as Region, 'Brisbane', 'Brisbane, CA, USA')).toBe('ambiguous');
+    });
+  });
+
+  it('knows a country or state by its other spellings', () => {
+    const home = { country: 'Australia', province: 'QLD', city: 'Brisbane' };
+    const city = (...labels: string[]) =>
+      picked(toIntent(def('contact.addressCity'), 'Brisbane', control('select'), 'en-AU', { home }), labels.map((label) => ({ label })));
+    expect(city('Brisbane, Queensland, AUS', 'Brisbane, CA, USA', 'Brisbane, IL, USA', 'Brisbane, Erin, ON, CAN')).toBe('Brisbane, Queensland, AUS');
+    expect(city('Brisbane, CA, USA', 'Brisbane, IL, USA')).toBe('none');
+    // A state short for another one elsewhere is not enough: the country still decides.
+    const perth = { country: 'Australia', province: 'WA', city: 'Perth' };
+    const west = (...labels: string[]) =>
+      picked(toIntent(def('contact.addressCity'), 'Perth', control('select'), 'en-AU', { home: perth }), labels.map((label) => ({ label })));
+    expect(west('Perth, Western Australia, AUS', 'Perth, WA, USA')).toBe('Perth, Western Australia, AUS');
+    expect(west('Perth, WA, USA')).toBe('none');
+  });
+
+  it('a city on a search box goes by the home address too', () => {
+    const home = { country: 'Australia', province: 'QLD', city: 'Brisbane' };
+    const city = (...labels: string[]) => picked(toIntent(def('contact.addressCity'), 'Brisbane', control('select'), 'en-AU', { home }), opts(...labels));
+    expect(city('Brisbane QLD, Australia', 'Melbourne VIC, Australia')).toBe('Brisbane QLD, Australia');
+    expect(city('Brisbane CA, United States')).toBe('none');
   });
 
   it('region: cascade path, joined text per locale, choice on a select', () => {

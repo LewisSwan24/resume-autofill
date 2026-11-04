@@ -192,6 +192,7 @@ export const en: Record<MessageKey, string> = {
   'options.field.disability': 'Disability',
   'options.field.genderIdentity': 'Gender identity',
   'options.field.veteran': 'Veteran',
+  'options.field.genderAnswer': 'When a gender question lets you decline',
   'options.field.selfIntroduction': 'Self introduction',
   'options.field.hobbies': 'Hobbies',
   'options.field.question': 'Question',

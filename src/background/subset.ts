@@ -114,6 +114,11 @@ export function buildResumeSubset(resume: Resume, needs: FrameNeeds): Resume {
     // attachments.* and unknown keys: nothing to copy here
   }
 
+  // Not a field of its own on any page: it says how the gender field is answered.
+  if (requested.has('basics.gender')) {
+    (outBag.diversity as Bag).genderAnswer = (srcBag.diversity as Bag).genderAnswer;
+  }
+
   // Array modules: whole module for a repeated section, requested leaves for a module reached by key only.
   const wholeModules = new Set<ArrayModuleName>();
   for (const section of needs.repeatSections) {

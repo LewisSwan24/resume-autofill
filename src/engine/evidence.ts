@@ -1,14 +1,19 @@
 // Evidence: every piece of text that may tell us what a control is for (labels, aria, placeholders,
 // table headers, nearby text, name/id), plus the "required" flag. Pure DOM reads, no side effects.
-import { isAddButtonText, isDeleteText, normalizeLabel, resolveCode } from '../dictionary';
-import { LIBRARY_OVERLAY_SELECTOR, LIBRARY_ROOT_SELECTOR } from '../drivers/libraries';
+import { isAddButtonText, isDeleteText, isNeverFill, normalizeLabel, resolveCode } from '../dictionary';
+import {
+  ANSWER_BUTTON_SELECTOR,
+  ARIA_COMBOBOX_SELECTOR,
+  LIBRARY_OVERLAY_SELECTOR,
+  LIBRARY_ROOT_SELECTOR,
+} from '../drivers/libraries';
 import { groupInputs } from './discover';
 import { EVIDENCE_WEIGHTS, type Control, type Evidence, type EvidenceSource } from './types';
 
 /** Native form fields (everything `discover` can report, minus buttons / hidden inputs). */
 export const FIELD_SELECTOR =
   'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]), ' +
-  'select, textarea, [contenteditable]:not([contenteditable=false])';
+  `select, textarea, [contenteditable]:not([contenteditable=false]), ${ARIA_COMBOBOX_SELECTOR}, ${ANSWER_BUTTON_SELECTOR}`;
 
 /** Elements that are headings for sure (as opposed to class-name guesses). */
 export const STRICT_HEADING_SELECTOR =
@@ -55,6 +60,11 @@ function labelTextOf(label: Element, control: Element): string {
   range.selectNodeContents(label);
   range.setEndBefore(control);
   const before = textWithoutControls(range.cloneContents());
+  range.selectNodeContents(label);
+  range.setStartAfter(control);
+  const after = textWithoutControls(range.cloneContents());
+  // Consent wording after the control still has to reach the never-fill check, on its own.
+  if (isNeverFill(cleanEvidenceText(after, Infinity))) return after;
   return cleanEvidenceText(before, MAX_LABEL_TEXT) ? before : textWithoutControls(label);
 }
 
@@ -215,6 +225,9 @@ function isHeadingLike(el: Element): boolean {
 
 const SKIP_NEARBY_TAGS = new Set(['SCRIPT', 'STYLE', 'BR', 'OPTION', 'OPTGROUP', 'BUTTON', 'SVG', 'TEMPLATE']);
 
+/** Text too long to be a label stands between the control and anything further up, which then names something else. */
+const isParagraph = (raw: string | null): boolean => cleanEvidenceText(raw, Infinity).length > MAX_NEARBY;
+
 function acceptNearby(raw: string): string | null {
   const t = cleanEvidenceText(raw, MAX_NEARBY);
   if (!t || isAddButtonText(t) || isDeleteText(t)) return null;
@@ -230,6 +243,7 @@ function nearbyText(c: Ctx): string | null {
   for (let level = 0; level <= MAX_NEARBY_LEVELS; level++) {
     for (let s: Node | null = node.previousSibling; s; s = s.previousSibling) {
       if (s.nodeType === 3) {
+        if (isParagraph(s.textContent)) return null;
         const t = acceptNearby(s.textContent ?? '');
         if (t) return t;
         continue;
@@ -239,7 +253,9 @@ function nearbyText(c: Ctx): string | null {
       if (SKIP_NEARBY_TAGS.has(sib.tagName.toUpperCase()) || sib.matches('[role=button]')) continue;
       if (containsField(sib)) return null;
       if (isHeadingLike(sib)) continue;
-      const t = acceptNearby(textWithoutControls(sib));
+      const raw = textWithoutControls(sib);
+      if (isParagraph(raw)) return null;
+      const t = acceptNearby(raw);
       if (t) return t;
     }
     const parent = node.parentElement;
@@ -292,6 +308,7 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     if (text) out.push({ source, text, weight: opts.weight ?? EVIDENCE_WEIGHTS[source] });
   };
 
+  push('label-for', control.questionText, { label: true });
   // label[for] → control (or inner input of a library widget)
   if (c.ids.size > 0) {
     for (const l of Array.from(c.root.querySelectorAll('label[for]'))) {
@@ -363,8 +380,9 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     push('title-attr', c.el.getAttribute('title'));
   }
 
-  // nearby text
-  push('nearby-text', nearbyText(c));
+  // nearby text. Answer buttons often sit right beside their question, inside the same element.
+  const beside = c.control.lib === 'aria' && c.optionGroup ? textWithoutControls(c.el) : '';
+  push('nearby-text', beside.trim() ? beside : nearbyText(c));
 
   // name / id
   const first = c.inputs[0] as HTMLInputElement | undefined;

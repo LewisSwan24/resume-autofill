@@ -1,6 +1,7 @@
 // ARIA comboboxes: react-select and hand-written widgets (role=combobox, or a button with
 // aria-haspopup=listbox). The list usually exists only while open and often lives in a portal, so it is
 // found again on every look, and only a list that is really on screen is ever read.
+import { isPlaceholderOption } from '../dictionary/options';
 import type { Control, OptionInfo } from '../engine/types';
 import { isVisible } from '../engine/visibility';
 import { isRetired, visibleOptions, type DropdownOption } from './dropdown';
@@ -18,6 +19,7 @@ const OPEN_ON_FOCUS_MS = 80;
 const OPEN_MS = 300;
 const LOAD_MS = 1500;
 const SETTLE_MS = 800;
+const AFTER_LEAVING_MS = 60;
 
 const squash = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
 const failed = (detail: string, observed: string | null = null): FillResult => ({
@@ -37,11 +39,33 @@ function searchRoots(el: Element): (Document | ShadowRoot)[] {
   return root === el.ownerDocument ? [el.ownerDocument] : [root as ShadowRoot, el.ownerDocument];
 }
 
-const isOnScreen = (el: Element): boolean => !isRetired(el) && isVisible(el);
+/** An empty list some widgets keep in the page has no height: it is not open. */
+const isOnScreen = (el: Element): boolean => {
+  if (isRetired(el) || !isVisible(el)) return false;
+  return el.getClientRects().length === 0 || el.getBoundingClientRect().height > 0;
+};
+
+/** Clicking a button with no type inside a form would submit it, and this extension never submits. */
+export function clickWithoutSubmit(el: Element): void {
+  const win = el.ownerDocument.defaultView;
+  const stop = (event: Event): void => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  win?.addEventListener('submit', stop, true);
+  try {
+    simulateClick(el);
+  } finally {
+    win?.removeEventListener('submit', stop, true);
+  }
+}
 
 function listsOnScreen(el: Element): HTMLElement[] {
   return searchRoots(el).flatMap((r) => Array.from(r.querySelectorAll<HTMLElement>(LISTBOX)).filter(isOnScreen));
 }
+
+const declaredListIds = (el: Element): string[] =>
+  ['aria-controls', 'aria-owns'].flatMap((a) => (el.getAttribute(a) ?? '').split(/\s+/).filter(Boolean));
 
 /** The list this combobox itself points at, when it says so and that list is on screen. */
 function referencedList(el: HTMLElement): HTMLElement | null {
@@ -52,8 +76,7 @@ function referencedList(el: HTMLElement): HTMLElement | null {
     }
     return null;
   };
-  const ids = ['aria-controls', 'aria-owns'].flatMap((a) => (el.getAttribute(a) ?? '').split(/\s+/).filter(Boolean));
-  for (const id of ids) {
+  for (const id of declaredListIds(el)) {
     const target = byId(id);
     if (target && isOnScreen(target)) return target.matches(LISTBOX) ? target : (target.querySelector<HTMLElement>(LISTBOX) ?? target);
   }
@@ -87,16 +110,19 @@ function readItems(el: HTMLElement): string[] {
   if (input) return input.value.trim() ? [input.value.trim()] : [];
   // A button shows the value as its text, or a prompt when nothing is chosen.
   const shown = squash(el.textContent);
-  return shown && el.getAttribute('data-placeholder') === null && !/^(?:please\s+)?(?:select|choose)\b|^请选择/i.test(shown) ? [shown] : [];
+  const prompt = /^(?:please\s+)?(?:select|choose|pick)\b/i.test(shown) || isPlaceholderOption({ label: shown });
+  return shown && !prompt ? [shown] : [];
 }
 
 const readText = (el: HTMLElement): string | null => readItems(el).join(', ') || null;
 
 /** Widgets may show less than the option says: "+61" for "Australia +61". */
-function sameChoice(shown: string, label: string): boolean {
-  const a = shown.toLowerCase();
-  const b = label.toLowerCase();
-  return !!a && (a.includes(b) || b.includes(a));
+export function sameChoice(shown: string, label: string): boolean {
+  if (!shown) return false;
+  // As whole words: "Male" is not part of "Female".
+  const within = (part: string, whole: string): boolean =>
+    new RegExp(`(?:^|[^\\p{L}\\p{N}])${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^\\p{L}\\p{N}])`, 'iu').test(whole);
+  return within(shown, label) || within(label, shown);
 }
 
 const infos = (labels: string[]): OptionInfo[] => labels.map((label) => ({ label }));
@@ -108,7 +134,9 @@ class Session {
   /** Lists already on screen before we touched anything belong to something else. */
   private readonly before: Set<HTMLElement>;
   private readonly initialText: string;
-  /** What we typed last, so a list that merely echoes it is not taken for a choice. */
+  /** What the control showed before we touched it. */
+  readonly shownBefore: string[];
+  /** What we typed last: an input still holding it has not necessarily taken a choice. */
   typed: string | null = null;
 
   constructor(
@@ -117,11 +145,15 @@ class Session {
   ) {
     this.input = inputOf(el);
     this.initialText = this.input?.value ?? '';
+    this.shownBefore = readItems(el);
     this.before = new Set(listsOnScreen(el).filter((l) => l !== referencedList(el)));
   }
 
   list(): HTMLElement | null {
-    return referencedList(this.el) ?? nearest(this.el, listsOnScreen(this.el).filter((l) => !this.before.has(l)));
+    const own = referencedList(this.el);
+    // A combobox that names its list means that one; a list that turns up elsewhere is another control's.
+    if (own || declaredListIds(this.el).length > 0) return own;
+    return nearest(this.el, listsOnScreen(this.el).filter((l) => !this.before.has(l)));
   }
 
   options(): DropdownOption[] {
@@ -139,7 +171,7 @@ class Session {
     focusElement(this.input ?? this.el);
     const onFocus = await this.wait(() => this.list(), OPEN_ON_FOCUS_MS);
     if (onFocus) return onFocus;
-    if (this.ctx.attempt === 1) simulateClick(this.input ?? this.el);
+    if (this.ctx.attempt === 1) clickWithoutSubmit(this.input ?? this.el);
     else pressKey(this.input ?? this.el, 'ArrowDown');
     return this.wait(() => this.list(), OPEN_MS);
   }
@@ -170,7 +202,7 @@ class Session {
       const closed = await this.wait(() => (this.list() ? null : true), OPEN_MS);
       // A button that opened the list may close it only by being clicked again.
       if (!closed && !this.input) {
-        simulateClick(this.el);
+        clickWithoutSubmit(this.el);
         await this.wait(() => (this.list() ? null : true), OPEN_MS);
       }
     }
@@ -181,7 +213,7 @@ class Session {
 type Picked = { label: string; query: string | null };
 type Resolved = Picked | { fail: FillResult };
 
-function verdict(m: OptionMatch, opts: DropdownOption[], query: string | null): Resolved {
+export function verdict(m: OptionMatch, opts: DropdownOption[], query: string | null): Resolved {
   if (m.status === 'matched') {
     const hit = opts[m.index];
     return hit ? { label: hit.info.label, query } : { fail: failed('matched option vanished') };
@@ -221,21 +253,48 @@ async function select(s: Session, pick: Picked): Promise<boolean> {
     option = await s.wait(find, LOAD_MS);
   }
   if (!option) return false;
-  simulateClick(option);
+  clickWithoutSubmit(option);
   return true;
 }
 
 function isCommitted(s: Session, label: string): boolean {
   const shown = readItems(s.el);
-  // An input still holding exactly what we typed proves nothing: the click did not take.
-  if (s.typed !== null && shown.length === 1 && shown[0] === s.typed && s.typed !== label) return false;
-  return shown.some((v) => sameChoice(v, label));
+  if (!shown.some((v) => sameChoice(v, label))) return false;
+  // Nothing changed and the list is still up, and what was there only resembles the choice: the click did not take.
+  const unchanged = shown.join('\n') === s.shownBefore.join('\n');
+  if (unchanged && s.list() && !shown.some((v) => v.toLowerCase() === label.toLowerCase())) return false;
+  // An input holding what we typed proves nothing until the list has gone away with the right text left.
+  if (s.typed !== null && shown.length === 1 && shown[0] === s.typed) return s.typed === label && !s.list();
+  return true;
 }
 
 function matchersOf(intent: FillIntent): { query: string; match: OptionMatcher }[] | null {
   if (intent.kind === 'choice') return [{ query: intent.query, match: intent.match }];
   if (intent.kind === 'multi') return intent.items;
   return null;
+}
+
+async function selectAll(s: Session, missing: { query: string; match: OptionMatcher }[], picks: Picked[]): Promise<FillResult> {
+  const { el, ctx } = s;
+  const opened = await s.open();
+  if (!opened && !s.canType()) return failed('list did not open');
+
+  // Resolve every value first, so a miss or an ambiguity changes nothing.
+  for (const w of missing) {
+    if (ctx.signal?.aborted) return failed('aborted');
+    const r = await resolve(s, w.query, w.match);
+    if ('fail' in r) return r.fail;
+    if (!picks.some((p) => p.label === r.label)) picks.push(r);
+    if (missing.length > 1) s.clearTyped();
+  }
+
+  for (const pick of picks) {
+    if (ctx.signal?.aborted) return failed('aborted');
+    if (!(await select(s, pick))) return failed(`option "${pick.label}" not clickable`);
+    const ok = await s.wait(() => (isCommitted(s, pick.label) ? true : null), SETTLE_MS);
+    if (!ok) return failed(`selection of "${pick.label}" did not stick`);
+  }
+  return { ok: true, observed: readText(el) };
 }
 
 async function fill(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
@@ -250,33 +309,21 @@ async function fill(control: Control, intent: FillIntent, ctx: DriverContext): P
   if (missing.length === 0) return { ok: true, observed: readText(el) };
 
   const s = new Session(el, ctx);
-  let done = false;
+  const picks: Picked[] = [];
+  let result: FillResult | undefined;
   try {
-    const opened = await s.open();
-    if (!opened && !s.canType()) return failed('list did not open', readText(el));
-
-    // Resolve every value first, so a miss or an ambiguity changes nothing.
-    const picks: Picked[] = [];
-    for (const w of missing) {
-      if (ctx.signal?.aborted) return failed('aborted', readText(el));
-      const r = await resolve(s, w.query, w.match);
-      if ('fail' in r) return { ...r.fail, observed: readText(el) };
-      if (!picks.some((p) => p.label === r.label)) picks.push(r);
-      if (missing.length > 1) s.clearTyped();
-    }
-
-    for (const pick of picks) {
-      if (ctx.signal?.aborted) return failed('aborted', readText(el));
-      if (!(await select(s, pick))) return failed(`option "${pick.label}" not clickable`, readText(el));
-      const ok = await s.wait(() => (isCommitted(s, pick.label) ? true : null), SETTLE_MS);
-      if (!ok) return failed(`selection of "${pick.label}" did not stick`, readText(el));
-    }
-    done = true;
-    return { ok: true, observed: readText(el) };
+    result = await selectAll(s, missing, picks);
   } finally {
-    if (!done) s.clearTyped();
+    if (!result?.ok) s.clearTyped();
     await s.close();
   }
+  if (!result.ok) return { ...result, observed: readText(el) };
+
+  // Some widgets take a value back when the field is left.
+  await new Promise((resolve) => setTimeout(resolve, AFTER_LEAVING_MS));
+  const shown = readItems(el);
+  const kept = picks.every((p) => shown.some((v) => sameChoice(v, p.label)));
+  return kept ? { ok: true, observed: readText(el) } : failed('the value did not survive leaving the field', readText(el));
 }
 
 // ------------------------------------------------------------------ answer buttons
@@ -296,7 +343,7 @@ async function pressAnswer(control: Control, intent: FillIntent, ctx: DriverCont
   if ('fail' in r) return { ...r.fail, observed: pressedAnswer(group) };
   // Pressing the pressed answer again could take it back.
   if (pressedAnswer(group) === r.label) return { ok: true, observed: r.label };
-  simulateClick(buttons.find((b) => b.info.label === r.label)!.el);
+  clickWithoutSubmit(buttons.find((b) => b.info.label === r.label)!.el);
   const ok = await waitFor(() => (pressedAnswer(group) === r.label ? true : null), {
     timeout: Math.min(ctx.timeoutMs, SETTLE_MS),
     root: group.ownerDocument,

@@ -282,7 +282,9 @@ describe('Side panel – report list', () => {
       report: makeReport([field('z1', 'filled', { label: '姓名', value: '林知远', source: 'basics.familyName+givenName', confidence: 1 })]),
     });
     await screen.findByText('姓名');
-    expect(expand('姓名').querySelector('.raf-source')?.textContent).toBe('来源：基本信息 › 姓 + 名');
+    // The language switches once the profile has loaded, which can be just after the row appears.
+    const row = expand('姓名');
+    await waitFor(() => expect(row.querySelector('.raf-source')?.textContent).toBe('来源：基本信息 › 姓 + 名'));
     cleanup();
     await renderPanel({ profile: makeProfile('zh') });
     await screen.findByText('Email');

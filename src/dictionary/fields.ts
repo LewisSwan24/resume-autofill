@@ -53,6 +53,18 @@ const RESUME_PARSER = [
   '自动解析', '简历解析', '解析简历', '智能解析', '一键解析', '自动填写', '自动填充',
 ];
 
+const OTHER_PERSON_HEADINGS = [
+  'refer', 'friend', 'notify', 'manager', 'supervisor', 'emergency', 'next of kin', 'guardian', 'spouse', 'partner',
+  'parent', 'colleague', 'recommend', 'in case of', 'other contact', 'alternate contact',
+  '推荐', '内推', '紧急', '家属', '家庭', '亲属', '监护', '上级', '主管', '证明人', '联系人',
+];
+
+/** A heading that says the fields under it are about someone other than the applicant. */
+export function isOtherPersonHeading(title: string): boolean {
+  const t = normalizeLabel(title);
+  return OTHER_PERSON_HEADINGS.some((w) => containsPhrase(t, normalizeLabel(w), 'prefix'));
+}
+
 /** True when an upload box's label says the page will read the file and fill the form from it. */
 export function isResumeParser(label: string): boolean {
   const t = normalizeLabel(label);
@@ -62,10 +74,14 @@ export function isResumeParser(label: string): boolean {
 // Questions that legitimately contain "同意/consent/agree" wording but are ordinary profile fields.
 const NEVER_FILL_EXEMPT = ['调剂', '调配', '外派', '服从', '异地', 'relocat', 'sponsor', 'work rights', 'work authori', 'background check', 'reference check'];
 
+// Someone signing their name to a statement, whatever the statement is about.
+const DECLARATIONS = ['i declare', 'i certify', 'i confirm', 'i acknowledge', 'i attest', 'i agree', 'i hereby', 'hereby', '声明', '承诺', '本人确认', '本人保证'];
+
 /** True when the label looks like a captcha / password / consent / declaration control. */
 export function isNeverFill(label: string): boolean {
   const t = normalizeLabel(label);
   if (!t) return false;
+  if (DECLARATIONS.some((w) => containsPhrase(t, normalizeLabel(w), 'prefix'))) return true;
   if (NEVER_FILL_EXEMPT.some((w) => containsPhrase(t, w, 'prefix'))) return false;
   return [...NEVER_FILL.zh, ...NEVER_FILL.en].some((w) => containsPhrase(t, normalizeLabel(w), 'prefix'));
 }

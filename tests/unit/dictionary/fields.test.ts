@@ -168,6 +168,25 @@ describe('NEVER_FILL', () => {
   });
 });
 
+describe('a declaration inside a question that is otherwise ordinary', () => {
+  it.each([
+    'Require visa sponsorship? I declare this is true',
+    'I certify that I have work rights in Australia',
+    'I confirm I will not need sponsorship',
+    'I acknowledge the background check',
+    '本人声明无需工作签证担保 sponsor',
+  ])('never fills "%s"', (label) => {
+    expect(isNeverFill(label)).toBe(true);
+  });
+
+  it.each(['Do you require visa sponsorship?', 'Do you have work rights in Australia?', 'Are you willing to relocate?'])(
+    'still answers "%s"',
+    (label) => {
+      expect(isNeverFill(label)).toBe(false);
+    },
+  );
+});
+
 describe('synonym sanity vs similarity', () => {
   it('"Surname" is closer to familyName than to givenName', () => {
     const best = (key: string) => Math.max(...allSynonyms(key).map((s) => labelSimilarity('Surname', s)));

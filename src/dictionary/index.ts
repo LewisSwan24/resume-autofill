@@ -4,3 +4,4 @@ export * from './sections';
 export * from './fields';
 export * from './options';
 export * from './addButtons';
+export * from './places';

@@ -191,6 +191,7 @@ export const zh = {
   'options.field.disability': '残障情况',
   'options.field.genderIdentity': '性别认同',
   'options.field.veteran': '退伍军人',
+  'options.field.genderAnswer': '可以不透露性别时',
   'options.field.selfIntroduction': '自我介绍',
   'options.field.hobbies': '兴趣爱好',
   'options.field.question': '问题',

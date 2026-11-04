@@ -1,7 +1,7 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
-import { OPTION_SYNONYMS, hasCjk, matchOption } from '../dictionary';
-import type { FileData, FillIntent, OptionMatch } from '../drivers/types';
-import type { Locale, Region, Resume } from '../schema';
+import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, matchOption, namesOtherState, placeOptions, placeSpellings } from '../dictionary';
+import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
+import type { GenderAnswer, Locale, Region, Resume } from '../schema';
 import type { FieldKeyDef } from '../schema/fieldKeys';
 import type { Control, FieldKey, OptionInfo, SectionKey } from './types';
 
@@ -222,6 +222,10 @@ export function optionLabel(domain: string | null, code: string, locale: Locale)
 export interface IntentOptions {
   /** Attachment files by id (the run payload's `files`). */
   files?: Record<string, FileData>;
+  /** The home address, to tell which of several places of one name is meant. */
+  home?: Region;
+  /** How to answer a gender question that offers a way to decline. Without it: from the resume. */
+  genderAnswer?: GenderAnswer;
 }
 
 const isTextLike = (c: Control) => c.kind === 'text' || c.kind === 'textarea' || c.kind === 'richtext';
@@ -273,18 +277,39 @@ function regionPath(region: Region): string[] {
   return parts;
 }
 
-/** Several places of one name: keep those the rest of the address also names, broadest part first. */
+/**
+ * A place from a search box. It must be named by the rest of the address: a search that finds only
+ * "Brisbane CA, USA" has not found this Brisbane. Several left: narrow by country, then by state.
+ */
 function matchPlace(name: string, region: Region, options: OptionInfo[]): OptionMatch {
-  const m = matchOption(null, name, options);
-  if (m.status !== 'ambiguous') return m;
-  let hits = m.candidates;
-  for (const part of [region.country, region.province]) {
-    const word = part?.trim().toLowerCase();
-    if (!word) continue;
-    const named = hits.filter((i) => new RegExp(`(?:^|[^\\p{L}])${escapeRegExp(word)}(?:$|[^\\p{L}])`, 'iu').test(options[i]!.label));
-    if (named.length > 0) hits = named;
+  const found = placeOptions(name, options);
+  if (found.length === 0) {
+    const m = matchOption(null, name, options);
+    // A plain list says the name and nothing else. "Melbourne Beach, FL" only starts like it.
+    if (m.status !== 'matched' || hasCjk(name)) return m;
+    return options[m.index]!.label.trim().toLowerCase() === name.trim().toLowerCase() ? m : { status: 'none' };
   }
-  return hits.length === 1 ? { status: 'matched', index: hits[0]!, confidence: 0.8 } : { status: 'ambiguous', candidates: hits };
+  const country = region.country?.trim() ?? '';
+  const province = region.province?.trim() ?? '';
+  const hits = found.filter((i) => {
+    const label = options[i]!.label;
+    if (country && isInOtherCountry(label, country)) return false;
+    return !province || !namesOtherState(label.slice(name.length), province, country);
+  });
+  const parts = [country, province].filter(Boolean);
+  const names = (i: number, part: string): boolean =>
+    placeSpellings(part, country).some((spelling) =>
+      new RegExp(`(?:^|[^\\p{L}])${escapeRegExp(spelling)}(?:$|[^\\p{L}])`, 'iu').test(options[i]!.label),
+    );
+  // Nothing to check a result against: it could be any place of that name.
+  if (parts.length === 0) return hits.length > 0 ? { status: 'ambiguous', candidates: hits } : { status: 'none' };
+  let left = hits.filter((i) => parts.some((part) => names(i, part)));
+  if (left.length === 0) return { status: 'none' };
+  for (const part of parts) {
+    const narrowed = left.filter((i) => names(i, part));
+    if (narrowed.length > 0) left = narrowed;
+  }
+  return left.length === 1 ? { status: 'matched', index: left[0]!, confidence: 0.8 } : { status: 'ambiguous', candidates: left };
 }
 
 function regionText(region: Region, locale: Locale): string {
@@ -330,6 +355,20 @@ export function toIntent(
     case 'enum': {
       if (typeof raw !== 'string') return null;
       const label = optionLabel(domain, raw, locale);
+      if (def.key === 'basics.gender' && opts.genderAnswer === 'prefer_not_to_say' && hasPickList(control)) {
+        // Only the question itself can say that declining is allowed, and a list may not be open yet.
+        const match: OptionMatcher = (options) => {
+          const decline = matchOption(domain, 'undisclosed', options);
+          return decline.status === 'none' ? matchOption(domain, raw, options) : decline;
+        };
+        const known = control.options ? match(control.options) : null;
+        const display = known?.status === 'matched' ? control.options![known.index]!.label : label;
+        // A list that loads as you type must not be handed the answer being kept back.
+        const query = optionLabel(domain, 'undisclosed', locale);
+        return control.multiple
+          ? { kind: 'multi', display, items: [{ query, match }] }
+          : { kind: 'choice', display, query, match };
+      }
       if (hasPickList(control)) {
         return control.multiple
           ? { kind: 'multi', display: label, items: [{ query: label, match: (o) => matchOption(domain, raw, o) }] }
@@ -364,6 +403,10 @@ export function toIntent(
       // text, longtext, number
       if (typeof raw === 'object') return null;
       const text = String(raw);
+      if (def.key === 'contact.addressCity' && opts.home && hasPickList(control) && !control.multiple) {
+        const home = opts.home;
+        return { kind: 'choice', display: text, query: text, match: (options) => matchPlace(text, home, options) };
+      }
       if (hasPickList(control)) return multiOrChoice(domain, [text], control);
       if (kind === 'cascader') return { kind: 'cascade', display: text, path: [text] };
       return { kind: 'text', text };

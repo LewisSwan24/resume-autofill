@@ -4,6 +4,7 @@ import {
   isExactOnlySynonym,
   isExcluded,
   isNeverFill,
+  isOtherPersonHeading,
   isResumeParser,
   matchSection,
   normalizeLabel,
@@ -260,8 +261,13 @@ function tiedApplicantCandidate(scores: FieldScores): ScoredCandidate | null {
  * the applicant's own form it is the applicant's: some other field asks about the applicant outright,
  * or several bare labels together read as one person's details.
  */
-function settleBareLabels(scores: FieldScores[], sections: SectionResult[]): void {
-  const bare = scores.flatMap((_, i) => (!sections[i]!.section || sections[i]!.inferred ? [i] : []));
+function settleBareLabels(contexts: FieldContext[], scores: FieldScores[], sections: SectionResult[]): void {
+  const bare = scores.flatMap((_, i) => {
+    if (sections[i]!.section && !sections[i]!.inferred) return [];
+    // Most headings on a flat form are the job title or "Apply". "Who referred you?" is about someone else.
+    const title = contexts[i]!.sectionTitle;
+    return title && isOtherPersonHeading(title) ? [] : [i];
+  });
   const ties = bare.flatMap((i) => {
     const cand = tiedApplicantCandidate(scores[i]!);
     return cand ? [{ i, cand }] : [];
@@ -286,7 +292,7 @@ export function classifyAll(contexts: FieldContext[]): Classification[] {
   const sections = contexts.map(classifySection);
   // An inferred section is reported but never fed back into scoring (it would confirm its own guess).
   const scores = contexts.map((ctx, i) => scoreField(ctx, sections[i]!.inferred ? null : sections[i]!.section));
-  settleBareLabels(scores, sections);
+  settleBareLabels(contexts, scores, sections);
   return assign(
     contexts,
     scores,

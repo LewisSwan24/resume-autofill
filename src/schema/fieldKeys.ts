@@ -2,7 +2,7 @@
 // A FieldKey is "<module>.<field>". Array modules use the module-level key; the entry index
 // comes from card alignment at fill time. Top-level string modules live under `misc.*`.
 import {
-  AWARD_LEVELS, DEGREES, DIVERSITY_ANSWERS, EDUCATION_TYPES, EMPLOYMENT_TYPES, GENDERS, ID_TYPES,
+  AWARD_LEVELS, DEGREES, DIVERSITY_ANSWERS, EDUCATION_TYPES, EMPLOYMENT_TYPES, GENDERS, GENDER_ANSWERS, ID_TYPES,
   MARITAL_STATUSES, POLITICAL_STATUSES, PROFICIENCIES, RELATIONSHIPS, SALARY_CURRENCIES, SALARY_PERIODS,
   WORK_KINDS, WORK_RIGHTS_STATUSES,
 } from './resume';
@@ -44,6 +44,11 @@ export const ENUM_VALUES: Readonly<Record<string, readonly string[]>> = {
 
 /** Every enum domain used by FIELD_KEYS (the option dictionary must cover each). */
 export const ENUM_DOMAINS: string[] = Object.keys(ENUM_VALUES);
+
+/** Choices that are settings in the editor: no field on a page has them as its value. */
+export const SETTING_ENUM_VALUES: Readonly<Record<string, readonly string[]>> = {
+  genderAnswer: GENDER_ANSWERS,
+};
 
 // ---------------------------------------------------------------- builders
 

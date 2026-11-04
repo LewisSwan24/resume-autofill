@@ -141,6 +141,7 @@ describe('createSampleProfile', () => {
     expect(en.diversity).toEqual({
       indigenous: 'prefer_not_to_say', disability: 'prefer_not_to_say',
       genderIdentity: 'prefer_not_to_say', veteran: 'prefer_not_to_say',
+      genderAnswer: 'prefer_not_to_say',
     });
     expect(en.selfIntroduction).toMatch(/[A-Za-z]/);
     expect(en.attachments).toEqual({ resumeFileId: 'sample-resume-en' });

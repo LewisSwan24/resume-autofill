@@ -1,6 +1,9 @@
 // Discover: find every fillable control in a document / shadow root.
 // Library widgets (antd / Element Plus) are matched first and consume their inner inputs;
 // everything else is reported as a native control.
+import { resolveAdapter } from '../adapters/resolve';
+import type { AtsAdapter } from '../adapters/types';
+import { resolveCode } from '../dictionary/options';
 import {
   ANSWER_BUTTON_SELECTOR,
   ARIA_COMBOBOX_SELECTOR,
@@ -18,6 +21,8 @@ import { isInputVisible, isVisible } from './visibility';
 export interface DiscoverOptions {
   /** Id allocator, so a caller can keep ids stable across rescans. Called in document order. */
   idFor?: (el: HTMLElement) => string;
+  /** The site's adapter; by default whichever one fits the page. */
+  adapter?: AtsAdapter | null;
 }
 
 type Draft = Omit<Control, 'id'> & { inputs?: HTMLInputElement[] };
@@ -25,6 +30,7 @@ type Draft = Omit<Control, 'id'> & { inputs?: HTMLInputElement[] };
 const EXCLUDED_INPUT_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image']);
 const NATIVE_SELECTOR = 'input, select, textarea, [contenteditable]';
 const DISABLED_SELECTOR = '[disabled], [aria-disabled="true"]';
+const PAGE_CHROME_SELECTOR = 'nav, header, footer, [role=navigation], [role=banner], [role=contentinfo]';
 
 const groupMembers = new WeakMap<Control, HTMLInputElement[]>();
 
@@ -144,7 +150,16 @@ function isRichtextHost(el: Element): boolean {
   return true;
 }
 
-function scanScope(scope: Document | ShadowRoot, out: Draft[]): void {
+/** Exactly Yes and No, and nothing else to fill in that element but at most one hidden checkbox or radio. */
+function isYesNoGroup(group: HTMLElement, buttons: HTMLElement[]): boolean {
+  if (buttons.length !== 2) return false;
+  const codes = buttons.map((b) => resolveCode('yesNo', text(b.textContent)));
+  if (!codes.includes('yes') || !codes.includes('no')) return false;
+  const others = Array.from(group.querySelectorAll<HTMLInputElement>('input:not([type=hidden]), select, textarea, [contenteditable], [role=combobox]'));
+  return others.length === 0 || (others.length === 1 && /^(?:checkbox|radio)$/.test(others[0]!.type ?? ''));
+}
+
+function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapter | null): void {
   // 1. Library widget roots (outermost wins). Disabled / unsupported / hidden ones still
   //    consume their inner inputs.
   const blocked = new Set<Element>();
@@ -158,31 +173,40 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[]): void {
     candidates.set(el, buildWidgetDraft(el, widget));
   }
 
+  // Search boxes an adapter names are plain inputs that only look like text boxes.
+  for (const { input, ...search } of adapter?.searchBoxes ?? []) {
+    for (const el of Array.from(scope.querySelectorAll<HTMLElement>(input))) {
+      if (insideAny(el, blocked)) continue;
+      blocked.add(el);
+      if (isDisabledEl(el) || !isVisible(el)) continue;
+      candidates.set(el, { el, kind: 'select', lib: 'search', search });
+    }
+  }
+
   // 2. Comboboxes outside those libraries consume their inner inputs too.
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>(ARIA_COMBOBOX_SELECTOR))) {
     if (insideAny(el, blocked) || el.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
     blocked.add(el);
     if (isDisabledEl(el) || !isVisible(el)) continue;
+    // A language switcher or site search: part of the page around the form.
+    if (el.closest(PAGE_CHROME_SELECTOR) && !el.closest('form')) continue;
     const draft: Draft = { el, kind: 'select', lib: 'aria' };
     if (isAriaMultiple(el)) draft.multiple = true;
     candidates.set(el, draft);
   }
 
-  // Answer buttons: two or more pressable buttons side by side, usually with a hidden input behind them.
-  const toggleGroups = new Set<HTMLElement>();
+  // Answer buttons: Yes and No side by side, usually with one hidden input behind them.
+  const buttonGroups = new Set<HTMLElement>();
   for (const button of Array.from(scope.querySelectorAll<HTMLElement>(ANSWER_BUTTON_SELECTOR))) {
     const group = button.parentElement;
-    if (!group || insideAny(group, blocked) || button.closest('[role=toolbar]')) continue;
-    if (group.querySelectorAll(`:scope > ${ANSWER_BUTTON_SELECTOR}`).length >= 2) toggleGroups.add(group);
+    if (group && !insideAny(group, blocked)) buttonGroups.add(group);
   }
-  for (const group of toggleGroups) {
+  for (const group of buttonGroups) {
+    const buttons = Array.from(group.querySelectorAll<HTMLElement>(`:scope > ${ANSWER_BUTTON_SELECTOR}`));
+    if (!isYesNoGroup(group, buttons)) continue;
     blocked.add(group);
-    if (!isVisible(group)) continue;
-    const options = Array.from(group.querySelectorAll<HTMLElement>(`:scope > ${ANSWER_BUTTON_SELECTOR}`)).map((b) => ({
-      label: text(b.textContent),
-      disabled: isDisabledEl(b),
-    }));
-    if (options.every((o) => o.disabled)) continue;
+    if (!isVisible(group) || buttons.every(isDisabledEl)) continue;
+    const options = buttons.map((b) => ({ label: text(b.textContent), disabled: isDisabledEl(b) }));
     candidates.set(group, { el: group, kind: 'radio', lib: 'aria', options });
   }
 
@@ -281,16 +305,29 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[]): void {
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>('*'))) {
     const draft = candidates.get(el);
     if (draft) out.push(draft);
-    if (el.shadowRoot) scanScope(el.shadowRoot, out);
+    if (el.shadowRoot) scanScope(el.shadowRoot, out, adapter);
   }
 }
 
+function questionTextOf(el: HTMLElement, adapter: AtsAdapter): string | null {
+  for (const q of adapter.questions ?? []) {
+    // A group of radio buttons has a box around them as its element.
+    if (!el.matches(q.control) && !el.querySelector(q.control)) continue;
+    const text = el.closest(q.within)?.querySelector(q.text)?.textContent?.trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 export function discover(root: Document | ShadowRoot, opts: DiscoverOptions = {}): Control[] {
+  const adapter = opts.adapter === undefined ? resolveAdapter(root) : opts.adapter;
   const drafts: Draft[] = [];
-  scanScope(root, drafts);
+  scanScope(root, drafts, adapter);
   let counter = 0;
   return drafts.map(({ inputs, ...rest }) => {
     const control: Control = { id: opts.idFor ? opts.idFor(rest.el) : `c${++counter}`, ...rest };
+    const question = adapter ? questionTextOf(rest.el, adapter) : null;
+    if (question) control.questionText = question;
     if (inputs) groupMembers.set(control, inputs);
     return control;
   });

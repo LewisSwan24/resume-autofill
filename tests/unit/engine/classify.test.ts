@@ -247,6 +247,47 @@ describe('evidence weights and types', () => {
     });
   });
 
+  describe('answer buttons', () => {
+    const buttons = '<button aria-pressed="false">Yes</button><button aria-pressed="false">No</button>';
+
+    it('take the question beside them, and never the question of the block above', () => {
+      const s = scan(`<div><p>Do you have the right to work</p>${buttons}</div><div><p>Do you consent to our privacy policy?</p>${buttons}</div><div><p>Do you consent to a background check?</p>${buttons}</div>`);
+      expect(s.cls[2]!.fieldKey).toBeNull();
+      expect(s.contexts).toHaveLength(3);
+      expect(s.cls[0]!.fieldKey).toBe('workRights.hasFullWorkRights');
+      expect(s.cls[1]!.fieldKey).toBeNull();
+      expect(s.cls[1]!.reason).toBe('never_fill');
+    });
+
+    it('stay unnamed when the text before them is too long to be a label', () => {
+      const long = 'I declare that everything in this application is true and complete. '.repeat(4);
+      const s = scan(`<div><p>Do you have the right to work</p><div>${buttons}</div></div><div><p>${long}</p><div>${buttons}</div></div>`);
+      expect(s.contexts[1]!.evidence.map((e) => e.text).join()).not.toContain('right to work');
+      expect(s.cls[1]!.fieldKey).toBeNull();
+    });
+  });
+
+  it('a combobox with no label does not borrow the label of the field above', () => {
+    const s = scan(`${text('Email', 'a')}<div><button aria-haspopup="listbox">Choose</button></div>`);
+    const combobox = s.contexts.find((c) => c.control.lib === 'aria')!;
+    expect(combobox.evidence.map((e) => e.text)).not.toContain('Email');
+  });
+
+  describe('a heading that says the fields are about someone else', () => {
+    const person = `${text('Name', 'c')}${text('Email', 'd')}${text('Phone', 'e')}`;
+
+    it.each(['Who referred you?', 'Refer a friend', 'Person to notify', 'Your manager', 'Supervisor'])('%j keeps them in review', (heading) => {
+      const s = scan(`${text('First name', 'a')}${text('Last name', 'b')}<h2>${heading}</h2>${person}`);
+      for (const i of [2, 3, 4]) expect(s.cls[i]!.confidence, s.cls[i]!.fieldKey ?? '').toBeLessThan(FILL_THRESHOLD);
+    });
+
+    it.each(['Apply for this job', 'Submit your application', 'Application form', 'Your details', 'Senior AI Platform Engineer'])('%j is the applicant again', (heading) => {
+      const s = scan(`<h2>${heading}</h2>${person}`);
+      expect(s.cls[1]!.fieldKey).toBe('contact.email');
+      expect(s.cls[1]!.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+    });
+  });
+
   describe('an upload box the page reads to fill the form itself', () => {
     const file = (label: string, id: string) => row(label, `<input id="${id}" type="file">`, id);
 

@@ -245,6 +245,11 @@ describe('questions as application forms write them', () => {
     expect(texts(ev, 'label-wrap')).toEqual(['Current location']);
   });
 
+  it('keeps consent wording that follows the control, so the field stays untouched', () => {
+    const ev = evidenceAt('<label>Willing to relocate <input id="q" type="checkbox"> I agree to the terms and conditions</label>', '#q');
+    expect(texts(ev, 'label-wrap')[0]).toContain('I agree to the terms and conditions');
+  });
+
   it('keeps a wrapping label whose text follows the control', () => {
     const ev = evidenceAt('<label><input id="q" type="text"> Nickname</label>', '#q');
     expect(texts(ev, 'label-wrap')).toEqual(['Nickname']);

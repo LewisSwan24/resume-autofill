@@ -332,27 +332,24 @@ describe('matchOption: ambiguity, none, placeholders', () => {
   });
 });
 
-describe('matchOption: a place name followed by its region', () => {
-  const places = (...labels: string[]) => labels.map((label) => ({ label }));
+describe('matchOption: rows a search box offers that are not answers', () => {
+  const labels = (...l: string[]) => l.map((label) => ({ label }));
 
-  it('takes the only option that is that place', () => {
-    const m = matchOption(null, 'Brisbane', places('Brisbane QLD, Australia', 'Melbourne VIC, Australia'));
-    expect(m).toMatchObject({ status: 'matched', index: 0 });
-    expect(matchOption(null, 'Brisbane', places('Brisbane, Queensland, Australia'))).toMatchObject({ status: 'matched' });
+  it.each(['Create "Monash University"', 'Add "Monash University"', 'Use "Monash University"', '创建 "Monash University"', '添加“Monash University”'])(
+    '%j is never chosen',
+    (label) => {
+      expect(isPlaceholderOption({ label })).toBe(true);
+      expect(matchOption(null, 'Monash University', labels(label))).toEqual({ status: 'none' });
+    },
+  );
+
+  it('real names that start the same way stay', () => {
+    expect(isPlaceholderOption({ label: 'Create Labs' })).toBe(false);
+    expect(isPlaceholderOption({ label: 'Add Health' })).toBe(false);
   });
 
-  it('reports two places with the same name as ambiguous', () => {
-    const m = matchOption(null, 'Brisbane', places('Brisbane QLD, Australia', 'Brisbane CA, United States'));
-    expect(m).toEqual({ status: 'ambiguous', candidates: [0, 1] });
-  });
-
-  it('does not take a longer name that merely starts the same', () => {
-    expect(matchOption(null, 'Sydney', places('Sydney Olympic Park NSW, Australia'))).toEqual({ status: 'none' });
-    expect(matchOption(null, 'Brisbane', places('Brisbane City QLD, Australia'))).toEqual({ status: 'none' });
-    expect(matchOption(null, 'Bris', places('Brisbane QLD, Australia'))).toEqual({ status: 'none' });
-  });
-
-  it('leaves short answers alone', () => {
-    expect(matchOption(null, 'No', places('No, I would need a visa'))).toEqual({ status: 'none' });
+  it('a free-text value does not take a longer name that starts the same', () => {
+    expect(matchOption(null, 'Java', labels('Java, Enterprise Edition', 'JavaScript'))).toEqual({ status: 'none' });
+    expect(matchOption(null, 'Master', labels('Master, Coursework only'))).toEqual({ status: 'none' });
   });
 });

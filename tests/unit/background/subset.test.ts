@@ -28,6 +28,34 @@ const RESUMES: Resume[] = [zh, en, fat, fatZh];
 
 const needs = (p: Partial<FrameNeeds>): FrameNeeds => ({ ...emptyNeeds(), ...p });
 
+describe('a city picked from a list', () => {
+  it('goes with the country and state that tell places of one name apart, and no more of the address', () => {
+    const out = buildResumeSubset(en, needs({ fieldKeys: ['contact.addressCity'] }));
+    expect(out.contact.address).toMatchObject({
+      city: en.contact.address.city,
+      country: en.contact.address.country,
+      province: en.contact.address.province,
+    });
+    expect(out.contact.address.street).toBe('');
+    expect(out.contact.address.postcode).toBe('');
+  });
+});
+
+describe('the choice of how to answer a gender question', () => {
+  const chosen = { ...en, diversity: { ...en.diversity, genderAnswer: 'from_resume' as const } };
+
+  it('goes along with the gender', () => {
+    const out = buildResumeSubset(chosen, needs({ fieldKeys: ['basics.gender'] }));
+    expect(out.basics.gender).toBe(en.basics.gender);
+    expect(out.diversity.genderAnswer).toBe('from_resume');
+  });
+
+  it('stays home otherwise', () => {
+    const out = buildResumeSubset(chosen, needs({ fieldKeys: ['contact.email'] }));
+    expect(out.diversity.genderAnswer).toBe('prefer_not_to_say');
+  });
+});
+
 // ---------------------------------------------------------------- leaf walking
 
 type Leaf = [path: string, value: unknown];
@@ -147,7 +175,7 @@ describe('buildResumeSubset: single modules (per leaf)', () => {
 
   it('copies address parts by key and misc strings', () => {
     const s = buildResumeSubset(en, needs({ fieldKeys: ['contact.addressCity', 'contact.postcode', 'misc.selfIntroduction'] }));
-    expect(s.contact.address).toEqual({ country: '', province: '', city: 'Brisbane', district: '', street: '', postcode: '4000' });
+    expect(s.contact.address).toEqual({ country: 'Australia', province: 'QLD', city: 'Brisbane', district: '', street: '', postcode: '4000' });
     expect(s.selfIntroduction).toBe(en.selfIntroduction);
     expect(s.hobbies).toBe('');
   });

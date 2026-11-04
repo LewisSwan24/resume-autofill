@@ -122,7 +122,7 @@ describe('Options page – editing and autosave', () => {
 
   it('renders Chinese labels and the 保存好啦 indicator when the UI language is zh', async () => {
     await renderApp(makeProfile('zh'));
-    expect(screen.getByLabelText('姓')).toBeTruthy();
+    expect(await screen.findByLabelText('姓', {}, WAIT)).toBeTruthy();
     type('姓', '林');
     await waitFor(() => expect(saveStatus().textContent).toMatch(/保存好啦/), WAIT);
     expect((await savedResume()).basics.familyName).toBe('林');

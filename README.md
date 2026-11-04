@@ -123,7 +123,8 @@ Open the options page from the extension details on `chrome://extensions`, or fr
 
 - Date range pickers (one control for both start and end) are not supported. Single-date and year-month pickers are.
 - Supported widgets are native HTML, Ant Design, Element Plus, react-select, and dropdowns and yes/no buttons with ARIA roles. Other libraries come later.
-- On Lever, "Current location" is a search box without ARIA roles, so it is not filled yet and is marked red. Custom questions there are read only from nearby text, so most are marked yellow for review.
+- A gender question that offers a way to decline is declined by default. To answer it from your resume instead, change the setting in the Diversity section of the editor.
+- Questions an employer adds are read, but only the ones the dictionary recognizes get an answer. The rest stay empty and are marked for review.
 - There is no AI layer. Fields are recognized with dictionaries and rules, and anything unrecognized stays empty and is marked red.
 - There is no preview step: one click fills the page.
 - Extra entry cards (a second education, a second internship and so on) are created by recognizing the text of the page's "Add …" button. A button whose text is not in the dictionary will not be clicked.

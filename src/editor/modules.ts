@@ -167,6 +167,7 @@ export const MODULES: readonly ModuleMeta[] = [
   mod('diversity', 'object', [
     select('indigenous', 'diversity'), select('disability', 'diversity'),
     select('genderIdentity', 'diversity'), select('veteran', 'diversity'),
+    select('genderAnswer', 'genderAnswer'),
   ]),
   mod('about', 'root', [area('selfIntroduction'), area('hobbies')]),
   mod('customAnswers', 'array', [text('question'), area('answer')]),

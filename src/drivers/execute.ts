@@ -150,7 +150,9 @@ export async function executeStep(
     report.observed = safeRead(driver, control) ?? result.observed;
     // A widget can accept a write and wipe it a moment later. Empty means unchecked for a checkbox, not a loss.
     const lostWrite = result.ok && step.intent.kind !== 'check' && !report.observed;
-    if (lostWrite) {
+    // The page re-rendered and dropped the control. A file box may go on purpose once it has its file.
+    const leftPage = result.ok && step.intent.kind !== 'file' && !control.el.isConnected;
+    if (lostWrite || leftPage) {
       report.outcome = 'action_failed';
     } else if (result.ok) {
       report.outcome = 'filled';

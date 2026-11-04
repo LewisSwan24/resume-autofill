@@ -3,7 +3,7 @@ import { ResumeSchema } from '../../../src/schema';
 import { DICTIONARIES } from '../../../src/i18n';
 import { ARRAY_MODULES, MODULES, getModule, newEntry, type FieldMeta } from '../../../src/editor';
 import { enumLabel, enumOptions } from '../../../src/editor';
-import { ENUM_VALUES } from '../../../src/schema';
+import { ENUM_VALUES, SETTING_ENUM_VALUES } from '../../../src/schema';
 
 const empty = ResumeSchema.parse({ id: 'x', title: 't', locale: 'en-AU' });
 const REGION_KEYS = new Set(['nativePlace', 'studentOrigin', 'household', 'currentLocation']);
@@ -70,7 +70,7 @@ describe('module metadata', () => {
   it('selects declare a known enum domain; end dates declare the current flag', () => {
     const fields: FieldMeta[] = MODULES.flatMap((m) => m.fields);
     for (const field of fields.filter((f) => f.input === 'select')) {
-      expect(ENUM_VALUES[field.enumDomain!], field.key).toBeDefined();
+      expect({ ...ENUM_VALUES, ...SETTING_ENUM_VALUES }[field.enumDomain!], field.key).toBeDefined();
     }
     for (const field of fields.filter((f) => f.currentKey)) expect(field.key).toBe('endDate');
     expect(getModule('education').fields.find((f) => f.key === 'endDate')?.currentKey).toBe('current');
@@ -97,7 +97,7 @@ describe('enum labels', () => {
       for (const f of meta.fields.filter((x) => x.input === 'select')) {
         for (const lang of ['zh', 'en'] as const) {
           const options = enumOptions(f.enumDomain!, lang);
-          expect(options.map((o) => o.value)).toEqual([...ENUM_VALUES[f.enumDomain!]!]);
+          expect(options.map((o) => o.value)).toEqual([...{ ...ENUM_VALUES, ...SETTING_ENUM_VALUES }[f.enumDomain!]!]);
           for (const o of options) expect(o.label.trim(), `${f.enumDomain}:${o.value}`).not.toBe('');
         }
       }

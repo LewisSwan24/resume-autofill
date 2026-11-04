@@ -24,12 +24,14 @@ const PLACEHOLDER_LATIN =
   /^[\s\-–—_.…]*(?:please\s+)?(?:select|choose|pick)(?:\s+(?:one|an?\s+option|an?\s+item|an?\s+value|option|item|value|from\s+(?:the\s+)?list))?[\s\-–—_.…]*$/i;
 const PLACEHOLDER_CJK = /^[\s\-–—_.…]*请(?:选择|选)[\s\S]*$/;
 const PLACEHOLDER_DASHES = /^[\s\-–—_.…]*$/;
+/** A search box offering to take what was typed: `Create "x"`, not an answer. */
+const CREATE_ROW = /^\s*(?:create|add|use|创建|添加|新增|使用)\s*["'“‘「『]/i;
 
 /** Empty-value, blank, "请选择…", "Select…" and "---" entries are prompts, not choices. */
 export function isPlaceholderOption(o: OptionInfo): boolean {
   if (o.value === '') return true;
   const label = o.label.trim();
-  return PLACEHOLDER_DASHES.test(label) || PLACEHOLDER_CJK.test(label) || PLACEHOLDER_LATIN.test(label);
+  return PLACEHOLDER_DASHES.test(label) || PLACEHOLDER_CJK.test(label) || PLACEHOLDER_LATIN.test(label) || CREATE_ROW.test(label);
 }
 
 // ------------------------------------------------------------------ synonym indexes
@@ -136,7 +138,19 @@ function matchSynonymGroup(domain: string, code: string, cands: Cand[]): OptionM
 
 /** What follows a place name: a comma, or a region code ending the label or followed by a comma. */
 const REGION_AFTER_PLACE = /^(?:\s*,|\s+[A-Z]{2,4}(?:\s*,|\s*$))/;
-const CONF_PLACE = 0.8;
+
+/** Options that are the named place followed by its region: "Brisbane" ↔ "Brisbane QLD, Australia". */
+export function placeOptions(name: string, options: OptionInfo[]): number[] {
+  const text = name.trim();
+  if (text.length < MIN_FUZZY_LENGTH || hasCjk(text)) return [];
+  const prefix = text.toLowerCase();
+  return candidates(options)
+    .filter((c) => {
+      const label = options[c.index]!.label.trim();
+      return label.toLowerCase().startsWith(prefix) && REGION_AFTER_PLACE.test(label.slice(text.length));
+    })
+    .map((c) => c.index);
+}
 
 const DIAL_CODE = /^\+?(\d{1,4})$/;
 
@@ -192,18 +206,6 @@ export function matchOption(
     const re = new RegExp(`\\+${dial[1]}(?![\\d-])`);
     const hit = result(cands.filter((c) => re.test(c.norm)), CONF_DIAL_CODE);
     if (hit) return hit;
-  }
-
-  // A place followed by its region: "Brisbane" ↔ "Brisbane QLD, Australia". Before containment, so a
-  // second place of that name makes it ambiguous rather than leaving whichever is short enough.
-  if (text.length >= MIN_FUZZY_LENGTH && !hasCjk(text)) {
-    const prefix = text.toLowerCase();
-    const hits = cands.filter((c) => {
-      const label = options[c.index]!.label.trim();
-      return label.toLowerCase().startsWith(prefix) && REGION_AFTER_PLACE.test(label.slice(text.length));
-    });
-    const place = result(hits, CONF_PLACE);
-    if (place) return place;
   }
 
   // (c) unique containment, length ratio ≥ 0.5

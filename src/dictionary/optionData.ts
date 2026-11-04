@@ -13,7 +13,7 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
     male: '男|男性|男生|Male|Man|M',
     female: '女|女性|女生|Female|Woman|F',
     nonbinary: '非二元|非二元性别|Non-binary|Nonbinary|Gender diverse|Genderqueer|Another term|Self-described',
-    undisclosed: '不愿透露|保密|不愿意透露|不想说|不公开|未说明|Prefer not to say|Prefer not to disclose|Not specified|Undisclosed|Rather not say|Decline to answer',
+    undisclosed: '不愿透露|保密|不愿意透露|不想说|不公开|未说明|不便透露|不方便透露|不透露|不想透露|拒绝回答|不愿回答|不愿说明|Prefer not to say|Prefer not to disclose|Not specified|Undisclosed|Rather not say|Decline to answer|Decline to self-identify|Decline to identify|Decline to state|Do not wish to disclose|Prefer not to respond|Prefer not to answer|I don\'t wish to answer|I do not wish to answer',
   }),
 
   idType: g({
@@ -141,6 +141,11 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
     jlpt_n3: '日语N3|日语三级|JLPT N3|N3',
     none: '无|未考|没有|暂无|None|No certificate|Not taken|N/A',
     other: '其他|其它|Other|Others',
+  }),
+
+  genderAnswer: g({
+    prefer_not_to_say: '不愿透露|Prefer not to say',
+    from_resume: '按简历填写|Answer from my resume',
   }),
 
   pronouns: g({

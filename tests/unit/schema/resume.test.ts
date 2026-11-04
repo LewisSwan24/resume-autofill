@@ -42,6 +42,7 @@ describe('ResumeSchema defaults', () => {
       disability: 'prefer_not_to_say',
       genderIdentity: 'prefer_not_to_say',
       veteran: 'prefer_not_to_say',
+      genderAnswer: 'prefer_not_to_say',
     });
     expect(empty.emergencyContact.phone).toBe('');
   });

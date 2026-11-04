@@ -76,6 +76,13 @@ describe('planFill on a small zh form', () => {
     expect(p.plan.steps).toEqual([]);
   });
 
+  it('still tells the user about a required control with nothing to call it by', () => {
+    const p = plan('<div><input type="checkbox" required></div>');
+    expect(p.plan.reports).toHaveLength(1);
+    expect(p.plan.reports[0]!.label).not.toMatch(/^c\d+$/);
+    expect(p.plan.reports[0]!.outcome).toBe('unmatched');
+  });
+
   it('reports unknown labels as unmatched', () => {
     const p = plan(html);
     expect(reportOf(p, '完全无关的字段')).toMatchObject({ outcome: 'unmatched', fieldKey: null });
@@ -106,6 +113,27 @@ describe('planFill on a small zh form', () => {
     expect(p.plan.steps.length + p.plan.reports.length).toBe(p.scan.contexts.length);
     const ids = [...p.plan.steps.map((s) => s.fieldId), ...p.plan.reports.map((r) => r.fieldId)];
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('planFill: a gender question that lets you decline', () => {
+  const form = row('性别', '<select id="a"><option value="">请选择</option><option>男</option><option>女</option><option>保密</option></select>', 'a');
+  const pick = (resume: typeof zh) => {
+    const p = plan(form, resume);
+    const step = stepOf(p, '性别')!;
+    if (step.intent.kind !== 'choice') throw new Error('not a choice');
+    const options = p.scan.contexts[0]!.control.options!;
+    const m = step.intent.match(options);
+    return m.status === 'matched' ? options[m.index]!.label : m.status;
+  };
+
+  it('declines unless the resume says otherwise', () => {
+    const { diversity: _, ...rest } = zh;
+    expect(pick(ResumeSchema.parse(rest))).toBe('保密');
+  });
+
+  it('answers from the resume when the resume says so', () => {
+    expect(pick({ ...zh, diversity: { ...zh.diversity, genderAnswer: 'from_resume' } })).toBe('男');
   });
 });
 

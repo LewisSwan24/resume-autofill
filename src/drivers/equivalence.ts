@@ -21,19 +21,12 @@ function dateParts(s: string): string[] | null {
 
 const PHONE_RE = /^\+?[\d\s()./-]+$/;
 const MIN_PHONE_DIGITS = 8;
-const MAX_DIAL_CODE_DIGITS = 3;
 
-/** Phone widgets format as they write, and may put the dial code in place of the trunk 0. */
+/** Phone widgets format as they write. A different dial code is a different number, so digits must all agree. */
 function samePhone(expected: string, observed: string): boolean {
   if (!PHONE_RE.test(expected) || !PHONE_RE.test(observed)) return false;
   const want = expected.replace(/\D/g, '');
-  const got = observed.replace(/\D/g, '');
-  if (want.length < MIN_PHONE_DIGITS) return false;
-  if (want === got) return true;
-  if (!want.startsWith('0') || !observed.startsWith('+')) return false;
-  const national = want.slice(1);
-  const extra = got.length - national.length;
-  return extra >= 1 && extra <= MAX_DIAL_CODE_DIGITS && got.endsWith(national);
+  return want.length >= MIN_PHONE_DIGITS && want === observed.replace(/\D/g, '');
 }
 
 /**

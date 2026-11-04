@@ -22,11 +22,12 @@ export interface WriteGuard {
 
 const READ_METHODS = new Set(['GET', 'HEAD']);
 
-const COMMENTS = /#[^\n]*/g;
-
-/** A JSON body holding one GraphQL query and no mutation. Some forms load their questions this way. */
-function isGraphqlRead(body: string | null): boolean {
-  if (!body) return false;
+/**
+ * A POST to a GraphQL endpoint holding a query. Some forms load their questions this way. Any word
+ * "mutation" or "subscription" stops it, even one in a string or a comment: better one read too few.
+ */
+function isGraphqlRead(method: string, url: string, body: string | null): boolean {
+  if (method !== 'POST' || !body || !/graphql/i.test(new URL(url).pathname)) return false;
   let query: unknown;
   try {
     query = (JSON.parse(body) as { query?: unknown }).query;
@@ -34,8 +35,7 @@ function isGraphqlRead(body: string | null): boolean {
     return false;
   }
   if (typeof query !== 'string') return false;
-  const text = query.replace(COMMENTS, '').trim();
-  return /^(?:query\b|\{)/.test(text) && !/\b(?:mutation|subscription)\b/.test(text);
+  return /^\s*(?:query\b|\{)/.test(query) && !/mutation|subscription/i.test(query);
 }
 
 /** Call before opening any page. Lets reads through; stops writes, sockets and service workers. */
@@ -46,7 +46,7 @@ export async function guardWrites(context: BrowserContext): Promise<WriteGuard> 
   await context.route(/^https?:\/\//, (route) => {
     const request = route.request();
     const method = request.method();
-    if (READ_METHODS.has(method) || isGraphqlRead(request.postData())) return route.continue();
+    if (READ_METHODS.has(method) || isGraphqlRead(method, request.url(), request.postData())) return route.continue();
     const { host, pathname } = new URL(request.url());
     const key = `${method} ${host}${pathname}`;
     const entry = log.get(key) ?? { method, host, path: pathname, count: 0 };

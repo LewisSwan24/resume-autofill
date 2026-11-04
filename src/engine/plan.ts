@@ -39,12 +39,12 @@ export function fieldKeyLabel(key: FieldKey, locale: Locale): string {
   return list[0] ?? syn.zh[0] ?? syn.en[0] ?? key;
 }
 
-const labelOf = (ctx: FieldContext) => ctx.evidence[0]?.text ?? ctx.control.id;
+const UNNAMED_REQUIRED = { 'zh-CN': '未命名的必填项', 'en-AU': 'Required field with no name' };
 
-function baseReport(ctx: FieldContext, cls: Classification): FieldReport {
+function baseReport(ctx: FieldContext, cls: Classification, locale: Resume['locale']): FieldReport {
   return {
     fieldId: ctx.control.id,
-    label: labelOf(ctx),
+    label: ctx.evidence[0]?.text ?? UNNAMED_REQUIRED[locale],
     fieldKey: cls.fieldKey,
     section: cls.section,
     outcome: 'unmatched',
@@ -66,10 +66,10 @@ export function planFill(
   contexts.forEach((ctx, i) => {
     const cls = classifications[i];
     if (!cls) return;
-    const report = baseReport(ctx, cls);
+    const report = baseReport(ctx, cls, resume.locale);
 
-    // Nothing to show the user but an internal id, and nothing to fill it from.
-    if (ctx.evidence.length === 0) return;
+    // Nothing to call it by and nothing to fill it from. If it is required the user still has to hear about it.
+    if (ctx.evidence.length === 0 && !ctx.required) return;
     if (cls.reason === 'never_fill') {
       reports.push({ ...report, fieldKey: null, confidence: 1 });
       return;
@@ -98,7 +98,11 @@ export function planFill(
       reports.push({ ...report, outcome: 'no_data' });
       return;
     }
-    const intent = toIntent(def, resolved.raw, ctx.control, resume.locale, { files });
+    const intent = toIntent(def, resolved.raw, ctx.control, resume.locale, {
+      files,
+      home: resume.contact.address,
+      genderAnswer: resume.diversity.genderAnswer,
+    });
     if (!intent) {
       // The data exists but this control cannot take it (e.g. a bool for a text box).
       reports.push({ ...report, outcome: 'no_data', source: resolved.source });

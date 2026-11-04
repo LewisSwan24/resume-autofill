@@ -43,6 +43,8 @@ export const AWARD_LEVELS = [
 export const PROFICIENCIES = ['native', 'fluent', 'proficient', 'intermediate', 'basic'] as const;
 export const RELATIONSHIPS = ['father', 'mother', 'spouse', 'sibling', 'other'] as const;
 export const DIVERSITY_ANSWERS = ['yes', 'no', 'prefer_not_to_say'] as const;
+/** How to answer a gender question that offers a way to decline. */
+export const GENDER_ANSWERS = ['prefer_not_to_say', 'from_resume'] as const;
 
 // ---------------------------------------------------------------- modules
 
@@ -234,6 +236,7 @@ export const DiversitySchema = z.object({
   disability: diversityAnswer(),
   genderIdentity: diversityAnswer(),
   veteran: diversityAnswer(),
+  genderAnswer: z.enum(GENDER_ANSWERS).default('prefer_not_to_say'),
 });
 
 export const AttachmentsSchema = z.object({
@@ -314,6 +317,7 @@ export type FamilyMember = z.infer<typeof FamilyMemberSchema>;
 export type EmergencyContact = z.infer<typeof EmergencyContactSchema>;
 export type Referee = z.infer<typeof RefereeSchema>;
 export type Diversity = z.infer<typeof DiversitySchema>;
+export type GenderAnswer = (typeof GENDER_ANSWERS)[number];
 export type Attachments = z.infer<typeof AttachmentsSchema>;
 export type CustomAnswer = z.infer<typeof CustomAnswerSchema>;
 export type Resume = z.infer<typeof ResumeSchema>;

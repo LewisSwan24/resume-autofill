@@ -20,6 +20,38 @@ afterEach(() => {
   setVisibilityProbe(null);
 });
 
+describe('custom controls found without taking others down', () => {
+  it('pressable buttons beside other fields do not hide those fields', () => {
+    const controls = scan(`<form>
+      <label>Email<input name="email"></label>
+      <label>Phone<input name="phone"></label>
+      <button aria-pressed="false">Yes</button><button aria-pressed="false">No</button>
+      <textarea name="note"></textarea>
+    </form>`);
+    expect(controls.map((c) => c.kind)).toEqual(['text', 'text', 'textarea']);
+  });
+
+  it('only Yes and No count as answer buttons', () => {
+    const controls = scan('<div><button aria-pressed="false">B</button><button aria-pressed="false">I</button></div>');
+    expect(controls).toEqual([]);
+  });
+
+  it('a hidden checkbox behind the buttons belongs to them', () => {
+    const controls = scan('<div><button aria-pressed="false">Yes</button><button aria-pressed="false">No</button><input type="checkbox" name="q" style="display:none"></div>');
+    expect(controls.map((c) => [c.kind, c.lib])).toEqual([['radio', 'aria']]);
+  });
+
+  it.each(['nav', 'header', 'footer'])('a language switcher in a %s is not a field', (tag) => {
+    const controls = scan(`<${tag}><button aria-haspopup="listbox" aria-label="Language">English</button></${tag}>`);
+    expect(controls).toEqual([]);
+  });
+
+  it('a combobox in a form inside a page header still is', () => {
+    const controls = scan('<header><form><input role="combobox" aria-label="City"></form></header>');
+    expect(controls.map((c) => c.lib)).toEqual(['aria']);
+  });
+});
+
 describe('visibility', () => {
   it('treats hidden attribute, display:none ancestors and visibility:hidden as invisible', () => {
     const host = mount(`

@@ -108,3 +108,52 @@ describe('runFill', () => {
     expect((document.getElementById('nm') as HTMLElement).style.outline).toBe('');
   });
 });
+
+describe('a form in several steps', () => {
+  const mountSteps = () => {
+    document.body.innerHTML = `<form id="f">
+      <section id="one"><h2>基本信息</h2>
+        <div><label for="nm">姓名</label><input id="nm"></div>
+        <button type="button" class="go">下一步</button>
+        <button type="button" class="go">Save and Continue</button></section>
+      <section id="two" style="display:none"><h2>联系方式</h2>
+        <div><label for="em">电子邮箱</label><input id="em"></div>
+        <button type="button" class="go">Next</button>
+        <button type="submit" class="go">提交申请</button></section>
+    </form>`;
+    const clicks: string[] = [];
+    for (const b of Array.from(document.querySelectorAll<HTMLElement>('.go'))) {
+      b.addEventListener('click', () => clicks.push(b.textContent ?? ''));
+    }
+    let submitted = 0;
+    document.querySelector('#f')!.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitted += 1;
+    });
+    const value = (id: string) => document.querySelector<HTMLInputElement>(`#${id}`)!.value;
+    return { clicks, value, submitted: () => submitted };
+  };
+
+  it('fills only the step on screen and presses nothing to move on', async () => {
+    const page = mountSteps();
+    await runFill(document, { resume: zh, files });
+    expect(page.value('nm')).toBe('林知远');
+    expect(page.value('em')).toBe('');
+    expect(page.clicks).toEqual([]);
+    expect(page.submitted()).toBe(0);
+  });
+
+  it('fills the next step once the user has moved there, and leaves the first alone', async () => {
+    const page = mountSteps();
+    await runFill(document, { resume: zh, files });
+    document.querySelector<HTMLElement>('#one')!.style.display = 'none';
+    document.querySelector<HTMLElement>('#two')!.style.display = '';
+    document.querySelector<HTMLInputElement>('#nm')!.value = '用户改过';
+    const second = await runFill(document, { resume: zh, files });
+    expect(page.value('em')).toBe(zh.contact.email);
+    expect(page.value('nm')).toBe('用户改过');
+    expect(second.report.fields.map((f) => f.label)).toEqual(['电子邮箱']);
+    expect(page.clicks).toEqual([]);
+    expect(page.submitted()).toBe(0);
+  });
+});

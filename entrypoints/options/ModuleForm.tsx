@@ -1,8 +1,9 @@
 // Form for one module of the selected resume: a plain object, or a repeatable list of entries.
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import {
   addEntry,
   getByPath,
+  insertEntry,
   moveEntry,
   removeEntry,
   setByPath,
@@ -12,19 +13,38 @@ import {
   type FieldMeta,
   type ModuleMeta,
 } from '../../src/editor';
-import { useT } from '../../src/i18n';
+import { useLanguage, useT } from '../../src/i18n';
 import type { Resume } from '../../src/schema';
-import { FieldInput } from './fields';
+import { BoolSwitch, FieldInput, REGION_PARTS } from './fields';
+import { Button, Checkbox, Divider, EmptyState, Field, IconButton, Input } from './ui/controls';
+import { useToast } from './ui/Toast';
 
 interface Props {
   resume: Resume;
   meta: ModuleMeta;
   /** Validation messages keyed by path relative to the resume. */
   issues: ReadonlyMap<string, string>;
-  onChange: (next: Resume) => void;
+  /** Apply an edit to the resume being edited; always runs against the newest saved state. */
+  onEdit: (edit: (resume: Resume) => Resume) => void;
 }
 
 const join = (...parts: (string | number)[]) => parts.join('.');
+
+/**
+ * Deliberate deviation from the design system's "one field per row" rule: pairs of SHORT, related values sit side by
+ * side (start / end month, min / max salary, height / weight, country code / phone). They are read as one thing and
+ * would otherwise stretch to 680px each. The three-part region (province / city / district) does the same.
+ * Key = first field of the pair, value = the field that joins it. Everything else is one column.
+ */
+const PAIRS: Readonly<Record<string, string>> = {
+  startDate: 'endDate',
+  salaryMin: 'salaryMax',
+  height: 'weight',
+  phoneCountryCode: 'phone',
+};
+
+/** English module names start with a capital in the module list ("Education") but read lower-case mid-sentence. */
+const lowerFirst = (text: string, language: string) => (language === 'en' ? text.charAt(0).toLowerCase() + text.slice(1) : text);
 
 interface FieldsProps {
   resume: Resume;
@@ -32,81 +52,109 @@ interface FieldsProps {
   /** Path of the object holding the fields, relative to the resume (`''` = resume root). */
   base: string;
   issues: ReadonlyMap<string, string>;
-  onChange: (next: Resume) => void;
+  onEdit: (edit: (resume: Resume) => Resume) => void;
 }
 
-function Fields({ resume, fields, base, issues, onChange }: FieldsProps) {
+function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
   const t = useT();
   const pathOf = (key: string) => (base ? `${base}.${key}` : key);
+  const change = (path: string, v: unknown) => onEdit((r) => setByPath(r, path, v));
 
-  return (
-    <div className="raf-grid">
-      {fields.map((field) => {
-        const path = pathOf(field.key);
-        const label = t(field.labelKey);
-        const error = issues.get(path);
-        const value = getByPath(resume, path);
-        const wide = field.input === 'textarea' || field.input === 'region' || field.input === 'list';
-        const className = `raf-field${wide ? ' raf-wide' : ''}${error ? ' raf-invalid' : ''}`;
-        const set = (v: unknown) => onChange(setByPath(resume, path, v));
+  const renderField = (field: FieldMeta): ReactNode => {
+    const path = pathOf(field.key);
+    const label = t(field.labelKey);
+    const error = issues.get(path);
+    const value = getByPath(resume, path);
 
-        let control: ReactNode;
-        if (field.currentKey) {
-          const current = getByPath(resume, pathOf(field.currentKey)) === true;
-          const entryPath = base;
-          control = (
-            <span className="raf-inline">
+    if (field.input === 'bool') {
+      return (
+        <div key={field.key} className="raf-field">
+          <BoolSwitch label={label} value={value} onChange={(v) => change(path, v)} />
+          {error ? <p className="raf-field__help raf-field__help--error">{error}</p> : null}
+        </div>
+      );
+    }
+
+    if (field.input === 'region') {
+      const region = (value && typeof value === 'object' ? value : {}) as Record<string, string | undefined>;
+      return (
+        <fieldset key={field.key} className="raf-fieldset">
+          <legend className="raf-field__label">{label}</legend>
+          {/* Three short parts of one address: side by side (see PAIRS). */}
+          <div className="raf-pair raf-pair--3">
+            {REGION_PARTS.map((part) => (
+              <Field key={part} label={t(`options.region.${part}`)} error={null}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="text"
+                    value={region[part] ?? ''}
+                    aria-invalid={error ? true : undefined}
+                    aria-label={`${label} – ${t(`options.region.${part}`)}`}
+                    onChange={(e) => change(path, { ...region, [part]: e.target.value })}
+                  />
+                )}
+              </Field>
+            ))}
+          </div>
+          {error ? <p className="raf-field__help raf-field__help--error">{error}</p> : null}
+        </fieldset>
+      );
+    }
+
+    if (field.currentKey) {
+      // End date + "Present": ticking it clears the date; typing a date unticks it.
+      const entryPath = base;
+      const current = getByPath(resume, pathOf(field.currentKey)) === true;
+      return (
+        <Field key={field.key} label={label} error={error}>
+          {(control) => (
+            <>
               <FieldInput
                 meta={field}
                 value={value}
                 disabled={current}
-                ariaLabel={label}
-                onChange={(v) => onChange(setByPath(resume, entryPath, setEndDate(getByPath(resume, entryPath) as never, String(v))))}
+                control={control}
+                onChange={(v) => onEdit((r) => setByPath(r, entryPath, setEndDate(getByPath(r, entryPath) as never, String(v))))}
               />
-              <label className="raf-check">
-                <input
-                  type="checkbox"
-                  checked={current}
-                  onChange={(e) =>
-                    onChange(setByPath(resume, entryPath, toggleCurrent(getByPath(resume, entryPath) as never, e.target.checked)))
-                  }
-                />
-                {t('options.present')}
-              </label>
-            </span>
-          );
-          return (
-            <div key={field.key} className={className}>
-              <span className="raf-label">{label}</span>
-              {control}
-              {error ? <small className="raf-error">{error}</small> : null}
-            </div>
-          );
-        }
+              <Checkbox
+                label={t('options.present')}
+                checked={current}
+                onChange={(checked) => onEdit((r) => setByPath(r, entryPath, toggleCurrent(getByPath(r, entryPath) as never, checked)))}
+              />
+            </>
+          )}
+        </Field>
+      );
+    }
 
-        if (field.input === 'region') {
-          return (
-            <fieldset key={field.key} className={className}>
-              <legend className="raf-label">{label}</legend>
-              <FieldInput meta={field} value={value} onChange={set} ariaLabel={label} />
-              {error ? <small className="raf-error">{error}</small> : null}
-            </fieldset>
-          );
-        }
+    return (
+      <Field key={field.key} label={label} error={error}>
+        {(control) => <FieldInput meta={field} value={value} control={control} onChange={(v) => change(path, v)} />}
+      </Field>
+    );
+  };
 
-        return (
-          <label key={field.key} className={className}>
-            <span className="raf-label">{label}</span>
-            <FieldInput meta={field} value={value} onChange={set} />
-            {error ? <small className="raf-error">{error}</small> : null}
-          </label>
-        );
-      })}
-    </div>
-  );
+  const rows: ReactNode[] = [];
+  for (let i = 0; i < fields.length; i += 1) {
+    const field = fields[i]!;
+    const partner = fields[i + 1];
+    if (partner && PAIRS[field.key] === partner.key) {
+      rows.push(
+        <div key={field.key} className="raf-pair">
+          {renderField(field)}
+          {renderField(partner)}
+        </div>,
+      );
+      i += 1;
+    } else {
+      rows.push(renderField(field));
+    }
+  }
+  return <div className="raf-fields">{rows}</div>;
 }
 
-/** First filled text field of an entry, shown next to its number so collapsed lists stay scannable. */
+/** First filled text field of an entry, shown next to its number so long lists stay scannable. */
 function entrySummary(meta: ModuleMeta, entry: Record<string, unknown>): string {
   for (const field of meta.fields) {
     const v = entry[field.key];
@@ -115,45 +163,72 @@ function entrySummary(meta: ModuleMeta, entry: Record<string, unknown>): string 
   return '';
 }
 
-export function ModuleForm({ resume, meta, issues, onChange }: Props) {
+export function ModuleForm({ resume, meta, issues, onEdit }: Props) {
   const t = useT();
+  const language = useLanguage();
+  const toast = useToast();
 
   if (!meta.repeatable) {
     const base = meta.container === 'root' ? '' : meta.module;
-    return <Fields resume={resume} fields={meta.fields} base={base} issues={issues} onChange={onChange} />;
+    return <Fields resume={resume} fields={meta.fields} base={base} issues={issues} onEdit={onEdit} />;
   }
 
   const module = meta.module as ArrayModuleName;
   const entries = resume[module] as unknown as Record<string, unknown>[];
   const name = t(meta.labelKey);
+  const lowerName = lowerFirst(name, language);
+
+  // Delete is immediate; the toast offers Undo, which puts the entry back where it was (everything edited since stays).
+  const remove = (index: number) => {
+    const removed = entries[index] as never;
+    const label = t('options.entry', { name, n: index + 1 });
+    onEdit((r) => removeEntry(r, module, index));
+    toast.push({
+      text: t('options.entryRemoved', { name: label }),
+      icon: 'trash',
+      action: { label: t('options.undo'), onClick: () => onEdit((r) => insertEntry(r, module, index, removed)) },
+    });
+  };
 
   return (
     <div className="raf-entries">
-      {entries.length === 0 ? <p className="raf-muted">{t('options.noEntries', { name })}</p> : null}
-      {entries.map((entry, index) => (
-        // Entries have no stable id; index keys are fine because every edit re-renders the whole list.
-        <section key={index} className="raf-entry" aria-label={t('options.entry', { name, n: index + 1 })}>
-          <header className="raf-entry-head">
-            <strong>{t('options.entry', { name, n: index + 1 })}</strong>
-            <span className="raf-entry-summary">{entrySummary(meta, entry)}</span>
-            <span className="raf-entry-actions">
-              <button type="button" aria-label={t('options.moveUp')} title={t('options.moveUp')} disabled={index === 0} onClick={() => onChange(moveEntry(resume, module, index, -1))}>
-                ↑
-              </button>
-              <button type="button" aria-label={t('options.moveDown')} title={t('options.moveDown')} disabled={index === entries.length - 1} onClick={() => onChange(moveEntry(resume, module, index, 1))}>
-                ↓
-              </button>
-              <button type="button" className="raf-danger" aria-label={t('options.removeEntry')} title={t('options.removeEntry')} onClick={() => onChange(removeEntry(resume, module, index))}>
-                ✕
-              </button>
-            </span>
-          </header>
-          <Fields resume={resume} fields={meta.fields} base={join(module, index)} issues={issues} onChange={onChange} />
-        </section>
-      ))}
-      <button type="button" className="raf-add" onClick={() => onChange(addEntry(resume, module))}>
-        + {t('options.add', { name })}
-      </button>
+      {entries.length === 0 ? <EmptyState>{t('options.noEntries', { name: lowerName })}</EmptyState> : null}
+      {entries.map((entry, index) => {
+        const legend = t('options.entry', { name, n: index + 1 });
+        const summary = entrySummary(meta, entry);
+        return (
+          // Entries have no stable id; index keys are fine because every edit re-renders the whole list.
+          <Fragment key={index}>
+            {index > 0 ? <Divider /> : null}
+            <fieldset className="raf-entry">
+              <legend className="raf-entry__legend">
+                <span className="raf-entry__name">{legend}</span>
+                {/* Decorative: the same text is in the first field, and it should not become part of the group's name. */}
+                {summary ? (
+                  <span className="raf-entry__summary" aria-hidden="true">
+                    {summary}
+                  </span>
+                ) : null}
+              </legend>
+              <div className="raf-entry__actions">
+                <IconButton icon="arrow-up" label={t('options.moveUp')} tip={index === 0 ? t('options.moveUpFirst') : undefined} disabled={index === 0} onClick={() => onEdit((r) => moveEntry(r, module, index, -1))} />
+                <IconButton
+                  icon="arrow-down"
+                  label={t('options.moveDown')}
+                  tip={index === entries.length - 1 ? t('options.moveDownLast') : undefined}
+                  disabled={index === entries.length - 1}
+                  onClick={() => onEdit((r) => moveEntry(r, module, index, 1))}
+                />
+                <IconButton icon="trash" label={t('options.removeEntry')} danger onClick={() => remove(index)} />
+              </div>
+              <Fields resume={resume} fields={meta.fields} base={join(module, index)} issues={issues} onEdit={onEdit} />
+            </fieldset>
+          </Fragment>
+        );
+      })}
+      <Button className="raf-add" icon="plus-lg" onClick={() => onEdit((r) => addEntry(r, module))}>
+        {t('options.add', { name: lowerName })}
+      </Button>
     </div>
   );
 }

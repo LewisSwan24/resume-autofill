@@ -1,78 +1,67 @@
-// Single-field inputs for the resume form. Controlled; the parent owns the value.
-import { useEffect, useState } from 'react';
+// Single-field controls for the resume form. Controlled; the parent owns the value.
+// The label (visible, above the control) and error text are added by <Field> in ModuleForm; this file only renders
+// the control itself and receives the ids / aria attributes through `control`.
 import { enumOptions } from '../../src/editor';
 import type { FieldMeta } from '../../src/editor';
 import { useLanguage, useT } from '../../src/i18n';
+import { IconButton, Input, SelectInput, Switch, Textarea, type ControlProps } from './ui/controls';
+import { TagInput } from './ui/TagInput';
 
 export interface FieldInputProps {
   meta: FieldMeta;
   value: unknown;
   onChange: (value: unknown) => void;
   disabled?: boolean;
-  /** Accessible name when no visible label wraps the control (region parts, standalone inputs). */
+  /** `id` and aria attributes from the surrounding <Field>. */
+  control?: Partial<ControlProps>;
+  /** Overrides the accessible name (region parts keep "Native place – City" even though only "City" is visible). */
   ariaLabel?: string;
 }
 
-const REGION_PARTS = ['province', 'city', 'district'] as const;
-const LIST_SPLIT = /[,，、;；\n]/;
+export const REGION_PARTS = ['province', 'city', 'district'] as const;
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-export const parseList = (text: string): string[] =>
-  text.split(LIST_SPLIT).map((s) => s.trim()).filter(Boolean);
-
-/** Comma-separated list; keeps the raw text locally so typing a trailing comma is not eaten. */
-function ListInput({ value, onChange, ariaLabel }: { value: unknown; onChange: (v: string[]) => void; ariaLabel?: string }) {
+/** Boolean that autosaves, so a Switch. `null` ("not set") shows as off with a quiet caption and can be cleared again. */
+export function BoolSwitch({ label, value, onChange }: { label: string; value: unknown; onChange: (v: boolean | null) => void }) {
   const t = useT();
-  const list = Array.isArray(value) ? (value as string[]) : [];
-  const [raw, setRaw] = useState(list.join(', '));
-  useEffect(() => {
-    setRaw((prev) => (parseList(prev).join('\u0000') === list.join('\u0000') ? prev : list.join(', ')));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list.join('\u0000')]);
+  const isSet = value === true || value === false;
   return (
-    <input
-      type="text"
-      value={raw}
-      aria-label={ariaLabel}
-      placeholder={t('options.listHint')}
-      onChange={(e) => {
-        setRaw(e.target.value);
-        onChange(parseList(e.target.value));
-      }}
-    />
+    <div className="raf-bool">
+      <Switch label={label} checked={value === true} onChange={(checked) => onChange(checked)} />
+      {isSet ? (
+        <IconButton icon="x-lg" label={t('options.clearField', { name: label })} className="raf-bool__clear" onClick={() => onChange(null)} />
+      ) : (
+        <span className="raf-field__help">{t('common.unset')}</span>
+      )}
+    </div>
   );
 }
 
-export function FieldInput({ meta, value, onChange, disabled, ariaLabel }: FieldInputProps) {
+export function FieldInput({ meta, value, onChange, disabled, control, ariaLabel }: FieldInputProps) {
   const t = useT();
   const language = useLanguage();
+  const common = { ...control, disabled, 'aria-label': ariaLabel };
 
   switch (meta.input) {
     case 'textarea':
-      return (
-        <textarea rows={3} value={asString(value)} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
-      );
+      return <Textarea rows={3} value={asString(value)} {...common} onChange={(e) => onChange(e.target.value)} />;
     case 'date': {
       const s = asString(value);
-      return (
-        <input type="date" value={s.length === 10 ? s : ''} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
-      );
+      return <Input type="date" value={s.length === 10 ? s : ''} {...common} onChange={(e) => onChange(e.target.value)} />;
     }
     case 'month': {
       const s = asString(value);
-      return (
-        <input type="month" value={s.slice(0, 7)} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />
-      );
+      return <Input type="month" value={s.slice(0, 7)} {...common} onChange={(e) => onChange(e.target.value)} />;
     }
     case 'number':
       return (
-        <input
+        <Input
           type="number"
           min={0}
+          inputMode="decimal"
           value={typeof value === 'number' ? value : ''}
-          disabled={disabled}
-          aria-label={ariaLabel}
+          {...common}
           onChange={(e) => {
             const n = e.target.valueAsNumber;
             onChange(e.target.value === '' || Number.isNaN(n) ? null : n);
@@ -82,51 +71,35 @@ export function FieldInput({ meta, value, onChange, disabled, ariaLabel }: Field
     case 'select': {
       const options = enumOptions(meta.enumDomain ?? '', language);
       return (
-        <select value={typeof value === 'string' ? value : ''} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
+        <SelectInput value={typeof value === 'string' ? value : ''} {...common} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
           <option value="">{t('common.unset')}</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
-        </select>
-      );
-    }
-    case 'bool':
-      return (
-        <select
-          value={value === true ? 'yes' : value === false ? 'no' : ''}
-          disabled={disabled}
-          aria-label={ariaLabel}
-          onChange={(e) => onChange(e.target.value === '' ? null : e.target.value === 'yes')}
-        >
-          <option value="">{t('common.unset')}</option>
-          <option value="yes">{t('common.yes')}</option>
-          <option value="no">{t('common.no')}</option>
-        </select>
-      );
-    case 'region': {
-      const region = (value && typeof value === 'object' ? value : {}) as Record<string, string | undefined>;
-      return (
-        <div className="raf-region">
-          {REGION_PARTS.map((part) => (
-            <input
-              key={part}
-              type="text"
-              value={region[part] ?? ''}
-              placeholder={t(`options.region.${part}`)}
-              aria-label={`${ariaLabel ?? t(meta.labelKey)} – ${t(`options.region.${part}`)}`}
-              disabled={disabled}
-              onChange={(e) => onChange({ ...region, [part]: e.target.value })}
-            />
-          ))}
-        </div>
+        </SelectInput>
       );
     }
     case 'list':
-      return <ListInput value={value} onChange={onChange} ariaLabel={ariaLabel} />;
+      return (
+        <TagInput
+          id={control?.id}
+          aria-invalid={control?.['aria-invalid']}
+          aria-describedby={control?.['aria-describedby']}
+          aria-label={ariaLabel}
+          value={Array.isArray(value) ? (value as string[]) : []}
+          placeholder={t('options.listHint')}
+          disabled={disabled}
+          onChange={onChange}
+        />
+      );
+    case 'bool':
+    case 'region':
+      // Rendered by ModuleForm (a Switch / a group of three inputs); never through this single-control path.
+      return null;
     case 'text':
     default:
-      return <input type="text" value={asString(value)} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value)} />;
+      return <Input type="text" value={asString(value)} {...common} onChange={(e) => onChange(e.target.value)} />;
   }
 }

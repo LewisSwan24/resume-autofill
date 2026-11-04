@@ -88,7 +88,7 @@ describe('runFill', () => {
     const run = await runFill(document, { resume: zh, files });
     highlightRun(run);
     expect((document.getElementById('nm') as HTMLElement).style.outline).toBe('2px solid #22c55e');
-    expect((document.getElementById('vc') as HTMLElement).style.outline).toBe('2px solid #ef4444');
+    expect((document.getElementById('vc') as HTMLElement).style.outline).toBe('3px solid #ef4444');
     expect((document.getElementById('g2') as HTMLElement).style.outline).toBe('');
     clearHighlights();
     expect((document.getElementById('nm') as HTMLElement).style.outline).toBe('');

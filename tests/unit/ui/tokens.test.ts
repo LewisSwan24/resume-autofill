@@ -2,7 +2,18 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { HIGHLIGHT_COLORS, cssVarName, tokenEntries, tokens, tokensToCss } from '../../../src/ui/tokens';
+import {
+  HIGHLIGHT_COLORS,
+  THEME_NAMES,
+  colorThemes,
+  colorTokenEntries,
+  colorTokensToCss,
+  cssVarName,
+  staticTokenEntries,
+  tokenEntries,
+  tokens,
+  tokensToCss,
+} from '../../../src/ui/tokens';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = (rel: string): string => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -14,60 +25,143 @@ function declarations(css: string): Array<[string, string]> {
 }
 
 const THEME_CSS = read('src/ui/theme.css');
+const DARK_MEDIA = '@media (prefers-color-scheme: dark)';
+const CLEAN_THEME_CSS = stripComments(THEME_CSS);
+const DARK_AT = CLEAN_THEME_CSS.indexOf(DARK_MEDIA);
+/** theme.css before the dark media query (light theme + theme-independent tokens), and the dark media block. */
+const LIGHT_BLOCK = DARK_AT < 0 ? CLEAN_THEME_CSS : CLEAN_THEME_CSS.slice(0, DARK_AT);
+const DARK_BLOCK = DARK_AT < 0 ? '' : CLEAN_THEME_CSS.slice(DARK_AT);
+const SELECTORS = [':root', ':host', '.raf-root'];
 
 describe('tokens.ts ↔ theme.css', () => {
-  it('theme.css defines exactly the names and values of tokens.ts', () => {
-    const fromCss = declarations(THEME_CSS);
-    expect(new Set(fromCss.map(([n]) => n)).size, 'duplicate declarations in theme.css').toBe(fromCss.length);
-    expect(Object.fromEntries(fromCss)).toEqual(Object.fromEntries(tokenEntries()));
+  it('has a dark media block after the light block', () => {
+    expect(DARK_AT, 'theme.css has @media (prefers-color-scheme: dark)').toBeGreaterThan(0);
+    expect(CLEAN_THEME_CSS.split(DARK_MEDIA).length, 'exactly one dark media block').toBe(2);
   });
 
-  it('theme.css applies to :root (pages), :host (shadow host) and .raf-root (inside the shadow tree)', () => {
-    const selector = stripComments(THEME_CSS).split('{')[0]!;
-    for (const s of [':root', ':host', '.raf-root']) expect(selector).toContain(s);
+  it('light block: theme.css defines exactly the names and values of tokens.ts (light colours + static tokens)', () => {
+    const fromCss = declarations(LIGHT_BLOCK);
+    expect(new Set(fromCss.map(([n]) => n)).size, 'duplicate declarations in the light block').toBe(fromCss.length);
+    expect(Object.fromEntries(fromCss)).toEqual(Object.fromEntries(tokenEntries('light')));
+    expect(fromCss).toEqual(tokenEntries('light'));
   });
 
-  it('tokensToCss emits one --raf-* declaration per token on the given selector', () => {
+  it('dark block: theme.css overrides exactly the colour tokens, with the dark values of tokens.ts', () => {
+    const fromCss = declarations(DARK_BLOCK);
+    expect(new Set(fromCss.map(([n]) => n)).size, 'duplicate declarations in the dark block').toBe(fromCss.length);
+    expect(Object.fromEntries(fromCss)).toEqual(Object.fromEntries(colorTokenEntries('dark')));
+    expect(fromCss.every(([n]) => n.startsWith('--raf-color-'))).toBe(true);
+    // No theme-independent token may be repeated in the dark block.
+    const statics = new Set(staticTokenEntries().map(([n]) => n));
+    expect(fromCss.filter(([n]) => statics.has(n))).toEqual([]);
+  });
+
+  it('every colour token exists in both themes and tokenEntries(dark) is complete', () => {
+    expect(THEME_NAMES).toEqual(['light', 'dark']);
+    expect(Object.keys(colorThemes.dark)).toEqual(Object.keys(colorThemes.light));
+    for (const theme of THEME_NAMES) {
+      for (const [key, value] of Object.entries(colorThemes[theme])) {
+        expect(value, `${theme}.${key}`).toMatch(/^#[0-9a-f]{6}$/);
+      }
+    }
+    expect(tokenEntries('dark').map(([n]) => n)).toEqual(tokenEntries('light').map(([n]) => n));
+    expect(tokenEntries('dark').length).toBe(colorTokenEntries('dark').length + staticTokenEntries().length);
+    // dark really differs from light (no accidental copy), and keeps no hue except status colours.
+    for (const key of Object.keys(colorThemes.light) as Array<keyof typeof colorThemes.light>) {
+      expect(colorThemes.dark[key], key).not.toBe(colorThemes.light[key]);
+    }
+  });
+
+  it('theme.css applies to :root (pages), :host (shadow host) and .raf-root (inside the shadow tree) in both blocks', () => {
+    const lightSelector = LIGHT_BLOCK.split('{')[0]!;
+    const darkSelector = DARK_BLOCK.split('{')[1]!;
+    for (const s of SELECTORS) {
+      expect(lightSelector).toContain(s);
+      expect(darkSelector).toContain(s);
+    }
+  });
+
+  it('declares color-scheme: light dark so native controls follow the OS theme', () => {
+    expect(LIGHT_BLOCK).toMatch(/color-scheme:\s*light dark;/);
+  });
+
+  it('tokensToCss / colorTokensToCss emit one --raf-* declaration per token on the given selector', () => {
     const css = tokensToCss('.x');
     expect(css.startsWith('.x {\n')).toBe(true);
-    expect(declarations(css)).toEqual(tokenEntries());
-    expect(css).toContain('--raf-color-primary: #');
+    expect(declarations(css)).toEqual(tokenEntries('light'));
+    expect(css).toContain('--raf-color-primary: #0066cc');
+    expect(declarations(tokensToCss('.x', 'dark'))).toEqual(tokenEntries('dark'));
+    expect(declarations(colorTokensToCss('.y', 'dark'))).toEqual(colorTokenEntries('dark'));
+    expect(colorTokensToCss('.y', 'dark')).toContain('--raf-color-primary: #f5f5f5');
   });
 
   it('every token name is unique, prefixed --raf- and has a non-empty value', () => {
-    const entries = tokenEntries();
-    expect(new Set(entries.map(([n]) => n)).size).toBe(entries.length);
-    for (const [name, value] of entries) {
-      expect(name).toMatch(/^--raf-[a-z0-9-]+$/);
-      expect(value).not.toBe('');
+    for (const theme of THEME_NAMES) {
+      const entries = tokenEntries(theme);
+      expect(new Set(entries.map(([n]) => n)).size).toBe(entries.length);
+      for (const [name, value] of entries) {
+        expect(name).toMatch(/^--raf-[a-z0-9-]+$/);
+        expect(value).not.toBe('');
+      }
     }
   });
 
   it('provides the canonical semantic names', () => {
     const names = new Set(tokenEntries().map(([n]) => n));
     const canonical = [
-      ...['bg', 'surface', 'surface-hover', 'text', 'text-muted', 'primary', 'primary-hover', 'primary-text', 'border', 'success', 'warning', 'danger', 'focus'].map((k) => `--raf-color-${k}`),
+      ...[
+        'bg', 'surface', 'surface-hover', 'text', 'text-muted', 'primary', 'primary-hover', 'primary-text', 'border',
+        'success', 'warning', 'danger', 'on-danger', 'focus', 'selected', 'on-selected', 'placeholder',
+      ].map((k) => `--raf-color-${k}`),
       '--raf-font-sans',
-      ...['xs', 'sm', 'md', 'lg'].map((k) => `--raf-font-size-${k}`),
+      '--raf-font-display',
+      ...['xs', 'sm', 'md', 'lg', 'xl', 'title'].map((k) => `--raf-font-size-${k}`),
       ...['regular', 'medium', 'strong'].map((k) => `--raf-font-weight-${k}`),
       '--raf-line-height',
-      ...['sm', 'md', 'lg', 'pill'].map((k) => `--raf-radius-${k}`),
-      ...[1, 2, 3, 4, 5, 6].map((k) => `--raf-space-${k}`),
+      '--raf-line-height-tight',
+      ...['xs', 'sm', 'md', 'lg', 'pill'].map((k) => `--raf-radius-${k}`),
+      ...[1, 2, 3, 4, 6].map((k) => `--raf-space-${k}`),
       '--raf-shadow-1',
       '--raf-shadow-2',
+      '--raf-shadow-host',
       '--raf-motion-duration',
+      '--raf-motion-move',
+      '--raf-motion-settle',
       '--raf-z-index',
     ];
     for (const n of canonical) expect(names.has(n), n).toBe(true);
     expect(cssVarName('color', 'primary')).toBe('--raf-color-primary');
     expect(tokens.typography['font-sans']).toMatch(/PingFang SC.*Microsoft YaHei/);
   });
-});
 
+  it('follows the design system values (DESIGN-SYSTEM §6.1)', () => {
+    const light = Object.fromEntries(tokenEntries('light'));
+    expect(light['--raf-font-sans']).toBe('"Manrope", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif');
+    expect(light['--raf-font-display']).toMatch(/^"ZCOOL KuaiLe", /);
+    expect(light['--raf-font-size-title']).toBe('28px');
+    expect(light['--raf-shadow-1']).toBe('none');
+    expect(light['--raf-shadow-2']).toBe('none');
+    expect(light['--raf-motion-duration-spinner']).toBe('900ms');
+    expect(light['--raf-motion-move']).toBe('320ms cubic-bezier(.34, 1.56, .64, 1)');
+    expect(light['--raf-motion-settle']).toBe('160ms ease-out');
+    expect(light['--raf-opacity-disabled']).toBe('0.45');
+    expect(light['--raf-size-icon-button']).toBe('36px');
+    expect(light['--raf-size-glyph']).toBe('20px');
+    expect(light['--raf-z-index']).toBe('2147483647');
+    expect(light['--raf-font-weight-medium']).toBe('600');
+    expect(colorThemes.light.primary).toBe('#0066cc');
+    expect(colorThemes.dark.success).toBe('#7fd6a0');
+    expect(colorThemes.dark.warning).toBe('#f2c066');
+    expect(colorThemes.dark.danger).toBe('#ff8a80');
+    // Only 400 / 600 weights exist in the system.
+    for (const k of ['regular', 'medium', 'strong']) expect(['400', '600']).toContain(light[`--raf-font-weight-${k}`]);
+  });
+});
 describe('the three UIs only use shared tokens', () => {
   const defined = new Set(tokenEntries().map(([n]) => n));
   const files = [
     'entrypoints/options/options.css',
+    'entrypoints/options/ui/ui.css',
     'entrypoints/sidepanel/sidepanel.css',
     'entrypoints/fab.content/style.css',
   ];
@@ -116,3 +210,4 @@ describe('the three UIs only use shared tokens', () => {
     expect(src).not.toMatch(COLOUR);
   });
 });
+

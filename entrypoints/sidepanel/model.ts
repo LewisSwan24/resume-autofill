@@ -1,7 +1,8 @@
 // Pure helpers for the side panel: filtering, sorting, formatting. No browser or React imports.
 import type { FieldReport, FillReport, Outcome } from '../../src/engine/types';
+import { OUTCOME_STATUS, STATUS_GROUPS, groupOf, type StatusGroupId, type StatusTone } from '../../src/ui/status';
 
-/** Outcomes from most to least urgent for the user. Also the display order of the filter chips. */
+/** Outcomes from most to least urgent for the user: the order of the rows in the list. */
 export const OUTCOME_ORDER: readonly Outcome[] = [
   'action_failed',
   'needs_review',
@@ -12,20 +13,28 @@ export const OUTCOME_ORDER: readonly Outcome[] = [
   'filled',
 ];
 
-export type Tone = 'success' | 'warning' | 'danger' | 'muted';
+export type Tone = StatusTone;
 
-const TONES: Record<Outcome, Tone> = {
-  filled: 'success',
-  needs_review: 'warning',
-  no_option: 'warning',
-  unmatched: 'danger',
-  action_failed: 'danger',
-  no_data: 'muted',
-  no_control: 'muted',
-};
+/** Colour family of an outcome (single source of truth: src/ui/status.ts). */
+export const outcomeTone = (outcome: Outcome): Tone => OUTCOME_STATUS[outcome].tone;
 
-/** Status chip colour family of an outcome. */
-export const outcomeTone = (outcome: Outcome): Tone => TONES[outcome];
+/** Filter chip order: the tone groups of `STATUS_GROUPS` (filled first, then attention states, then neutral). */
+export const GROUP_ORDER = Object.keys(STATUS_GROUPS) as StatusGroupId[];
+
+/** Count fields per tone group (the vocabulary shared with the FAB card). */
+export function countGroups(fields: readonly { outcome: Outcome }[]): Record<StatusGroupId, number> {
+  const counts = Object.fromEntries(GROUP_ORDER.map((g) => [g, 0])) as Record<StatusGroupId, number>;
+  for (const field of fields) counts[groupOf(field.outcome)] += 1;
+  return counts;
+}
+
+/**
+ * Confidence only means something where a value was written or proposed: `filled` and `needs_review`, and only
+ * when the engine reported a number. Every other outcome shows its status word instead.
+ */
+export function hasConfidence(field: Pick<FieldReport, 'outcome' | 'confidence'>): boolean {
+  return (field.outcome === 'filled' || field.outcome === 'needs_review') && confidencePercent(field.confidence) !== null;
+}
 
 /** Lower = more severe. */
 export function severity(outcome: Outcome): number {
@@ -41,18 +50,18 @@ export function sortBySeverity<T extends { outcome: Outcome }>(fields: readonly 
     .map((entry) => entry.field);
 }
 
-/** Keep fields whose outcome is selected. An empty selection means "no filter". */
-export function filterByOutcomes<T extends { outcome: Outcome }>(
+/** Keep fields whose tone group is selected. An empty selection means "no filter". */
+export function filterByGroups<T extends { outcome: Outcome }>(
   fields: readonly T[],
-  selected: ReadonlySet<Outcome>,
+  selected: ReadonlySet<StatusGroupId>,
 ): T[] {
-  return selected.size === 0 ? [...fields] : fields.filter((f) => selected.has(f.outcome));
+  return selected.size === 0 ? [...fields] : fields.filter((f) => selected.has(groupOf(f.outcome)));
 }
 
-/** Toggle one outcome in the selection (returns a new set). */
-export function toggleOutcome(selected: ReadonlySet<Outcome>, outcome: Outcome): Set<Outcome> {
+/** Toggle one group in the selection (returns a new set). */
+export function toggleGroup(selected: ReadonlySet<StatusGroupId>, group: StatusGroupId): Set<StatusGroupId> {
   const next = new Set(selected);
-  if (!next.delete(outcome)) next.add(outcome);
+  if (!next.delete(group)) next.add(group);
   return next;
 }
 
@@ -69,7 +78,13 @@ export function formatConfidence(confidence: number | null | undefined): string 
   return `${Math.round(Math.min(1, Math.max(0, confidence)) * 100)}%`;
 }
 
-/** The value shown in the table: what we intended to write, else what was read back, else ''. */
+/** Confidence 0..1 → whole percent 0..100 (clamped), or null when unknown. */
+export function confidencePercent(confidence: number | null | undefined): number | null {
+  if (typeof confidence !== 'number' || !Number.isFinite(confidence)) return null;
+  return Math.round(Math.min(1, Math.max(0, confidence)) * 100);
+}
+
+/** The value shown in the row meta line: what we intended to write, else what was read back, else ''. */
 export function displayValue(field: Pick<FieldReport, 'value' | 'observed'>): string {
   return field.value || field.observed || '';
 }

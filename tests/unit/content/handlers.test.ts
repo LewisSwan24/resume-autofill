@@ -49,7 +49,7 @@ describe('fill', () => {
     const report = await h.fill({ resume: zh, files });
     expect((document.getElementById('nm') as HTMLInputElement).value).toBe('林知远');
     expect(outline('nm')).toBe('2px solid #22c55e');
-    expect(outline('vc')).toBe('2px solid #ef4444'); // unmatched
+    expect(outline('vc')).toBe('3px solid #ef4444'); // unmatched
     const nm = report.fields.find((f) => f.label === '姓名')!;
     expect(nm.fieldId).toBe(idFor(document.getElementById('nm')!));
     expect(discard).toHaveBeenCalled(); // watcher is told about our own highlight writes
@@ -150,7 +150,7 @@ describe('apply', () => {
     const ambiguous = await h.apply({ fieldId: row.fieldId, optionLabel: 'Beta' });
     expect(ambiguous.outcome).toBe('needs_review');
     expect((document.getElementById('zz') as HTMLSelectElement).value).toBe('');
-    expect(outline('zz')).toBe('2px solid #eab308');
+    expect(outline('zz')).toBe('2px dashed #eab308');
 
     const none = await h.apply({ fieldId: row.fieldId, optionLabel: 'Gamma' });
     expect(none.outcome).toBe('no_option');

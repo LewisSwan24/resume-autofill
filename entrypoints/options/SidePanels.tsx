@@ -1,8 +1,11 @@
-// Left-column panels: UI settings and JSON import/export.
-import { useState } from 'react';
+// Global (not per-resume) tab panels: UI settings and JSON import/export.
+import { useRef, useState } from 'react';
 import { exportProfile, parseProfileJson } from '../../src/editor';
-import { useT } from '../../src/i18n';
+import { useT, type LanguageSetting } from '../../src/i18n';
 import type { Profile, Settings } from '../../src/schema';
+import { Button, Notice, Segmented, Switch } from './ui/controls';
+import { Dialog } from './ui/Dialog';
+import { useToast } from './ui/Toast';
 
 // ------------------------------------------------------------------ settings
 
@@ -14,22 +17,25 @@ interface SettingsProps {
 export function SettingsPanel({ settings, onChange }: SettingsProps) {
   const t = useT();
   return (
-    <section className="raf-card" aria-label={t('options.settings.title')}>
-      <h2>{t('options.settings.title')}</h2>
-      <label className="raf-field">
-        <span className="raf-label">{t('options.settings.uiLanguage')}</span>
-        <select value={settings.uiLanguage} onChange={(e) => onChange({ ...settings, uiLanguage: e.target.value as Settings['uiLanguage'] })}>
-          <option value="auto">{t('common.lang.auto')}</option>
-          <option value="zh">{t('common.lang.zh')}</option>
-          <option value="en">{t('common.lang.en')}</option>
-        </select>
-      </label>
-      <label className="raf-check">
-        <input type="checkbox" checked={settings.previewBeforeFill} onChange={(e) => onChange({ ...settings, previewBeforeFill: e.target.checked })} />
-        {t('options.settings.previewBeforeFill')}
-      </label>
-      <small className="raf-muted">{t('options.settings.previewHint')}</small>
-    </section>
+    <div className="raf-form-stack raf-form-stack--cols">
+      <Segmented<LanguageSetting>
+        label={t('options.settings.uiLanguage')}
+        visibleLabel
+        value={settings.uiLanguage}
+        options={[
+          { value: 'auto', label: t('options.settings.langAuto') },
+          { value: 'zh', label: t('common.lang.zh') },
+          { value: 'en', label: t('common.lang.en') },
+        ]}
+        onChange={(uiLanguage) => onChange({ ...settings, uiLanguage })}
+      />
+      <Switch
+        label={t('options.settings.previewBeforeFill')}
+        help={t('options.settings.previewHint')}
+        checked={settings.previewBeforeFill}
+        onChange={(previewBeforeFill) => onChange({ ...settings, previewBeforeFill })}
+      />
+    </div>
   );
 }
 
@@ -51,11 +57,13 @@ interface DataProps {
   onImport: (profile: Profile) => Promise<void>;
 }
 
-type Notice = { kind: 'ok' | 'error'; text: string } | null;
-
 export function DataPanel({ profile, onImport }: DataProps) {
   const t = useT();
-  const [notice, setNotice] = useState<Notice>(null);
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+  /** A file that parsed fine and waits for the "Replace your resumes?" answer. */
+  const [pending, setPending] = useState<Profile | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
 
   const doExport = () => {
     if (!profile) return;
@@ -68,52 +76,66 @@ export function DataPanel({ profile, onImport }: DataProps) {
   };
 
   const doImport = async (file: File) => {
+    setError(null);
     let text: string;
     try {
       text = await readText(file);
     } catch {
-      setNotice({ kind: 'error', text: t('options.data.importError', { message: t('options.data.readError') }) });
+      setError(t('options.data.importError', { message: t('options.data.readError') }));
       return;
     }
     const result = parseProfileJson(text);
     if (!result.ok) {
       const message = result.code === 'invalid_json' ? t('options.data.invalidJson') : result.message;
-      setNotice({ kind: 'error', text: t('options.data.importError', { message }) });
+      setError(t('options.data.importError', { message }));
       return;
     }
-    if (!window.confirm(t('options.data.confirmImport'))) return;
-    await onImport(result.profile);
-    setNotice({ kind: 'ok', text: t('options.data.importOk', { count: result.profile.resumes.length }) });
+    setPending(result.profile);
+  };
+
+  const confirmImport = async () => {
+    const incoming = pending;
+    setPending(null);
+    if (!incoming) return;
+    await onImport(incoming);
+    toast.push({ text: t('options.data.importOk', { count: incoming.resumes.length }) });
   };
 
   return (
-    <section className="raf-card" aria-label={t('options.data.title')}>
-      <h2>{t('options.data.title')}</h2>
+    <div className="raf-form-stack">
       <div className="raf-row">
-        <button type="button" onClick={doExport} disabled={!profile}>
+        <Button icon="download" onClick={doExport} disabled={!profile}>
           {t('options.data.export')}
-        </button>
-        <label className="raf-button">
+        </Button>
+        <Button icon="upload" onClick={() => picker.current?.click()}>
           {t('options.data.import')}
-          <input
-            type="file"
-            hidden
-            accept="application/json,.json"
-            aria-label={t('options.data.import')}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (file) void doImport(file);
-            }}
-          />
-        </label>
+        </Button>
+        <input
+          ref={picker}
+          type="file"
+          hidden
+          accept="application/json,.json"
+          aria-label={t('options.data.import')}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void doImport(file);
+          }}
+        />
       </div>
-      <small className="raf-muted">{t('options.data.note')}</small>
-      {notice ? (
-        <p role={notice.kind === 'error' ? 'alert' : 'status'} className={notice.kind === 'error' ? 'raf-error' : 'raf-ok'}>
-          {notice.text}
-        </p>
+      <Notice>{t('options.data.note')}</Notice>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      {pending ? (
+        <Dialog
+          title={t('options.data.importTitle')}
+          text={t('options.data.confirmImport')}
+          cancelLabel={t('options.notNow')}
+          confirmLabel={t('options.data.importConfirm')}
+          danger
+          onCancel={() => setPending(null)}
+          onConfirm={() => void confirmImport()}
+        />
       ) : null}
-    </section>
+    </div>
   );
 }

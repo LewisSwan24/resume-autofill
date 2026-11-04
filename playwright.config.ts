@@ -21,5 +21,7 @@ export default defineConfig({
     { name: 'e2e', testDir: 'tests/e2e' },
     // Driver/engine tests on fixtures, extension not loaded.
     { name: 'drivers', testDir: 'tests/drivers', use: { baseURL: FIXTURE_URL } },
+    // Visual capture for design review (`pnpm visual`): writes PNGs to docs/reviews/ui-screenshots/. Not part of `pnpm e2e`.
+    { name: 'visual', testDir: 'tests/visual', timeout: 120_000 },
   ],
 });

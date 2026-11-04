@@ -1,23 +1,28 @@
-// Header control: choose the active resume (`title (locale)`); writes via `setActiveResume`.
-import { useState } from 'react';
-import { useT } from '../../src/i18n';
+// Toolbar control: choose the active resume (`title (locale)`); writes via `setActiveResume`.
+// A native <select> (the design system recommends it on narrow screens) dressed as the Select trigger.
 import type { Profile } from '../../src/schema';
+import { useT } from '../../src/i18n';
+import { Icon } from '../../src/ui/Icon';
 import { setActiveResume } from '../../src/storage';
 
-export function ResumeSwitcher({ profile }: { profile: Profile }) {
-  const t = useT();
-  const [error, setError] = useState<string | null>(null);
+export interface ResumeSwitcherProps {
+  profile: Profile;
+  /** Called with `null` when a change starts and with a message when writing it failed. */
+  onError: (message: string | null) => void;
+}
 
-  if (profile.resumes.length === 0) return <p className="raf-muted">{t('panel.noResume')}</p>;
+export function ResumeSwitcher({ profile, onError }: ResumeSwitcherProps) {
+  const t = useT();
+  if (profile.resumes.length === 0) return null;
 
   const change = (id: string) => {
-    setError(null);
-    setActiveResume(id).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    onError(null);
+    setActiveResume(id).catch((e: unknown) => onError(e instanceof Error ? e.message : String(e)));
   };
 
   return (
-    <div className="raf-field raf-switcher">
-      <label className="raf-label" htmlFor="raf-active-resume">
+    <div className="raf-select">
+      <label className="raf-sr-only" htmlFor="raf-active-resume">
         {t('panel.resume')}
       </label>
       <select id="raf-active-resume" value={profile.activeResumeId ?? ''} onChange={(e) => change(e.target.value)}>
@@ -28,11 +33,9 @@ export function ResumeSwitcher({ profile }: { profile: Profile }) {
           </option>
         ))}
       </select>
-      {error ? (
-        <span className="raf-error" role="alert">
-          {error}
-        </span>
-      ) : null}
+      <span className="raf-select-icon">
+        <Icon name="chevron-down" />
+      </span>
     </div>
   );
 }

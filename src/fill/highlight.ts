@@ -7,17 +7,20 @@ export interface HighlightEntry {
   outcome: Outcome;
 }
 
-/** Outline for an outcome, or null when the field is not highlighted (no_data / no_control). */
+/**
+ * Outline for an outcome, or null when the field is not highlighted (no_data / no_control).
+ * State is not carried by colour alone: filled = 2px solid, review = 2px DASHED, error = 3px solid (thicker).
+ */
 export function outlineFor(outcome: Outcome): string | null {
   switch (outcome) {
     case 'filled':
       return `2px solid ${HIGHLIGHT_COLORS.filled}`;
     case 'needs_review':
     case 'no_option':
-      return `2px solid ${HIGHLIGHT_COLORS.review}`;
+      return `2px dashed ${HIGHLIGHT_COLORS.review}`;
     case 'unmatched':
     case 'action_failed':
-      return `2px solid ${HIGHLIGHT_COLORS.error}`;
+      return `3px solid ${HIGHLIGHT_COLORS.error}`;
     default:
       return null;
   }

@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "e2e": "pnpm build && playwright test --project=e2e",
     "e2e:headed": "pnpm build && playwright test --project=e2e --headed",
+    "visual": "pnpm build && playwright test --project=visual",
     "typecheck": "wxt prepare && tsc --noEmit && tsc --noEmit -p fixtures/synthetic/tsconfig.json",
     "postinstall": "wxt prepare",
     "fixtures:dev": "vite --config fixtures/synthetic/vite.config.ts",
@@ -21,6 +22,9 @@
     "fixtures:preview": "vite preview --config fixtures/synthetic/vite.config.ts --port 4173 --strictPort"
   },
   "dependencies": {
+    "@fontsource/manrope": "^5.3.0",
+    "@fontsource/zcool-kuaile": "^5.3.0",
+    "bootstrap-icons": "^1.13.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zod": "^4.6.7"

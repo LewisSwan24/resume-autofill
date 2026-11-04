@@ -1,4 +1,4 @@
-// FAB pill (bottom-right) + result card. Renders inside the closed shadow root of `<raf-fab>`.
+// FAB (bottom-right Button with icon + caption) + result card. Renders inside the closed shadow root of `<raf-fab>`.
 //
 // Geometry contract: the root wrapper is exactly as large as the FAB button; the card is
 // absolutely positioned above it. See style.css header.
@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { useT } from '../../src/i18n';
 import { isFromExtension, isValidMessage, sendToBackground, type Sender } from '../../src/messaging';
+import { Icon } from '../../src/ui/Icon';
 import { SummaryCard } from './SummaryCard';
 import { summarize, type FillSummary } from './summarize';
 
@@ -41,25 +42,40 @@ export function errorKey(code: string | undefined): (typeof ERROR_KEYS)[keyof ty
   return code !== undefined && Object.hasOwn(ERROR_KEYS, code) ? ERROR_KEYS[code as keyof typeof ERROR_KEYS] : null;
 }
 
+/**
+ * "44 filled · 2 need review · 1 not filled": each part matches one card badge (same STATUS_GROUPS grouping);
+ * zero counts are left out.
+ */
+function resultCaption(summary: FillSummary, t: ReturnType<typeof useT>): string {
+  const parts = [t('fab.result.filled', { n: summary.filled })];
+  if (summary.review > 0) parts.push(t('fab.result.review', { n: summary.review }));
+  if (summary.unrecognized > 0) parts.push(t('fab.result.failed', { n: summary.unrecognized }));
+  return parts.join(' · ');
+}
+
 const ignore = () => {
   /* fire-and-forget: the background may be restarting; nothing useful to do on failure */
 };
 
-function Glyph() {
-  return (
-    <svg className="raf-fab__glyph" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
-    </svg>
-  );
+/** Play the card's exit animation unless the user asked for reduced motion (or there is no matchMedia, e.g. tests). */
+function canAnimate(): boolean {
+  return typeof window.matchMedia === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+type CardView = Extract<View, { kind: 'done' | 'error' }>;
 
 export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const t = useT();
   const [total, setTotal] = useState(0);
+  /** Result of the last fill on this page: the FAB caption shows it instead of the detected count until the next fill starts. */
+  const [result, setResult] = useState<FillSummary | null>(null);
   const [view, setViewState] = useState<View>({ kind: 'idle' });
   const viewRef = useRef<View>(view);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const runRef = useRef(0);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  /** The card that is playing its exit animation (it has already been closed). */
+  const [leaving, setLeaving] = useState<CardView | null>(null);
 
   const setView = useCallback((next: View) => {
     viewRef.current = next;
@@ -84,7 +100,9 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
         if (!Array.isArray(message.report?.fields)) return;
         clearTimer();
         runRef.current++; // supersede any in-flight fill:request response handling
-        setView({ kind: 'done', summary: summarize(message.report) });
+        const summary = summarize(message.report);
+        setResult(summary);
+        setView({ kind: 'done', summary });
       }
     };
     browser.runtime.onMessage.addListener(onMessage);
@@ -99,6 +117,8 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
     if (viewRef.current.kind === 'filling') return;
     clearTimer();
     const run = ++runRef.current;
+    setLeaving(null);
+    setResult(null);
     setView({ kind: 'filling' });
     try {
       const res = await sendToBackground({ type: 'fill:request' });
@@ -120,26 +140,41 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
     }
   }, [clearTimer, reportTimeoutMs, setView, t]);
 
+  /** Close the card and hand focus back to the FAB (the control that opened it); the card settles out first. */
   const close = useCallback(() => {
     clearTimer();
+    const current = viewRef.current;
+    if (current.kind === 'done' || current.kind === 'error') setLeaving(canAnimate() ? current : null);
     setView({ kind: 'idle' });
+    buttonRef.current?.focus();
   }, [clearTimer, setView]);
 
   const filling = view.kind === 'filling';
+  const cardView: CardView | null = view.kind === 'done' || view.kind === 'error' ? view : null;
+  const shown = cardView ?? leaving;
   const detected =
     total === 0 ? t('fab.detected.none') : t(total === 1 ? 'fab.detected.one' : 'fab.detected.other', { n: total });
+  // After a fill the caption states the result (same numbers as the card: to check = needs review + not filled).
+  const caption = result ? resultCaption(result, t) : detected;
+  const noFields = total === 0 && !filling && !result;
 
   return (
     <div
       className="raf-root"
       onKeyDown={(e) => {
-        if (e.key === 'Escape' && (view.kind === 'done' || view.kind === 'error')) close();
+        if (e.key === 'Escape' && cardView) {
+          e.stopPropagation();
+          close();
+        }
       }}
     >
-      {(view.kind === 'done' || view.kind === 'error') && (
+      {shown && (
         <SummaryCard
-          summary={view.kind === 'done' ? view.summary : null}
-          error={view.kind === 'error' ? view.message : null}
+          key={cardView ? 'open' : 'leaving'}
+          summary={shown.kind === 'done' ? shown.summary : null}
+          error={shown.kind === 'error' ? shown.message : null}
+          leaving={!cardView}
+          onSettled={() => setLeaving(null)}
           onClose={close}
           onFocusField={(item) =>
             void sendToBackground({ type: 'field:focus', frameId: item.frameId, fieldId: item.fieldId }).catch(ignore)
@@ -148,20 +183,22 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
           onOpenOptions={() => void sendToBackground({ type: 'ui:openOptions' }).catch(ignore)}
         />
       )}
+      {/* Primary Button; with no detected fields it becomes the outlined button + muted caption (still clickable).
+          Busy keeps focus and width: aria-busy + spinner, and fill() ignores clicks while filling (not `disabled`). */}
       <button
+        ref={buttonRef}
         type="button"
-        className="raf-fab"
+        className={`raf-btn raf-fab${noFields ? '' : ' raf-btn--primary'}`}
         data-testid="raf-fab-button"
-        data-muted={total === 0 && !filling}
-        disabled={filling}
+        data-muted={noFields}
         aria-busy={filling}
-        aria-label={`${t('fab.autofill')} — ${detected}`}
+        aria-label={`${t('fab.autofill')} — ${caption}`}
         onClick={() => void fill()}
       >
-        <span className="raf-fab__icon">{filling ? <span className="raf-spinner" /> : <Glyph />}</span>
+        <span className="raf-fab__icon">{filling ? <span className="raf-spinner" role="presentation" /> : <Icon name="file-earmark-text" />}</span>
         <span className="raf-fab__text">
           <span className="raf-fab__title">{filling ? t('fab.filling') : t('fab.autofill')}</span>
-          <span className="raf-fab__sub">{detected}</span>
+          <span className="raf-fab__sub">{caption}</span>
         </span>
       </button>
     </div>

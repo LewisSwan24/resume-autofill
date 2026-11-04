@@ -66,6 +66,16 @@ export function addEntry<M extends ArrayModuleName>(resume: Resume, module: M, e
   return withList(resume, module, (list) => [...list, entry ?? newEntry(module)]);
 }
 
+/** Put `entry` back at `index` (clamped to the list), e.g. to undo a removal. */
+export function insertEntry<M extends ArrayModuleName>(resume: Resume, module: M, index: number, entry: EntryOf<M>): Resume {
+  return withList(resume, module, (list) => {
+    const at = Math.min(Math.max(Number.isInteger(index) ? index : list.length, 0), list.length);
+    const copy = [...list];
+    copy.splice(at, 0, entry);
+    return copy;
+  });
+}
+
 /** Remove entry `index`; out-of-range indexes leave the resume unchanged. */
 export function removeEntry(resume: Resume, module: ArrayModuleName, index: number): Resume {
   const list = resume[module] as unknown[];

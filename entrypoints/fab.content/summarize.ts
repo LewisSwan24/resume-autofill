@@ -1,9 +1,10 @@
 // Pure summary formatter for the FAB card. Deliberately drops every resume value: the card only
 // ever sees field labels and outcomes.
 import type { FillReport, Outcome } from '../../src/engine/types';
+import { groupOf } from '../../src/ui/status';
 
-/** Outcomes the card lists (in display order). `filled` is counted only; `no_control` is ignored. */
-export type SummaryOutcome = Exclude<Outcome, 'filled' | 'no_control'>;
+/** Outcomes the card lists as rows. `filled` and `no_data` are counted only (no_data has no action: one sentence), `no_control` is ignored. */
+export type SummaryOutcome = Exclude<Outcome, 'filled' | 'no_data' | 'no_control'>;
 
 export interface SummaryItem {
   fieldId: string;
@@ -21,43 +22,29 @@ export interface FillSummary {
   unrecognized: number;
   /** no_data */
   noData: number;
-  /** Non-filled fields, ordered review → unrecognized → no data (stable within a group). */
+  /** Fields that need a look (review group, then unrecognized group); never filled and never no_data. */
   items: SummaryItem[];
 }
 
-/** List order by group: review (0) → unrecognized (1) → no data (2). */
+/** List order by tone group: review first, then not filled (`Array#sort` is stable, so report order holds within a group). */
 const GROUP_RANK: Record<SummaryOutcome, number> = {
   needs_review: 0,
   no_option: 0,
   unmatched: 1,
   action_failed: 1,
-  no_data: 2,
 };
 
 export function summarize(report: FillReport): FillSummary {
   const summary: FillSummary = { filled: 0, review: 0, unrecognized: 0, noData: 0, items: [] };
   for (const f of report.fields) {
-    switch (f.outcome) {
-      case 'filled':
-        summary.filled++;
-        continue;
-      case 'needs_review':
-      case 'no_option':
-        summary.review++;
-        break;
-      case 'unmatched':
-      case 'action_failed':
-        summary.unrecognized++;
-        break;
-      case 'no_data':
-        summary.noData++;
-        break;
-      default:
-        continue; // no_control
-    }
-    summary.items.push({ fieldId: f.fieldId, frameId: f.frameId ?? 0, label: f.label.trim(), outcome: f.outcome });
+    const group = groupOf(f.outcome);
+    if (group === 'filled') summary.filled++;
+    else if (group === 'review') summary.review++;
+    else if (group === 'failed') summary.unrecognized++;
+    else if (f.outcome === 'no_data') summary.noData++;
+    if (group !== 'review' && group !== 'failed') continue; // filled / no data (counted) / no_control (ignored)
+    summary.items.push({ fieldId: f.fieldId, frameId: f.frameId ?? 0, label: f.label.trim(), outcome: f.outcome as SummaryOutcome });
   }
-  // Array#sort is stable, so items of one group keep report order.
   summary.items.sort((a, b) => GROUP_RANK[a.outcome] - GROUP_RANK[b.outcome]);
   return summary;
 }

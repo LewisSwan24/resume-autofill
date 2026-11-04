@@ -1,5 +1,5 @@
 // Fill report of one tab: read from `storage.session` (`report:<tabId>`) and kept fresh.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import type { FieldReport, FillReport } from '../../src/engine/types';
 import { isFromExtension, isValidMessage } from '../../src/messaging';
@@ -9,29 +9,39 @@ export interface ReportState {
   report: FillReport | null;
   /** True until the first read for the current tab finished. */
   loading: boolean;
+  /** True when the last read of `storage.session` failed (the report is then unknown, not empty). */
+  error: boolean;
+  /** Read the report again now (refresh button / "Try again"). */
+  reload: () => void;
   /** Merge a field result (response of `field:apply`) into the displayed report. */
   patchField: (field: FieldReport) => void;
 }
 
-async function readReport(tabId: number): Promise<FillReport | null> {
+type ReadResult = { ok: true; report: FillReport | null } | { ok: false };
+
+async function readReport(tabId: number): Promise<ReadResult> {
   try {
     const key = reportStorageKey(tabId);
     const stored = await browser.storage.session.get(key);
     const value = stored[key];
-    return isFillReport(value) ? value : null;
+    return { ok: true, report: isFillReport(value) ? value : null };
   } catch {
-    return null;
+    return { ok: false };
   }
 }
 
 export function useReport(tabId: number | null): ReportState {
   const [report, setReport] = useState<FillReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const reloadRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     setReport(null);
+    setError(false);
     if (tabId === null) {
       setLoading(false);
+      reloadRef.current = () => undefined;
       return;
     }
     setLoading(true);
@@ -41,10 +51,13 @@ export function useReport(tabId: number | null): ReportState {
     const refresh = () => {
       void readReport(tabId).then((next) => {
         if (cancelled) return;
-        setReport(next);
+        // A failed read keeps whatever is on screen and raises the error flag; the next good read clears it.
+        if (next.ok) setReport(next.report);
+        setError(!next.ok);
         setLoading(false);
       });
     };
+    reloadRef.current = refresh;
     refresh();
 
     // storage.onChanged also reports the session area (area === 'session'); no separate hook needed.
@@ -54,6 +67,7 @@ export function useReport(tabId: number | null): ReportState {
       if (message.type !== 'report:updated' || message.tabId !== tabId) return;
       if (isFillReport(message.report)) {
         setReport(message.report);
+        setError(false);
         setLoading(false);
       }
     };
@@ -81,5 +95,7 @@ export function useReport(tabId: number | null): ReportState {
     setReport((current) => (current ? patchReport(current, field) : current));
   }, []);
 
-  return { report, loading, patchField };
+  const reload = useCallback(() => reloadRef.current(), []);
+
+  return { report, loading, error, reload, patchField };
 }

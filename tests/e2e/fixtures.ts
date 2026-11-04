@@ -3,7 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { test as base, chromium, type BrowserContext, type Worker } from '@playwright/test';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-export const EXT = path.join(ROOT, '.output', 'chrome-mv3');
+// RAF_EXT_DIR lets parallel workers test a private copy of the build output.
+export const EXT = process.env.RAF_EXT_DIR
+  ? path.resolve(process.env.RAF_EXT_DIR)
+  : path.join(ROOT, '.output', 'chrome-mv3');
 
 interface ExtensionFixtures {
   context: BrowserContext;

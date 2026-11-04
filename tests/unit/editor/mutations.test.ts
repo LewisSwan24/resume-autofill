@@ -6,6 +6,7 @@ import {
   createResume,
   duplicateResume,
   getByPath,
+  insertEntry,
   moveEntry,
   parsePath,
   pruneMissingAttachments,
@@ -76,6 +77,17 @@ describe('repeatable entries', () => {
     expect(removeEntry(r, 'skills', 1).skills.map((s) => s.name)).toEqual(['a', 'c']);
     expect(removeEntry(r, 'skills', 3)).toBe(r);
     expect(removeEntry(r, 'skills', -1)).toBe(r);
+  });
+
+  it('insertEntry puts an entry back at its index (undo of removeEntry) and clamps the index', () => {
+    let r = resume();
+    for (const name of ['a', 'b', 'c']) r = addEntry(r, 'skills', { name, level: '' });
+    const removed = r.skills[1]!;
+    const without = removeEntry(r, 'skills', 1);
+    expect(insertEntry(without, 'skills', 1, removed)).toEqual(r);
+    expect(insertEntry(without, 'skills', 99, removed).skills.map((s) => s.name)).toEqual(['a', 'c', 'b']);
+    expect(insertEntry(without, 'skills', -5, removed).skills.map((s) => s.name)).toEqual(['b', 'a', 'c']);
+    expect(without.skills).toHaveLength(2); // immutable
   });
 
   it('moveEntry swaps neighbours and is a no-op at the ends', () => {

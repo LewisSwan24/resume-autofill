@@ -6,7 +6,6 @@ import {
   addResume,
   createResume,
   duplicateResume,
-  getModule,
   issuesForResume,
   pruneMissingAttachments,
   referencedFileIds,
@@ -22,12 +21,20 @@ import {
 import { resolveLanguage, setLanguage, useT } from '../../src/i18n';
 import type { Locale, Profile, Resume } from '../../src/schema';
 import { deleteFile, getFile, putFile } from '../../src/storage';
-import { Attachments, MAX_ATTACHMENT_MB } from './Attachments';
+import { Icon } from '../../src/ui/Icon';
+import { Attachments, MAX_ATTACHMENT_MB, acceptsFile, slotTypeKey } from './Attachments';
 import { ModuleForm } from './ModuleForm';
 import { ResumeList } from './ResumeList';
 import { DataPanel, SettingsPanel } from './SidePanels';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
+import { Accordion, AccordionItem } from './ui/Accordion';
+import { Badge, Button, EmptyState, Field, Input, Notice, SelectInput } from './ui/controls';
+import { Dialog } from './ui/Dialog';
+import { Tabs, panelId, tabId, type TabItem } from './ui/Tabs';
+import { ToastProvider } from './ui/Toast';
+import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
+import './ui/ui.css';
 import './options.css';
 
 export interface AppProps {
@@ -35,34 +42,50 @@ export interface AppProps {
   autosaveDelayMs?: number;
 }
 
+type TabKey = 'editor' | 'attachments' | 'settings' | 'data';
+
+/** Sections that start expanded; the rest stay folded until asked for. */
+const OPEN_BY_DEFAULT: readonly ModuleName[] = ['basics', 'contact', 'education', 'work'];
+const EDITOR_MODULES = MODULES.filter((m) => m.container !== 'attachments');
+const PREFIX = 'raf-options';
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-function StatusBadge({ status, error, issueCount }: { status: SaveStatus; error: string | null; issueCount: number }) {
+/** Autosave state as a caption: always in the DOM (role=status) so changes are announced; failures add icon + danger colour. */
+function SaveStatusLine({ status }: { status: SaveStatus }) {
   const t = useT();
-  if (status === 'idle') return <span className="raf-status" role="status" />;
-  const text =
+  const view =
     status === 'saved'
-      ? `✓ ${t('options.saved')}`
-      : status === 'error'
-        ? t('options.saveError', { message: error ?? '' })
+      ? { text: t('options.allSaved'), icon: 'check-lg' as const }
+      : status === 'pending' || status === 'saving'
+        ? { text: t('options.saving'), icon: null }
         : status === 'invalid'
-          ? t('options.invalid', { count: issueCount })
-          : t('options.saving');
+          ? { text: t('options.needsLook'), icon: 'exclamation-triangle' as const }
+          : status === 'error'
+            ? { text: t('options.saveFailed'), icon: 'exclamation-triangle' as const }
+            : null;
+  const bad = status === 'invalid' || status === 'error';
   return (
-    <span className={`raf-status is-${status}`} role="status" data-status={status}>
-      {text}
+    <span className={`raf-status${bad ? ' is-bad' : ''}`} role="status" data-status={status}>
+      {view?.icon ? <Icon name={view.icon} size={16} /> : null}
+      {view?.text}
     </span>
   );
 }
 
-export default function App({ autosaveDelayMs }: AppProps = {}) {
+function Options({ autosaveDelayMs }: AppProps) {
   const t = useT();
   const { profile, loadError, status, saveError, issues, commit } = useProfileEditor(autosaveDelayMs);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<ModuleName>('basics');
+  const [tab, setTab] = useState<TabKey>('editor');
+  const [open, setOpen] = useState<ReadonlySet<ModuleName>>(() => new Set(OPEN_BY_DEFAULT));
   const [attachErrors, setAttachErrors] = useState<Partial<Record<AttachmentSlot, string>>>({});
+  const [attachBusy, setAttachBusy] = useState<Partial<Record<AttachmentSlot, boolean>>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Resume | null>(null);
+  const [linkTarget, setLinkTarget] = useState<Resume | null>(null);
+  const [linkChoice, setLinkChoice] = useState('');
 
-  // Handlers run after awaits; always read the newest profile through this ref.
+  // Handlers run after awaits (and Undo runs seconds later); always read the newest profile through this ref.
   const latest = useRef<Profile | null>(profile);
   latest.current = profile;
 
@@ -91,8 +114,13 @@ export default function App({ autosaveDelayMs }: AppProps = {}) {
 
   // ---------------------------------------------------------------- resume-level actions
 
-  const editResume = (next: Resume) => {
-    if (profile && resume) void commit(updateResume(profile, resume.id, () => next));
+  /** Edit one resume against the newest profile (also what the entry-delete Undo uses). */
+  const editResumeById = (id: string, edit: (resume: Resume) => Resume) => {
+    const current = latest.current;
+    if (!current) return;
+    const next = updateResume(current, id, edit);
+    latest.current = next; // two edits in one tick must build on each other
+    void commit(next);
   };
 
   const createNew = (locale: Locale) => {
@@ -100,27 +128,34 @@ export default function App({ autosaveDelayMs }: AppProps = {}) {
     const created = createResume({ title: t('options.defaultTitle'), locale });
     void commit(addResume(profile, created, { activate: profile.resumes.length === 0 }), { immediate: true });
     setSelectedId(created.id);
-    setTab('basics');
+    setTab('editor');
   };
 
-  const duplicate = () => {
-    if (!profile || !resume) return;
-    const copy = duplicateResume(resume, { title: `${resume.title}${t('options.copySuffix')}` });
+  const duplicate = (source: Resume) => {
+    if (!profile) return;
+    const copy = duplicateResume(source, { title: `${source.title}${t('options.copySuffix')}` });
     void commit(addResume(profile, copy), { immediate: true });
     setSelectedId(copy.id);
   };
 
-  const remove = async () => {
-    if (!profile || !resume) return;
-    if (!window.confirm(t('options.confirmDelete', { title: resume.title }))) return;
-    const next = removeResume(profile, resume.id);
+  const remove = async (target: Resume) => {
+    if (!profile) return;
+    setDeleteTarget(null);
+    const next = removeResume(profile, target.id);
     setSelectedId(null);
     await commit(next, { immediate: true });
     // Attachment files nobody references any more would only waste space.
     const keep = referencedFileIds(next);
-    for (const id of referencedFileIds({ ...profile, resumes: [resume] })) {
+    for (const id of referencedFileIds({ ...profile, resumes: [target] })) {
       if (!keep.has(id)) await deleteFile(id).catch(() => undefined);
     }
+  };
+
+  const saveLink = () => {
+    const target = linkTarget;
+    const current = latest.current;
+    setLinkTarget(null);
+    if (target && current) void commit(setLinkedResume(current, target.id, linkChoice || null));
   };
 
   // ---------------------------------------------------------------- attachments
@@ -129,10 +164,16 @@ export default function App({ autosaveDelayMs }: AppProps = {}) {
     if (!resume) return;
     const resumeId = resume.id;
     const setError = (message: string | null) => setAttachErrors((prev) => ({ ...prev, [slot]: message ?? undefined }));
+    const types = t(slotTypeKey(slot));
+    if (!acceptsFile(slot, file)) {
+      setError(t('options.attach.wrongType', { types, max: MAX_ATTACHMENT_MB }));
+      return;
+    }
     if (file.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
       setError(t('options.attach.tooLarge', { max: MAX_ATTACHMENT_MB }));
       return;
     }
+    setAttachBusy((prev) => ({ ...prev, [slot]: true }));
     try {
       const id = await putFile({ name: file.name, type: file.type || 'application/octet-stream', blob: file });
       const current = latest.current;
@@ -144,6 +185,8 @@ export default function App({ autosaveDelayMs }: AppProps = {}) {
       if (old && !referencedFileIds(next).has(old)) await deleteFile(old);
     } catch (error) {
       setError(t('options.attach.error', { message: messageOf(error) }));
+    } finally {
+      setAttachBusy((prev) => ({ ...prev, [slot]: false }));
     }
   };
 
@@ -170,124 +213,182 @@ export default function App({ autosaveDelayMs }: AppProps = {}) {
 
   // ---------------------------------------------------------------- render
 
-  const settingsPanels = (
-    <>
-      {profile ? <SettingsPanel settings={profile.settings} onChange={(settings) => void commit({ ...profile, settings })} /> : null}
-      <DataPanel profile={profile} onImport={importProfile} />
-    </>
+  const header = (
+    <header className="raf-header">
+      <div className="raf-header__text">
+        <h1 className="raf-title">{t('options.title')}</h1>
+        <p className="raf-caption">{t('options.subtitle')}</p>
+      </div>
+      <SaveStatusLine status={status} />
+    </header>
   );
 
   if (!profile) {
     return (
       <div className="raf-app">
-        <header className="raf-header">
-          <h1>{t('options.title')}</h1>
-        </header>
+        {header}
         {loadError ? (
-          <div className="raf-body raf-body-single">
-            <p role="alert" className="raf-error">
-              {loadError}
-            </p>
-            {settingsPanels}
+          <div className="raf-single raf-form-stack">
+            <Notice tone="danger">{loadError}</Notice>
+            <section className="raf-card" aria-label={t('options.data.title')}>
+              <h2 className="raf-heading">{t('options.data.title')}</h2>
+              <DataPanel profile={null} onImport={importProfile} />
+            </section>
           </div>
         ) : (
-          <p className="raf-muted raf-pad">{t('options.loading')}</p>
+          <p className="raf-caption raf-pad">{t('options.loading')}</p>
         )}
       </div>
     );
   }
 
-  const meta = getModule(tab);
-  const others = profile.resumes.filter((r) => r.id !== resume?.id);
+  const tabs: TabItem<TabKey>[] = [
+    { id: 'editor', label: t('options.tab.editor'), icon: 'pencil' },
+    { id: 'attachments', label: t('options.module.attachments'), icon: 'paperclip' },
+    { id: 'settings', label: t('options.settings.title'), icon: 'gear' },
+    { id: 'data', label: t('options.data.title'), icon: 'download' },
+  ];
+  const linkedTitle = resume?.linkedResumeId ? profile.resumes.find((r) => r.id === resume.linkedResumeId)?.title : undefined;
+  const linkOthers = linkTarget ? profile.resumes.filter((r) => r.id !== linkTarget.id) : [];
+  const resumeScoped = tab === 'editor' || tab === 'attachments';
+
+  const toggle = (module: ModuleName, value: boolean) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (value) next.add(module);
+      else next.delete(module);
+      return next;
+    });
+
+  const editor = !resume ? (
+    <EmptyState>{t('options.empty')}</EmptyState>
+  ) : tab === 'attachments' ? (
+    <section className="raf-card" aria-label={t('options.module.attachments')}>
+      <Attachments resume={resume} errors={attachErrors} busy={attachBusy} onUpload={(s, f) => void uploadAttachment(s, f)} onRemove={(s) => void removeAttachment(s)} />
+    </section>
+  ) : (
+    <>
+      <div className="raf-resume-head">
+        <Field label={t('options.resumeTitle')}>
+          {(control) => <Input {...control} type="text" value={resume.title} onChange={(e) => editResumeById(resume.id, (r) => ({ ...r, title: e.target.value }))} />}
+        </Field>
+        <div className="raf-resume-head__meta">
+          <Badge>{resume.locale}</Badge>
+          {linkedTitle !== undefined ? <span className="raf-caption">{t('options.linkedTo', { title: linkedTitle || '—' })}</span> : null}
+        </div>
+      </div>
+      <Accordion>
+        {EDITOR_MODULES.map((m) => {
+          const count = (ARRAY_MODULES as readonly string[]).includes(m.module) ? (resume[m.module as ArrayModuleName] as unknown[]).length : 0;
+          return (
+            <AccordionItem key={m.module} title={t(m.labelKey)} count={count} open={open.has(m.module)} onToggle={(v) => toggle(m.module, v)}>
+              <ModuleForm resume={resume} meta={m} issues={resumeIssues} onEdit={(edit) => editResumeById(resume.id, edit)} />
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+    </>
+  );
 
   return (
     <div className="raf-app">
-      <header className="raf-header">
-        <h1>{t('options.title')}</h1>
-        <span className="raf-muted">{t('options.subtitle')}</span>
-        <StatusBadge status={status} error={saveError} issueCount={issues.length} />
-      </header>
+      {header}
 
-      <div className="raf-body">
-        <aside className="raf-side">
-          <ResumeList profile={profile} selectedId={resume?.id ?? null} onSelect={setSelectedId} onCreate={createNew} />
-          {settingsPanels}
-        </aside>
-
-        <main className="raf-main">
-          {!resume ? (
-            <p className="raf-muted raf-pad">{t('options.empty')}</p>
+      {status === 'error' || status === 'invalid' ? (
+        <div className="raf-notices">
+          {status === 'error' ? (
+            <Notice
+              tone="danger"
+              action={
+                <Button onClick={() => latest.current && void commit(latest.current, { immediate: true })}>{t('options.tryAgain')}</Button>
+              }
+            >
+              {t('options.saveError', { message: saveError ?? '' })}
+            </Notice>
           ) : (
-            <>
-              <section className="raf-card raf-resume-head" aria-label={t('options.resumeTitle')}>
-                <label className="raf-field raf-grow">
-                  <span className="raf-label">{t('options.resumeTitle')}</span>
-                  <input type="text" value={resume.title} onChange={(e) => editResume({ ...resume, title: e.target.value })} />
-                </label>
-                <div className="raf-field">
-                  <span className="raf-label">{t('options.locale')}</span>
-                  <span className="raf-badge">{resume.locale}</span>
-                </div>
-                <label className="raf-field">
-                  <span className="raf-label">{t('options.linked')}</span>
-                  <select
-                    value={resume.linkedResumeId ?? ''}
-                    title={t('options.linkHint')}
-                    onChange={(e) => void commit(setLinkedResume(profile, resume.id, e.target.value || null))}
-                  >
-                    <option value="">{t('options.linkNone')}</option>
-                    {others.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.title} ({r.locale})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="raf-row raf-actions">
-                  <button type="button" disabled={resume.id === profile.activeResumeId} onClick={() => void commit(setActive(profile, resume.id), { immediate: true })}>
-                    {resume.id === profile.activeResumeId ? `★ ${t('options.active')}` : t('options.setActive')}
-                  </button>
-                  <button type="button" onClick={duplicate}>
-                    {t('options.duplicate')}
-                  </button>
-                  <button type="button" className="raf-danger" onClick={() => void remove()}>
-                    {t('options.delete')}
-                  </button>
-                </div>
-              </section>
-
-              <div className="raf-tabs" role="tablist" aria-label={t('options.title')}>
-                {MODULES.map((m) => {
-                  const count = (ARRAY_MODULES as readonly string[]).includes(m.module)
-                    ? (resume[m.module as ArrayModuleName] as unknown[]).length
-                    : 0;
-                  return (
-                    <button
-                      key={m.module}
-                      type="button"
-                      role="tab"
-                      aria-selected={m.module === tab}
-                      className={m.module === tab ? 'is-selected' : ''}
-                      onClick={() => setTab(m.module)}
-                    >
-                      {t(m.labelKey)}
-                      {count > 0 ? <span className="raf-count">{count}</span> : null}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <section className="raf-card raf-panel" role="tabpanel" aria-label={t(meta.labelKey)}>
-                {meta.container === 'attachments' ? (
-                  <Attachments resume={resume} errors={attachErrors} onUpload={(s, f) => void uploadAttachment(s, f)} onRemove={(s) => void removeAttachment(s)} />
-                ) : (
-                  <ModuleForm resume={resume} meta={meta} issues={resumeIssues} onChange={editResume} />
-                )}
-              </section>
-            </>
+            <Notice tone="danger">{t('options.invalid', { count: issues.length })}</Notice>
           )}
-        </main>
+        </div>
+      ) : null}
+
+      <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel={t('options.title')} idPrefix={PREFIX} />
+
+      <div role="tabpanel" id={panelId(PREFIX, tab)} aria-labelledby={tabId(PREFIX, tab)} className={resumeScoped ? 'raf-workspace' : 'raf-single'}>
+        {resumeScoped ? (
+          <>
+            <aside className="raf-side">
+              <ResumeList
+                profile={profile}
+                selectedId={resume?.id ?? null}
+                onSelect={setSelectedId}
+                onCreate={createNew}
+                onSetActive={(r) => void commit(setActive(profile, r.id), { immediate: true })}
+                onDuplicate={duplicate}
+                onLink={(r) => {
+                  setLinkChoice(r.linkedResumeId ?? '');
+                  setLinkTarget(r);
+                }}
+                onDelete={setDeleteTarget}
+              />
+            </aside>
+            <main className="raf-main">{editor}</main>
+          </>
+        ) : tab === 'settings' ? (
+          <section className="raf-card" aria-label={t('options.settings.title')}>
+            <h2 className="raf-heading">{t('options.settings.title')}</h2>
+            <SettingsPanel settings={profile.settings} onChange={(settings) => void commit({ ...profile, settings })} />
+          </section>
+        ) : (
+          <section className="raf-card" aria-label={t('options.data.title')}>
+            <h2 className="raf-heading">{t('options.data.title')}</h2>
+            <DataPanel profile={profile} onImport={importProfile} />
+          </section>
+        )}
       </div>
+
+      {deleteTarget ? (
+        <Dialog
+          title={t('options.deleteTitle')}
+          text={t('options.confirmDelete', { title: deleteTarget.title || '—' })}
+          cancelLabel={t('options.notNow')}
+          confirmLabel={t('options.deleteConfirm')}
+          danger
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void remove(deleteTarget)}
+        />
+      ) : null}
+
+      {linkTarget ? (
+        <Dialog
+          title={t('options.linkTitle')}
+          text={t('options.linkHint')}
+          cancelLabel={t('options.notNow')}
+          confirmLabel={t('options.linkSave')}
+          onCancel={() => setLinkTarget(null)}
+          onConfirm={saveLink}
+        >
+          <Field label={t('options.linked')} className="raf-dialog__field">
+            {(control) => (
+              <SelectInput {...control} value={linkChoice} onChange={(e) => setLinkChoice(e.target.value)}>
+                <option value="">{t('options.linkNone')}</option>
+                {linkOthers.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title} ({r.locale})
+                  </option>
+                ))}
+              </SelectInput>
+            )}
+          </Field>
+        </Dialog>
+      ) : null}
     </div>
+  );
+}
+
+export default function App(props: AppProps = {}) {
+  return (
+    <ToastProvider>
+      <Options {...props} />
+    </ToastProvider>
   );
 }

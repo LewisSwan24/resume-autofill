@@ -1,15 +1,19 @@
-// Side panel: active resume switcher + fill report of the current tab.
-import { useEffect, useMemo, useState } from 'react';
-import type { FieldReport, Outcome } from '../../src/engine/types';
+// Side panel: toolbar (title, active resume, refresh) + fill report of the current tab.
+// Layout follows DESIGN-SYSTEM §6.2-B: a `paper` page with `surface` islands, no shadows.
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FieldReport } from '../../src/engine/types';
 import { resolveLanguage, setLanguage, useT } from '../../src/i18n';
+import type { StatusGroupId } from '../../src/ui/status';
 import { FilterChips } from './FilterChips';
-import { countOutcomes, filterByOutcomes, sortBySeverity, toggleOutcome } from './model';
-import { ReportTable } from './ReportTable';
+import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
+import { EmptyState, IconButton, LoadingList, Notice, Toast } from './parts';
+import { ReportList } from './ReportList';
 import { ResumeSwitcher } from './ResumeSwitcher';
 import { useActiveTab } from './useActiveTab';
 import { useFieldActions } from './useFieldActions';
 import { useProfile } from './useProfile';
 import { useReport } from './useReport';
+import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
 import './sidepanel.css';
 
@@ -19,9 +23,11 @@ export default function App() {
   const t = useT();
   const { profile } = useProfile();
   const tabId = useActiveTab();
-  const { report, loading, patchField } = useReport(tabId);
+  const { report, loading, error, reload, patchField } = useReport(tabId);
   const { focus, apply } = useFieldActions(tabId, patchField);
-  const [selected, setSelected] = useState<ReadonlySet<Outcome>>(new Set());
+  const [selected, setSelected] = useState<ReadonlySet<StatusGroupId>>(new Set());
+  const [switchFailed, setSwitchFailed] = useState(false);
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
 
   // UI language follows the stored setting.
   const uiLanguage = profile?.settings.uiLanguage ?? 'auto';
@@ -35,38 +41,85 @@ export default function App() {
   }, [t]);
 
   const fields = report?.fields ?? NO_FIELDS;
-  const counts = useMemo(() => countOutcomes(fields), [fields]);
-  const rows = useMemo(() => sortBySeverity(filterByOutcomes(fields, selected)), [fields, selected]);
+  const counts = useMemo(() => countGroups(fields), [fields]);
+  const rows = useMemo(() => sortBySeverity(filterByGroups(fields, selected)), [fields, selected]);
+
+  const dismissToast = useCallback(() => setToast(null), []);
+  const onApplied = useCallback(() => setToast({ id: Date.now(), text: t('panel.applied') }), [t]);
+
+  // One sentence in the same groups as the chips (and the FAB card): filled, to review, not filled.
+  // "No data" is neutral and never counted as something to look at.
+  const { filled, review, failed } = counts;
+  const summary =
+    review > 0 && failed > 0
+      ? t('panel.summaryBoth', { filled, review, failed })
+      : review > 0
+        ? t('panel.summaryReview', { filled, review })
+        : failed > 0
+          ? t('panel.summaryFailed', { filled, failed })
+          : t('panel.summaryClear', { filled });
 
   return (
     <div className="raf-panel-app">
       <header className="raf-header">
-        <h1>{t('panel.title')}</h1>
-        {profile ? <ResumeSwitcher profile={profile} /> : <span className="raf-muted">{t('panel.loading')}</span>}
+        <div className="raf-toolbar">
+          <h1 className="raf-toolbar-title">{t('panel.title')}</h1>
+          <div className="raf-toolbar-end">
+            {profile ? (
+              <ResumeSwitcher profile={profile} onError={(message) => setSwitchFailed(message !== null)} />
+            ) : (
+              <span className="raf-skeleton raf-skeleton-select" aria-hidden="true" />
+            )}
+            <IconButton icon="arrow-clockwise" label={t('panel.refresh')} onClick={reload} />
+          </div>
+        </div>
       </header>
 
       <main className="raf-main">
+        {profile && profile.resumes.length === 0 ? <Notice>{t('panel.noResume')}</Notice> : null}
+        {switchFailed ? <Notice tone="danger">{t('panel.switchError')}</Notice> : null}
+        {error ? (
+          <Notice
+            tone="danger"
+            title={t('panel.error.title')}
+            action={
+              <button type="button" className="raf-btn" onClick={reload}>
+                {t('panel.retry')}
+              </button>
+            }
+          >
+            {t('panel.error.text')}
+          </Notice>
+        ) : null}
+
         {loading && tabId !== null ? (
-          <p className="raf-muted raf-pad">{t('panel.loading')}</p>
+          <LoadingList />
         ) : fields.length === 0 ? (
-          <p className="raf-empty raf-muted raf-pad">{t('panel.empty')}</p>
+          error ? null : <EmptyState icon="file-earmark-text" title={t('panel.emptyTitle')} text={t('panel.empty')} />
         ) : (
           <>
-            <p className="raf-summary raf-muted">{t('panel.summary', { total: fields.length, filled: counts.filled })}</p>
-            <FilterChips
-              counts={counts}
-              selected={selected}
-              onToggle={(o) => setSelected((prev) => toggleOutcome(prev, o))}
-              onClear={() => setSelected(new Set())}
-            />
+            <section className="raf-overview">
+              <p className="raf-summary">{summary}</p>
+              <FilterChips
+                counts={counts}
+                total={fields.length}
+                selected={selected}
+                onToggle={(g) => setSelected((prev) => toggleGroup(prev, g))}
+                onClear={() => setSelected(new Set())}
+              />
+            </section>
             {rows.length === 0 ? (
-              <p className="raf-muted raf-pad">{t('panel.filter.none')}</p>
+              <EmptyState compact icon="search" text={t('panel.filter.none')} />
             ) : (
-              <ReportTable fields={rows} onFocus={focus} onApply={apply} />
+              <ReportList fields={rows} onFocus={focus} onApply={apply} onApplied={onApplied} />
             )}
           </>
         )}
       </main>
+
+      <div className="raf-toast-stack" role="status">
+        {toast ? <Toast key={toast.id} text={toast.text} onDismiss={dismissToast} /> : null}
+      </div>
     </div>
   );
 }

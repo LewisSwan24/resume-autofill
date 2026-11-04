@@ -1,0 +1,17 @@
+/*
+ * Bundled web fonts for EXTENSION PAGES ONLY (options page, side panel). No network: fontsource ships the woff2
+ * files, Vite copies them into the build and rewrites the url()s to extension-relative paths.
+ *
+ *  - Manrope 400 + 600 for UI text (Latin + Latin Extended only; Chinese falls to "Noto Sans SC" / system fonts).
+ *  - ZCOOL KuaiLe 400 for page titles only (var(--raf-font-display)); the package is split into unicode-range
+ *    subsets, so the browser downloads (reads from the package) only the chunks a title actually needs.
+ *
+ * Do NOT import this from the FAB (closed shadow root on a host page): @font-face does not work there and would
+ * have to be declared in the host document. See the note in theme.css.
+ * Import it BEFORE theme.css.
+ */
+@import '@fontsource/manrope/latin-400.css';
+@import '@fontsource/manrope/latin-ext-400.css';
+@import '@fontsource/manrope/latin-600.css';
+@import '@fontsource/manrope/latin-ext-600.css';
+@import '@fontsource/zcool-kuaile/400.css';

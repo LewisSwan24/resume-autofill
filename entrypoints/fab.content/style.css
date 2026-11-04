@@ -4,6 +4,11 @@
  * Design tokens (colour, type, radius, spacing, shadow, motion, z-index, sizes) are NOT declared here: they
  * come from src/ui/theme.css, imported before this file in index.tsx, and apply to `:host` and again to
  * `.raf-root` (inside the shadow tree, so page CSS cannot override them). Only the rules live here.
+ * Light / dark follow the OS (`prefers-color-scheme` in theme.css), not the theme of the host page.
+ *
+ * The rules are the design system's Button, IconButton, Badge, ListItem, Notice and Popover (DESIGN-SYSTEM §3, §6.2-A)
+ * translated from bundle.css to --raf-* variables. There is no @font-face here on purpose: the closed shadow root sits
+ * on somebody else's page, so text uses var(--raf-font-sans) and falls back to the system fonts.
  *
  * Geometry contract (relied on by e2e): the host box is exactly the FAB button while the card is
  * closed or open, because the card is absolutely positioned relative to the button wrapper.
@@ -44,7 +49,8 @@
   box-sizing: border-box;
 }
 
-.raf-root button {
+/* `:where` keeps this reset at zero specificity so the component classes below win. */
+.raf-root :where(button) {
   margin: 0;
   font: inherit;
   color: inherit;
@@ -52,71 +58,126 @@
   cursor: pointer;
 }
 
-.raf-root button:focus-visible {
+.raf-root :where(h2, h3, p, ul) {
+  margin: 0;
+  padding: 0;
+}
+
+/* ------------------------------------------------------------------ Button */
+
+.raf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--raf-space-2);
+  min-height: var(--raf-size-icon-button);
+  padding: 0 var(--raf-space-4);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  background: var(--raf-color-surface);
+  color: var(--raf-color-text);
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+  transition:
+    background-color var(--raf-motion-duration) var(--raf-motion-easing),
+    border-color var(--raf-motion-duration) var(--raf-motion-easing),
+    box-shadow var(--raf-motion-duration) var(--raf-motion-easing),
+    outline-color var(--raf-motion-duration) var(--raf-motion-easing);
+}
+
+.raf-btn--primary {
+  border-color: var(--raf-color-primary);
+  background: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
+}
+
+.raf-btn--block {
+  display: flex;
+  width: 100%;
+}
+
+/* Hover: bordered control = line turns ink + 1px ink inner ring; filled primary = 1px ink outline, offset 1px. */
+.raf-btn:hover {
+  border-color: var(--raf-color-text);
+  box-shadow: inset 0 0 0 1px var(--raf-color-text);
+}
+
+.raf-btn--primary:hover {
+  border-color: var(--raf-color-primary);
+  box-shadow: none;
+  outline: 1px solid var(--raf-color-text);
+  outline-offset: 1px;
+}
+
+/* Pressed: bordered = tile fill; primary = 2px ink outline. */
+.raf-btn:active {
+  background: var(--raf-color-surface-hover);
+}
+
+.raf-btn--primary:active {
+  background: var(--raf-color-primary);
+  border-color: var(--raf-color-primary);
+  box-shadow: none;
+  outline: 2px solid var(--raf-color-text);
+  outline-offset: 1px;
+}
+
+/* Keyboard focus last, so it wins over the hover outline. */
+.raf-btn:focus-visible,
+.raf-icon-btn:focus-visible {
   outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
   outline-offset: var(--raf-focus-ring-offset);
 }
 
-/* ------------------------------------------------------------------ FAB pill */
+/* ------------------------------------------------------------------ FAB (Button primary + icon + caption) */
 
 .raf-fab {
-  display: flex;
-  align-items: center;
   gap: var(--raf-space-2);
   height: var(--raf-size-fab-height);
-  padding: 0 var(--raf-space-4) 0 var(--raf-space-2);
-  border: 0;
-  border-radius: var(--raf-radius-pill);
-  background: var(--raf-color-primary);
-  color: var(--raf-color-primary-text);
-  box-shadow: var(--raf-shadow-2);
+  padding: 0 var(--raf-space-4) 0 var(--raf-space-3);
+  text-align: start;
   white-space: nowrap;
-  transition: background-color var(--raf-motion-duration) var(--raf-motion-easing), opacity var(--raf-motion-duration) var(--raf-motion-easing);
 }
 
-.raf-fab:hover:not(:disabled) {
-  background: var(--raf-color-primary-hover);
-}
-
-.raf-fab:disabled {
+.raf-fab[aria-busy='true'] {
   cursor: progress;
-  opacity: var(--raf-opacity-busy);
 }
 
-/* Nothing detected: stay visible but recede. */
-.raf-fab[data-muted='true'] {
-  opacity: var(--raf-opacity-muted);
+/*
+ * Host-page edge (supplementary deviation, DESIGN-SYSTEM §6.2-A): the filled FAB gets a TWO-TONE hairline so its edge
+ * reads on any host page in either theme:
+ *   inner 1px = on-accent at 60%  (white in light, near-black in dark): the contrast against the FAB's own fill,
+ *   outer 1px = accent at 60%     (blue in light, near-white in dark): the same colour as the fill.
+ * A single ring always vanishes on one kind of page: the old near-black dark ring disappeared on a dark host, and a white
+ * ring disappears on a white one. With both, one of the two always contrasts: dark FAB = near-white outer ring on dark
+ * pages, near-black inner ring on white pages; light FAB = white inner ring on dark and blue pages, blue outer ring on
+ * white pages. The card needs no ring: its 1px line plus a surface that contrasts with the page held its edge everywhere.
+ * The outlined "no fields" variant keeps its 1px line only. --raf-shadow-host itself is a fixed white hairline, useless on
+ * white pages in dark theme, so the ring is derived here from tokens (theme.css should make it theme-aware).
+ */
+.raf-root {
+  --raf-fab-ring-inner: color-mix(in srgb, var(--raf-color-primary-text) 60%, transparent);
+  --raf-fab-ring-outer: color-mix(in srgb, var(--raf-color-primary) 60%, transparent);
+  --raf-fab-ring: 0 0 0 1px var(--raf-fab-ring-inner), 0 0 0 2px var(--raf-fab-ring-outer);
 }
 
-.raf-fab[data-muted='true']:hover:not(:disabled) {
-  opacity: 1;
+.raf-fab.raf-btn--primary {
+  box-shadow: var(--raf-fab-ring);
 }
-
 .raf-fab__icon {
   display: grid;
   flex: none;
   place-items: center;
-  width: var(--raf-size-fab-icon);
-  height: var(--raf-size-fab-icon);
-  border-radius: var(--raf-radius-pill);
-  background: color-mix(in srgb, var(--raf-color-primary-text) 22%, transparent);
-}
-
-.raf-fab__glyph {
   width: var(--raf-size-glyph);
   height: var(--raf-size-glyph);
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .raf-spinner {
   width: var(--raf-size-glyph);
   height: var(--raf-size-glyph);
-  border: var(--raf-size-spinner-width) solid color-mix(in srgb, currentColor 30%, transparent);
-  border-top-color: currentColor;
+  border: var(--raf-size-spinner-width) solid currentColor;
+  border-top-color: transparent;
   border-radius: var(--raf-radius-pill);
   animation: raf-spin var(--raf-motion-duration-spinner) linear infinite;
 }
@@ -134,18 +195,24 @@
 }
 
 .raf-fab__title {
-  font-size: var(--raf-font-size-lg);
+  font-size: var(--raf-font-size-md);
   font-weight: var(--raf-font-weight-strong);
-  line-height: var(--raf-line-height);
+  line-height: var(--raf-line-height-tight);
 }
 
+/* Caption: 12px / 400, full colour of the button (no opacity dimming). */
 .raf-fab__sub {
-  font-size: var(--raf-font-size-xs);
-  line-height: var(--raf-line-height);
-  opacity: var(--raf-opacity-muted);
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-regular);
+  line-height: var(--raf-line-height-tight);
 }
 
-/* ------------------------------------------------------------------ card */
+/* No fields detected: the primary button turns into the outlined one and the caption into ink-muted. */
+.raf-fab[data-muted='true'] .raf-fab__sub {
+  color: var(--raf-color-text-muted);
+}
+
+/* ------------------------------------------------------------------ card (Popover geometry) */
 
 .raf-card {
   position: absolute;
@@ -153,217 +220,306 @@
   bottom: calc(100% + var(--raf-space-2));
   display: flex;
   flex-direction: column;
-  width: var(--raf-size-card-width);
+  width: min(var(--raf-size-card-width), calc(100vw - 2 * var(--raf-space-4)));
   max-height: var(--raf-size-card-max-height);
-  overflow: hidden;
+  padding: var(--raf-space-1) var(--raf-space-1) var(--raf-space-3) var(--raf-space-3);
   border: var(--raf-border-width) solid var(--raf-color-border);
-  border-radius: var(--raf-radius-lg);
+  border-radius: var(--raf-radius-md);
   background: var(--raf-color-surface);
-  box-shadow: var(--raf-shadow-2);
+  color: var(--raf-color-text);
+  transform-origin: bottom right;
+  animation: raf-pop var(--raf-motion-move);
 }
 
-.raf-card[data-tone='error'] {
-  border-color: color-mix(in srgb, var(--raf-color-danger) 45%, var(--raf-color-border));
+/* Leaving things settle (no bounce); the card stays mounted until this finishes, then Fab removes it. */
+.raf-card[data-state='leaving'] {
+  pointer-events: none;
+  animation: raf-settle var(--raf-motion-settle) forwards;
 }
 
-.raf-card__header {
+/* The card opens above the FAB, so it pops up from the button instead of down from a trigger. */
+@keyframes raf-pop {
+  from {
+    opacity: 0;
+    transform: translateY(var(--raf-space-1)) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes raf-settle {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(var(--raf-space-1));
+  }
+}
+
+.raf-card__head {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   gap: var(--raf-space-2);
-  padding: var(--raf-space-3) var(--raf-space-3) var(--raf-space-2) var(--raf-space-4);
 }
 
 .raf-card__title {
-  margin: 0;
-  font-size: var(--raf-font-size-lg);
+  font-size: var(--raf-font-size-md);
   font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
 }
 
-.raf-icon-button {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: var(--raf-size-icon-button);
-  height: var(--raf-size-icon-button);
-  padding: 0;
-  border: 0;
-  border-radius: var(--raf-radius-sm);
-  background: transparent;
-  color: var(--raf-color-text-muted);
-}
-
-.raf-icon-button:hover {
-  background: var(--raf-color-surface-hover);
-  color: var(--raf-color-text);
+/* The 4px of padding/negative margin give the focus rings of the controls inside room to draw. */
+.raf-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  min-height: 0;
+  margin: 0 0 calc(-1 * var(--raf-space-1)) calc(-1 * var(--raf-space-1));
+  padding: var(--raf-space-1) var(--raf-space-2) var(--raf-space-1) var(--raf-space-1);
+  overflow-y: auto;
 }
 
 .raf-card__stats {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: var(--raf-space-1) var(--raf-space-2);
-  padding: 0 var(--raf-space-4) var(--raf-space-3);
-  font-size: var(--raf-font-size-sm);
 }
 
-.raf-stat {
+.raf-card__note,
+.raf-card__list-title {
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-regular);
+  line-height: var(--raf-line-height-tight);
+  color: var(--raf-color-text-muted);
+}
+
+/* ------------------------------------------------------------------ Badge (outlined; tone = text + 1px border) */
+
+.raf-badge {
+  /* Set inline per status (TONE_COLOR_VAR); this default only applies to an untoned badge. */
+  --raf-badge-tone: var(--raf-color-text-muted);
   display: inline-flex;
   align-items: center;
   gap: var(--raf-space-1);
-  font-weight: var(--raf-font-weight-strong);
-  white-space: nowrap;
-}
-
-.raf-stat[data-tone='success'] {
-  color: var(--raf-color-success);
-}
-
-.raf-stat[data-tone='warning'] {
-  color: var(--raf-color-warning);
-}
-
-.raf-stat[data-tone='danger'] {
-  color: var(--raf-color-danger);
-}
-
-.raf-stat[data-tone='muted'] {
-  color: var(--raf-color-text-muted);
-  font-weight: var(--raf-font-weight-regular);
-}
-
-.raf-stat__sep {
-  color: var(--raf-color-text-muted);
-}
-
-.raf-card__body {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-top: var(--raf-border-width) solid var(--raf-color-border);
-  background: var(--raf-color-bg);
-}
-
-.raf-card__message {
-  margin: 0;
-  padding: var(--raf-space-3) var(--raf-space-4);
+  max-width: 100%;
+  min-height: 20px;
+  padding: 0 var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-badge-tone);
+  border-radius: var(--raf-radius-xs);
+  color: var(--raf-badge-tone);
   font-size: var(--raf-font-size-sm);
-  color: var(--raf-color-text-muted);
-}
-
-.raf-card__message[data-tone='danger'] {
-  color: var(--raf-color-danger);
-}
-
-.raf-card__list-title {
-  margin: 0;
-  padding: var(--raf-space-2) var(--raf-space-4) var(--raf-space-1);
-  font-size: var(--raf-font-size-xs);
   font-weight: var(--raf-font-weight-strong);
-  color: var(--raf-color-text-muted);
+  line-height: var(--raf-line-height-tight);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
+
+.raf-badge__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------------ IconButton (28px visual, 36px hit area) */
+
+.raf-icon-btn {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--raf-size-icon-button) - 2 * var(--raf-space-1));
+  height: calc(var(--raf-size-icon-button) - 2 * var(--raf-space-1));
+  padding: 0;
+  border: 0;
+  border-radius: var(--raf-radius-sm);
+  background: none;
+  color: var(--raf-color-text);
+  transition: background-color var(--raf-motion-duration) var(--raf-motion-easing);
+}
+
+/* Invisible pseudo-element that grows the clickable area to 36px. */
+.raf-icon-btn::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--raf-space-1));
+}
+
+.raf-icon-btn:hover {
+  background: var(--raf-color-surface-hover);
+}
+
+.raf-icon-btn:active {
+  background: var(--raf-color-selected);
+  color: var(--raf-color-on-selected);
+}
+
+/* Tooltip (`data-tip`, same words as aria-label): inverted bubble, to the left so the scrolling list never clips it. */
+.raf-icon-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--raf-space-2));
+  z-index: 1;
+  padding: var(--raf-space-1) var(--raf-space-2);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-color-text);
+  color: var(--raf-color-bg);
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-regular);
+  line-height: var(--raf-line-height-tight);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--raf-motion-duration) var(--raf-motion-easing),
+    visibility 0s linear var(--raf-motion-duration);
+}
+
+/* Hover shows it after 250ms, keyboard focus at once. */
+.raf-icon-btn:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 250ms;
+}
+
+.raf-icon-btn:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* ------------------------------------------------------------------ ListItem (compact: no tile, 36px row) */
 
 .raf-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
   max-height: var(--raf-size-card-list-max-height);
-  margin: 0;
-  padding: 0 var(--raf-space-2) var(--raf-space-2);
   overflow-y: auto;
   list-style: none;
 }
 
-.raf-item {
+.raf-list-item {
   display: flex;
+  flex: none;
   align-items: center;
-  justify-content: space-between;
   gap: var(--raf-space-2);
-  width: 100%;
-  padding: var(--raf-space-1) var(--raf-space-2);
   min-height: var(--raf-size-icon-button);
-  border: 0;
-  border-radius: var(--raf-radius-sm);
-  background: transparent;
-  font-size: var(--raf-font-size-sm);
+  padding: 0 var(--raf-space-1) 0 var(--raf-space-3);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  background: var(--raf-color-surface);
 }
 
-.raf-item:hover {
-  background: var(--raf-color-surface-hover);
-}
-
-.raf-item__label {
+.raf-list-item__name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.raf-item__label[data-empty='true'] {
+/* Unnamed fields are muted and regular weight (no italics in this design system). */
+.raf-list-item__name[data-empty='true'] {
   color: var(--raf-color-text-muted);
-  font-style: italic;
+  font-weight: var(--raf-font-weight-regular);
 }
 
-.raf-tag {
-  flex: none;
-  padding: 0 var(--raf-space-2);
-  border-radius: var(--raf-radius-pill);
-  font-size: var(--raf-font-size-xs);
-  line-height: calc(var(--raf-font-size-xs) * 1.6);
-  color: var(--raf-color-text-muted);
-  background: color-mix(in srgb, var(--raf-color-text-muted) var(--raf-tint-strength), transparent);
-}
+/* ------------------------------------------------------------------ Notice (tile block; danger adds a 1px danger border) */
 
-.raf-tag[data-tone='warning'] {
-  color: var(--raf-color-warning);
-  background: color-mix(in srgb, var(--raf-color-warning) var(--raf-tint-strength), transparent);
-}
-
-.raf-tag[data-tone='danger'] {
-  color: var(--raf-color-danger);
-  background: color-mix(in srgb, var(--raf-color-danger) var(--raf-tint-strength), transparent);
-}
-
-.raf-card__footer {
+.raf-notice {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--raf-space-2);
-  padding: var(--raf-space-3) var(--raf-space-4);
-  border-top: var(--raf-border-width) solid var(--raf-color-border);
-  background: var(--raf-color-surface);
-}
-
-.raf-button {
-  flex: 1 1 auto;
-  padding: var(--raf-space-2) var(--raf-space-3);
-  border: var(--raf-border-width) solid var(--raf-color-border);
+  padding: var(--raf-space-2) var(--raf-space-2) var(--raf-space-2) var(--raf-space-3);
+  border: var(--raf-border-width) solid transparent;
   border-radius: var(--raf-radius-md);
-  background: var(--raf-color-surface);
-  color: var(--raf-color-text);
-  font-size: var(--raf-font-size-sm);
-  font-weight: var(--raf-font-weight-medium);
-  text-align: center;
-  transition: background-color var(--raf-motion-duration) var(--raf-motion-easing);
-}
-
-.raf-button:hover {
   background: var(--raf-color-surface-hover);
+  color: var(--raf-color-text);
 }
 
-.raf-button[data-variant='primary'] {
-  border-color: transparent;
-  background: var(--raf-color-primary);
-  color: var(--raf-color-primary-text);
+.raf-notice > .raf-icon,
+.raf-notice__icon {
+  margin-top: 2px;
 }
 
-.raf-button[data-variant='primary']:hover {
-  background: var(--raf-color-primary-hover);
+.raf-notice__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.raf-notice__text {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 0;
+  font-size: var(--raf-font-size-lg);
+  line-height: var(--raf-line-height);
+}
+
+.raf-notice__title {
+  display: block;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+}
+
+.raf-notice--danger {
+  border-color: var(--raf-color-danger);
+}
+
+.raf-notice--danger > .raf-icon,
+.raf-notice--danger .raf-notice__title {
+  color: var(--raf-color-danger);
+}
+
+/* The action sits on its own line, under the text (icon width + gap = 28px indent). */
+.raf-notice__actions {
+  display: flex;
+  flex-basis: 100%;
+  padding-left: calc(var(--raf-size-glyph) + var(--raf-space-2));
+}
+
+/* ------------------------------------------------------------------ touch + reduced motion */
+
+@media (pointer: coarse) {
+  .raf-btn {
+    min-height: 44px;
+  }
+
+  .raf-icon-btn::before {
+    inset: calc(-1 * var(--raf-space-2));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* No displacement, no pop: only colour changes remain. The spinner just turns slower. */
   .raf-spinner {
-    animation-duration: calc(var(--raf-motion-duration-spinner) * 3);
+    animation-duration: 2400ms;
   }
 
-  .raf-fab,
-  .raf-button {
+  .raf-card,
+  .raf-card[data-state='leaving'] {
+    animation: none;
+  }
+
+  .raf-btn,
+  .raf-icon-btn,
+  .raf-icon-btn::after {
     transition: none;
   }
 }

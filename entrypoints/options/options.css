@@ -1,12 +1,11 @@
 /*
- * Options page styles: compact, neutral, no UI library.
- * All colours, fonts, radii, spacing, shadows, motion and z-indices come from the shared `--raf-*` tokens
- * (src/ui/theme.css, imported before this file). Do not add literal colours here.
+ * Options page layout: paper background, resume list (300px) + editor (712px = 680px reading width + card padding) grid,
+ * centred as one 1036px block so a 1280px window is not half empty. Single column below 768px.
+ * Settings / Import-Export cards span that same block; Attachments shares the editor column.
+ * Component styles (buttons, fields, tabs, accordion, dialog, toast...) live in ./ui/ui.css.
+ * All colours, fonts, radii, spacing, motion come from the shared `--raf-*` tokens (src/ui/theme.css, imported first).
+ * Do not add literal colours here. Colour scheme (light / dark) follows the OS through those tokens.
  */
-
-html {
-  color-scheme: light;
-}
 
 * {
   box-sizing: border-box;
@@ -16,302 +15,283 @@ body {
   margin: 0;
   background: var(--raf-color-bg);
   color: var(--raf-color-text);
-  font: var(--raf-font-size-md) / var(--raf-line-height) var(--raf-font-sans);
+  font: var(--raf-font-weight-regular) var(--raf-font-size-lg) / var(--raf-line-height) var(--raf-font-sans);
 }
 
-h1 {
-  margin: 0;
-  font-size: var(--raf-font-size-xl);
+:root {
+  --opt-side: 300px;
+  --opt-main: 712px;
+  --opt-gap: var(--raf-space-6);
 }
 
-h2 {
-  margin: 0 0 var(--raf-space-2);
-  font-size: var(--raf-font-size-md);
-  font-weight: var(--raf-font-weight-strong);
+.raf-app {
+  /* sidebar + gap + editor column + the page padding on both sides */
+  max-width: calc(var(--opt-side) + var(--opt-gap) + var(--opt-main) + 2 * var(--raf-space-4));
+  margin: 0 auto;
+  padding: var(--raf-space-6) var(--raf-space-4) calc(var(--raf-space-6) * 3);
+  min-height: 100vh;
 }
+
+/* ------------------------------------------------------------- header */
 
 .raf-header {
   display: flex;
-  align-items: baseline;
-  gap: var(--raf-space-3);
-  padding: var(--raf-space-3) var(--raf-space-4);
-  background: var(--raf-color-surface);
-  border-bottom: var(--raf-border-width) solid var(--raf-color-border);
-  box-shadow: var(--raf-shadow-1);
-  position: sticky;
-  top: 0;
-  z-index: var(--raf-z-sticky);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--raf-space-2) var(--raf-space-4);
+  margin-bottom: var(--raf-space-6);
 }
-
-.raf-status {
-  margin-left: auto;
+/* The ONLY place the playful display face (ZCOOL KuaiLe) is used: the page title. */
+.raf-title {
+  margin: 0;
+  font-family: var(--raf-font-display);
+  font-size: var(--raf-font-size-title);
+  line-height: 1.25;
+  font-weight: var(--raf-font-weight-regular);
+  letter-spacing: -0.01em;
+}
+.raf-caption {
+  margin: 0;
   font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
   color: var(--raf-color-text-muted);
-  min-height: 1em;
 }
-.raf-status.is-saved {
-  color: var(--raf-color-success);
+.raf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raf-space-1);
+  min-height: 1.4em;
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+  color: var(--raf-color-text-muted);
 }
-.raf-status.is-invalid,
-.raf-status.is-error {
+.raf-status.is-bad {
   color: var(--raf-color-danger);
+  font-weight: var(--raf-font-weight-strong);
 }
 
-.raf-body {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: var(--raf-space-3);
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: var(--raf-space-3) var(--raf-space-4) calc(var(--raf-space-6) + var(--raf-space-2));
-  align-items: start;
-}
-.raf-body-single {
-  grid-template-columns: minmax(0, 560px);
-}
-
-.raf-side,
-.raf-main {
+.raf-notices {
   display: flex;
   flex-direction: column;
-  gap: var(--raf-space-3);
-  min-width: 0;
-}
-
-.raf-card {
-  background: var(--raf-color-surface);
-  border: var(--raf-border-width) solid var(--raf-color-border);
-  border-radius: var(--raf-radius-md);
-  padding: var(--raf-space-3);
+  gap: var(--raf-space-2);
+  margin-bottom: var(--raf-space-4);
 }
 
 .raf-pad {
   padding: var(--raf-space-4);
 }
 
-.raf-muted {
-  color: var(--raf-color-text-muted);
-}
-.raf-error {
-  color: var(--raf-color-danger);
-}
-.raf-ok {
-  color: var(--raf-color-success);
+/* ------------------------------------------------------------- layout */
+
+.raf-tabs {
+  margin-bottom: var(--raf-space-4);
 }
 
-/* ------------------------------------------------------------- controls */
-
-input[type='text'],
-input[type='number'],
-input[type='date'],
-input[type='month'],
-select,
-textarea {
-  width: 100%;
+.raf-workspace {
+  display: grid;
+  grid-template-columns: var(--opt-side) minmax(0, var(--opt-main));
+  gap: var(--opt-gap);
+  align-items: start;
+}
+/* Settings and Import / Export: one card across the whole block (sidebar + editor width). */
+.raf-single {
+  max-width: calc(var(--opt-side) + var(--opt-gap) + var(--opt-main));
+}
+.raf-side,
+.raf-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-4);
   min-width: 0;
-  padding: var(--raf-space-1) var(--raf-space-2);
-  border: var(--raf-border-width) solid var(--raf-color-border);
-  border-radius: var(--raf-radius-sm);
-  background: var(--raf-color-surface);
-  color: inherit;
-  font: inherit;
 }
-textarea {
-  resize: vertical;
+/* Wide screens: the resume list stays in view while a long editor scrolls (its own scrollbar if the list is long).
+   The small padding / negative margin keep focus rings from being clipped by the scroll container. */
+@media (min-width: 768px) {
+  .raf-side {
+    position: sticky;
+    top: var(--raf-space-4);
+    align-self: start;
+    max-height: calc(100vh - 2 * var(--raf-space-4));
+    margin: calc(-1 * var(--raf-space-1));
+    padding: var(--raf-space-1);
+    overflow-y: auto;
+    z-index: var(--raf-z-sticky);
+  }
 }
-input:focus,
-select:focus,
-textarea:focus,
-button:focus-visible {
-  outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
-  border-color: var(--raf-color-primary);
-}
-input:disabled,
-select:disabled {
-  background: var(--raf-color-surface-hover);
-  color: var(--raf-color-text-muted);
+@media (max-width: 767px) {
+  .raf-app {
+    padding-bottom: calc(var(--raf-space-6) * 4);
+  }
+  .raf-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--raf-space-4);
+  }
 }
 
-button,
-.raf-button {
-  display: inline-block;
-  padding: var(--raf-space-1) var(--raf-space-3);
-  border: var(--raf-border-width) solid var(--raf-color-border);
-  border-radius: var(--raf-radius-sm);
+.raf-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-4);
+  padding: var(--raf-space-4);
   background: var(--raf-color-surface);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background-color var(--raf-motion-duration) var(--raf-motion-easing),
-    border-color var(--raf-motion-duration) var(--raf-motion-easing);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
 }
-button:hover:not(:disabled),
-.raf-button:hover {
-  border-color: var(--raf-color-primary);
-  color: var(--raf-color-primary);
-}
-button:disabled {
-  cursor: default;
-  opacity: var(--raf-opacity-disabled);
-}
-button.raf-primary {
-  background: var(--raf-color-primary);
-  border-color: var(--raf-color-primary);
-  color: var(--raf-color-primary-text);
-}
-button.raf-primary:hover:not(:disabled) {
-  background: var(--raf-color-primary-hover);
-  border-color: var(--raf-color-primary-hover);
-  color: var(--raf-color-primary-text);
-}
-button.raf-danger,
-.raf-danger {
-  color: var(--raf-color-danger);
-}
-button.raf-danger:hover:not(:disabled) {
-  border-color: var(--raf-color-danger);
-  color: var(--raf-color-danger);
+.raf-heading {
+  margin: 0;
+  font-size: var(--raf-font-size-xl);
+  line-height: 1.3;
+  font-weight: var(--raf-font-weight-strong);
 }
 
 .raf-row {
   display: flex;
-  gap: var(--raf-space-2);
-  align-items: center;
   flex-wrap: wrap;
-}
-.raf-check {
-  display: inline-flex;
   align-items: center;
-  gap: var(--raf-space-1);
-  white-space: nowrap;
+  gap: var(--raf-space-2);
+}
+.raf-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-4);
+}
+/* Settings: the two controls sit side by side once there is room. */
+.raf-form-stack--cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--raf-space-6);
+  align-items: start;
+}
+.raf-error-text {
+  color: var(--raf-color-danger);
 }
 
 /* ------------------------------------------------------------- resume list */
 
-.raf-resumes {
-  list-style: none;
-  margin: 0 0 var(--raf-space-2);
-  padding: 0;
+.raf-side-section,
+.raf-side-body {
   display: flex;
   flex-direction: column;
-  gap: var(--raf-space-1);
+  gap: var(--raf-space-3);
 }
-.raf-resume {
+.raf-side-body[hidden] {
+  display: none;
+}
+/* Below 768px the heading becomes the button that folds the list: name of the open resume + chevron. */
+.raf-fold {
   display: flex;
   align-items: center;
   gap: var(--raf-space-2);
   width: 100%;
+  min-height: var(--opt-hit);
+  padding: 0;
+  border: 0;
+  border-radius: var(--raf-radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
   text-align: left;
+  cursor: pointer;
 }
-.raf-resume.is-selected {
-  border-color: var(--raf-color-primary);
-  background: color-mix(in srgb, var(--raf-color-primary) 8%, var(--raf-color-surface));
+.raf-fold:focus-visible {
+  outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
+  outline-offset: var(--raf-focus-ring-offset);
 }
-.raf-resume-title {
+.raf-fold__current {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.raf-badge {
-  padding: 0 var(--raf-space-2);
-  border-radius: var(--raf-radius-pill);
-  background: color-mix(in srgb, var(--raf-color-text-muted) var(--raf-tint-strength), transparent);
+  white-space: nowrap;
   color: var(--raf-color-text-muted);
-  font-size: var(--raf-font-size-xs);
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-regular);
 }
-.raf-badge-active {
-  background: color-mix(in srgb, var(--raf-color-warning) var(--raf-tint-strength), transparent);
-  color: var(--raf-color-warning);
+.raf-fold__chevron {
+  flex: none;
+  margin-left: auto;
+  transition: transform var(--raf-motion-move);
+}
+.raf-fold[aria-expanded='true'] .raf-fold__chevron {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .raf-fold__chevron {
+    transition: none;
+  }
+}
+.raf-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.raf-list--loose {
+  gap: var(--raf-space-6);
 }
 .raf-new {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: var(--raf-space-2);
 }
-.raf-new select {
-  flex: 1;
-}
 
-.raf-side .raf-field {
-  margin-bottom: var(--raf-space-2);
-}
+/* ------------------------------------------------------------- editor */
 
-/* ------------------------------------------------------------- editor header */
-
+/* Same right edge as the sections card below it (both fill the 712px editor column). */
 .raf-resume-head {
   display: flex;
-  gap: var(--raf-space-3);
-  align-items: flex-end;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--raf-space-2);
 }
-.raf-grow {
-  flex: 1 1 200px;
-}
-.raf-actions {
-  margin-left: auto;
-}
-
-.raf-tabs {
+.raf-resume-head__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--raf-space-1);
-}
-.raf-tabs button {
-  border-radius: var(--raf-radius-pill);
-  padding: 0 var(--raf-space-3);
-}
-.raf-tabs button.is-selected {
-  background: var(--raf-color-primary);
-  border-color: var(--raf-color-primary);
-  color: var(--raf-color-primary-text);
-}
-.raf-count {
-  margin-left: var(--raf-space-1);
-  padding: 0 var(--raf-space-1);
-  border-radius: var(--raf-radius-pill);
-  background: color-mix(in srgb, currentColor 18%, transparent);
-  font-size: var(--raf-font-size-xs);
+  align-items: center;
+  gap: var(--raf-space-2);
 }
 
-/* ------------------------------------------------------------- fields */
-
-.raf-grid {
+.raf-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-4);
+  max-width: 680px;
+}
+.raf-pair {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: var(--raf-space-2) var(--raf-space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--raf-space-3);
 }
-.raf-field {
+.raf-pair--3 {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+.raf-fieldset {
   display: flex;
   flex-direction: column;
   gap: var(--raf-space-1);
   min-width: 0;
-  border: 0;
-  padding: 0;
   margin: 0;
-}
-.raf-wide {
-  grid-column: 1 / -1;
-}
-.raf-label {
-  font-size: var(--raf-font-size-sm);
-  color: var(--raf-color-text-muted);
   padding: 0;
+  border: 0;
 }
-.raf-invalid input,
-.raf-invalid select,
-.raf-invalid textarea {
-  border-color: var(--raf-color-danger);
+.raf-fieldset > legend {
+  padding: 0;
+  margin-bottom: var(--raf-space-1);
 }
-.raf-inline {
+.raf-bool {
   display: flex;
-  gap: var(--raf-space-2);
+  flex-wrap: wrap;
   align-items: center;
-}
-.raf-region {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--raf-space-2);
+}
+.raf-bool__clear {
+  width: 28px;
+  height: 28px;
+  color: var(--raf-color-text-muted);
 }
 
 /* ------------------------------------------------------------- repeatable entries */
@@ -319,64 +299,78 @@ button.raf-danger:hover:not(:disabled) {
 .raf-entries {
   display: flex;
   flex-direction: column;
-  gap: var(--raf-space-3);
 }
 .raf-entry {
-  border: var(--raf-border-width) solid var(--raf-color-border);
-  border-radius: var(--raf-radius-md);
-  padding: var(--raf-space-2) var(--raf-space-3);
-  background: var(--raf-color-bg);
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.raf-entry-head {
+/* Legend and the three action buttons share one row: the legend floats across, the buttons sit on top at the right. */
+.raf-entry__legend {
+  float: left;
   display: flex;
   align-items: center;
   gap: var(--raf-space-2);
+  width: 100%;
+  min-height: var(--opt-hit);
   margin-bottom: var(--raf-space-2);
+  padding: 0 calc(3 * var(--opt-hit) + var(--raf-space-2)) 0 0;
+  font-size: var(--raf-font-size-md);
+  line-height: var(--raf-line-height-tight);
+  font-weight: var(--raf-font-weight-strong);
 }
-.raf-entry-summary {
-  flex: 1;
-  color: var(--raf-color-text-muted);
+.raf-entry__legend + .raf-entry__actions + .raf-fields {
+  clear: both;
+}
+.raf-entry__name {
+  white-space: nowrap;
+}
+.raf-entry__summary {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--raf-color-text-muted);
+  font-weight: var(--raf-font-weight-regular);
 }
-.raf-entry-actions {
+.raf-entry__actions {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
-  gap: var(--raf-space-1);
-}
-.raf-entry-actions button {
-  padding: 0 var(--raf-space-2);
+  gap: 0;
 }
 .raf-add {
   align-self: flex-start;
+  margin-top: var(--raf-space-4);
+}
+.raf-entries > .raf-empty + .raf-add {
+  align-self: center;
+  margin-top: 0;
 }
 
 /* ------------------------------------------------------------- attachments */
 
 .raf-attachments {
-  list-style: none;
-  margin: 0 0 var(--raf-space-2);
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-4);
+}
+.raf-slot {
   display: flex;
   flex-direction: column;
   gap: var(--raf-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
-.raf-attach {
-  display: grid;
-  grid-template-columns: 140px minmax(0, 1fr) auto;
-  gap: var(--raf-space-2);
-  align-items: center;
+.raf-slot > legend {
+  padding: 0;
+  margin-bottom: var(--raf-space-2);
 }
-.raf-attach-actions {
-  display: flex;
-  gap: var(--raf-space-2);
-}
-.raf-attach-error {
-  grid-column: 2 / -1;
-}
-
-@media (max-width: 760px) {
-  .raf-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.raf-dialog__field {
+  margin-bottom: var(--raf-space-4);
 }

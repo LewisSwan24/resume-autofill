@@ -115,7 +115,7 @@ pnpm fixtures:preview     # 固定端口 4173
 | `src/schema/` | 简历数据模型、字段键、迁移、示例简历 |
 | `src/storage/`、`src/editor/` | 本地存储（简历和文件）、简历编辑逻辑、导入导出 |
 | `src/messaging/`、`src/i18n/` | 消息协议与校验、界面文案 |
-| `src/ui/` | 共用的设计令牌和主题 |
+| `src/ui/` | 设计系统基础：令牌、主题、字体、图标、状态词汇 |
 | `fixtures/synthetic/` | 合成测试站（原生、Ant Design、Element Plus） |
 | `tests/` | 单元测试、驱动测试和端到端测试 |
 
@@ -140,12 +140,21 @@ pnpm fixtures:preview     # 固定端口 4173
 - 权限只有 `storage`、`unlimitedStorage`、`sidePanel` 和 `webNavigation`（列出标签页里的各个 frame），不申请 `tabs`。
 - 需要 `<all_urls>` 主机权限，因为扩展要在任意招聘网站上识别并填写表单。
 
-## 设计令牌
+## 设计系统
 
-三个界面（选项页、侧边栏、页面上的悬浮按钮）共用一套设计令牌，位于 `src/ui/tokens.ts` 和 `src/ui/theme.css`。目前的值是中性的默认值，之后会替换成作者自己的设计系统。
+三个界面（选项页、侧边栏、页面上的悬浮按钮）共用一套设计系统，改编自作者的 “Lively Icons”：界面安静、图标优先，用 `paper` / `surface` / `tile` 三层加 1px 线分层，不用阴影。基础部分在 `src/ui/`：
 
-- 换样式只需改这两个文件，并保持 `tokens.ts` 和 `theme.css` 同步。`tests/unit/ui/tokens.test.ts` 会检查两边的名字和值一致，也会检查三个界面里没有写死的颜色和未定义的令牌。
-- 命名：颜色用 `--raf-color-*`，其余有 `--raf-font-*`、`--raf-radius-*`、`--raf-space-*`、`--raf-shadow-*`、`--raf-motion-*`、`--raf-z-*` 和 `--raf-size-*`。
-- 悬浮按钮在 shadow root 里引入 `theme.css`，页面的 CSS 改不到。
-- 页面元素上的高亮描边是行内样式，用不了 CSS 变量。三种颜色是 `tokens.ts` 里的常量 `HIGHLIGHT_COLORS`。
-- `public/icon/` 里的扩展图标目前是占位图，会随设计系统一起替换。
+| 文件 | 内容 |
+|---|---|
+| `tokens.ts`、`theme.css` | 设计令牌（`--raf-*` 自定义属性） |
+| `fonts.css` | 扩展页面用的内置字体 |
+| `Icon.tsx` | 内联 SVG 图标（Bootstrap Icons） |
+| `status.ts` | 每种填写结果对应的色调、图标和词 |
+
+- **令牌。** 换样式只需改 `tokens.ts` 和 `theme.css`，并保持两者同步。`tests/unit/ui/tokens.test.ts` 会分别检查亮色块和暗色块里的名字和值是否一致，也会检查三个界面里没有写死的颜色和未定义的令牌。命名：颜色用 `--raf-color-*`，其余有 `--raf-font-*`、`--raf-radius-*`、`--raf-space-*`、`--raf-shadow-*`、`--raf-motion-*`、`--raf-z-*` 和 `--raf-size-*`。字重只有 400 和 600，阴影一律是 `none`，动效是 320ms 弹性（`--raf-motion-move`）、160ms（`--raf-motion-settle`）和 120ms（`--raf-motion-duration`）。
+- **深色模式。** 跟随系统设置（`prefers-color-scheme`），没有切换开关。`theme.css` 先写亮色的值，暗色的颜色放在 `@media (prefers-color-scheme: dark)` 块里。暗色没有色相，只有状态色（danger、success、warning）例外。悬浮按钮同样跟随系统主题，不跟随它所在页面的主题。
+- **字体。** 界面文字用 Manrope（400 和 600），ZCOOL KuaiLe 只用于页面标题（`--raf-font-display`）。两者都来自 npm（`@fontsource/*`），打包进构建产物，不发任何网络请求。`src/ui/fonts.css` 只由选项页和侧边栏引入。悬浮按钮在别人页面的 shadow root 里，`@font-face` 在那里不生效，要生效就得写进页面本身，所以它不注册任何字体：本机装了 Manrope 就用，否则用系统字体栈（`Noto Sans SC`、`PingFang SC`、`Microsoft YaHei`、`system-ui`）。Manrope 只覆盖拉丁字母，所以中文不受影响。
+- **图标。** `<Icon name="check-circle" />` 从 `bootstrap-icons` 包渲染内联 SVG。只有 `Icon.tsx` 里 `ICONS` 注册表列出的图标会被打包，新图标要在那里导入并注册。图标默认只是装饰（`aria-hidden`），传入 `label` 才会有无障碍名称。状态图标总是和文字并排出现。
+- **状态。** `status.ts` 里的 `OUTCOME_STATUS` 把每种填写结果映射到色调（success、warning、danger、muted）、图标和词（`src/i18n` 里的 `status.*`），状态不会只靠颜色表达。
+- **页面高亮。** 页面自身字段上的描边是行内样式，用不了 CSS 变量，三种颜色是 `tokens.ts` 里的常量 `HIGHLIGHT_COLORS`。线型也随状态变化：已填写是 2px 实线，待确认是 2px 虚线，失败是 3px 实线。
+- **扩展图标。** `public/icon/*.png` 由设计系统草稿渲染而来（主色 `#0066cc` 方块，白色 `file-earmark-check` 字形，16 和 32 px 用更粗的 `check-lg`）。运行 `node scripts/render-icons.mjs` 可重新生成（需要 Playwright Chromium）。

@@ -115,7 +115,7 @@ Open the options page from the extension details on `chrome://extensions`, or fr
 | `src/schema/` | Resume data model, field keys, migrations, sample resumes |
 | `src/storage/`, `src/editor/` | Local storage (profiles and files), resume editor logic, import and export |
 | `src/messaging/`, `src/i18n/` | Message protocol and guards, interface strings |
-| `src/ui/` | Shared design tokens and theme |
+| `src/ui/` | Design system foundation: tokens, theme, fonts, icons, status vocabulary |
 | `fixtures/synthetic/` | Synthetic test sites (native, Ant Design, Element Plus) |
 | `tests/` | Unit tests, driver tests and end-to-end tests |
 
@@ -140,12 +140,21 @@ Open the options page from the extension details on `chrome://extensions`, or fr
 - Permissions are `storage`, `unlimitedStorage`, `sidePanel` and `webNavigation` (to list the frames of a tab). The `tabs` permission is not requested.
 - The `<all_urls>` host permission is required because the extension has to recognize and fill forms on any recruitment site.
 
-## Design tokens
+## Design system
 
-All three surfaces (options page, side panel and the floating button on pages) share one set of design tokens in `src/ui/tokens.ts` and `src/ui/theme.css`. The current values are neutral defaults, and they will be replaced with the author's own design system.
+All three surfaces (options page, side panel and the floating button on pages) share one design system, adapted from the author's "Lively Icons": quiet screens, icon first, `paper` / `surface` / `tile` layers separated by 1px lines, no drop shadows. The foundation lives in `src/ui/`:
 
-- Changing the look takes edits to these two files only. Keep `tokens.ts` and `theme.css` in sync: `tests/unit/ui/tokens.test.ts` checks that names and values match and that the three surfaces use no hard-coded colors or undefined tokens.
-- Naming: colors use `--raf-color-*`. Other groups are `--raf-font-*`, `--raf-radius-*`, `--raf-space-*`, `--raf-shadow-*`, `--raf-motion-*`, `--raf-z-*` and `--raf-size-*`.
-- The floating button imports `theme.css` inside a shadow root, so page CSS cannot change it.
-- The highlight outlines on page elements are inline styles and cannot use CSS variables. Their three colors are the `HIGHLIGHT_COLORS` constant in `tokens.ts`.
-- The extension icons in `public/icon/` are placeholders and will be replaced together with the design system.
+| File | Contents |
+|---|---|
+| `tokens.ts`, `theme.css` | The design tokens (`--raf-*` custom properties) |
+| `fonts.css` | Bundled web fonts for the extension pages |
+| `Icon.tsx` | Inline SVG icons (Bootstrap Icons) |
+| `status.ts` | One tone, icon and word per fill outcome |
+
+- **Tokens.** Changing the look takes edits to `tokens.ts` and `theme.css` only. Keep them in sync: `tests/unit/ui/tokens.test.ts` checks that names and values match, separately for the light block and the dark block, and that the three surfaces use no hard-coded colors or undefined tokens. Naming: colors use `--raf-color-*`. Other groups are `--raf-font-*`, `--raf-radius-*`, `--raf-space-*`, `--raf-shadow-*`, `--raf-motion-*`, `--raf-z-*` and `--raf-size-*`. Weights are only 400 and 600, shadows are `none`, motion is 320 ms spring (`--raf-motion-move`), 160 ms (`--raf-motion-settle`) and 120 ms (`--raf-motion-duration`).
+- **Dark mode.** It follows the system setting (`prefers-color-scheme`) and has no toggle. `theme.css` declares the light values first and the dark colors inside a `@media (prefers-color-scheme: dark)` block. Dark has no hue except the status colors (danger, success, warning). The floating button follows the system theme too, not the theme of the page it sits on.
+- **Fonts.** Manrope (400 and 600) is used for interface text and ZCOOL KuaiLe only for page titles (`--raf-font-display`). Both come from npm (`@fontsource/*`), are bundled into the build and make no network request. `src/ui/fonts.css` is imported by the options page and the side panel only. The floating button lives in a shadow root on someone else's page, where `@font-face` does not work and would have to be added to the page itself, so it registers no fonts: it uses Manrope if it happens to be installed and otherwise the system stack (`Noto Sans SC`, `PingFang SC`, `Microsoft YaHei`, `system-ui`). Manrope only covers Latin letters, so Chinese text is unaffected.
+- **Icons.** `<Icon name="check-circle" />` renders inline SVG from the `bootstrap-icons` package. Only the icons listed in the `ICONS` registry in `Icon.tsx` are bundled, so a new icon is imported and registered there. Icons are decorative (`aria-hidden`) unless you pass `label`. Status icons always appear next to a word.
+- **Status.** `OUTCOME_STATUS` in `status.ts` maps each fill outcome to a tone (success, warning, danger, muted), an icon and a word (`status.*` in `src/i18n`), so a state is never shown by color alone.
+- **Page highlights.** The outlines on the page's own fields are inline styles and cannot use CSS variables. Their three colors are the `HIGHLIGHT_COLORS` constant in `tokens.ts`. The line style also differs by state: filled is 2px solid, needs review is 2px dashed and failed is 3px solid.
+- **Extension icons.** `public/icon/*.png` are rendered from the design-system drafts (accent `#0066cc` tile, white `file-earmark-check` glyph, bolder `check-lg` at 16 and 32 px). Run `node scripts/render-icons.mjs` to regenerate them (needs Playwright Chromium).

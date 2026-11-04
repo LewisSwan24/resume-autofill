@@ -34,7 +34,7 @@ describe('summarize', () => {
     expect(s).toMatchObject({ filled: 2, review: 2, unrecognized: 2, noData: 1 });
   });
 
-  it('lists only non-filled items, ordered review → unrecognized → no data, stable within a group', () => {
+  it('lists only the fields that need a look (never filled, never no_data), review group first, stable within a group', () => {
     const s = summarize(
       report([
         field('1', 'no_data'),
@@ -45,8 +45,9 @@ describe('summarize', () => {
         field('6', 'action_failed'),
       ]),
     );
-    expect(s.items.map((i) => i.fieldId)).toEqual(['4', '5', '3', '6', '1']);
-    expect(s.items.map((i) => i.outcome)).toEqual(['no_option', 'needs_review', 'unmatched', 'action_failed', 'no_data']);
+    expect(s.items.map((i) => i.fieldId)).toEqual(['4', '5', '3', '6']);
+    expect(s.items.map((i) => i.outcome)).toEqual(['no_option', 'needs_review', 'unmatched', 'action_failed']);
+    expect(s.noData).toBe(1); // counted for the sentence, not listed
   });
 
   it('carries label and frame id; a missing frame id defaults to the top frame (0)', () => {

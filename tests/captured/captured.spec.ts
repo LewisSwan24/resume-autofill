@@ -38,7 +38,7 @@ async function openStatic(browser: Browser, sample: CapturedSample): Promise<Pag
   const html = readFileSync(path.join(sample.dir, 'page.html'), 'utf8');
   // Everything but the document is refused, so this cannot reach the site.
   await context.route('**/*', (route) =>
-    route.request().url() === sample.url ? route.fulfill({ contentType: 'text/html', body: html }) : route.abort(),
+    route.request().url() === sample.url ? route.fulfill({ contentType: 'text/html; charset=utf-8', body: html }) : route.abort(),
   );
   const page = await context.newPage();
   await page.goto(sample.url);
@@ -69,7 +69,7 @@ for (const sample of samples) {
       try {
         await injectHarness(page);
         const wanted = Object.entries(sample.expected.fields).flatMap(([label, f]) =>
-          f.fieldKey ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
+          f.fieldKey && !f.liveOnlyKey ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
         );
         const rows = await page.evaluate((items) => {
           const { contexts, classifications } = window.__raf.scanDocument(document);

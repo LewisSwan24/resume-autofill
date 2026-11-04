@@ -31,9 +31,13 @@ export function isExcluded(key: FieldKey, label: string): boolean {
   return ex.some((w) => containsPhrase(t, normalizeLabel(w), 'prefix'));
 }
 
+/** A word that names the field only when it stands alone: "Office location" is another question. */
+const TOO_GENERAL_TO_CONTAIN = new Set(['location', 'your location']);
+
 /** Synonyms this short are only trustworthy as exact (normalized) matches. */
 export function isExactOnlySynonym(syn: string): boolean {
   const t = normalizeLabel(syn);
+  if (TOO_GENERAL_TO_CONTAIN.has(t)) return true;
   return hasCjk(t) ? [...t].length <= 1 : t.length <= 2;
 }
 
@@ -43,7 +47,7 @@ export const NEVER_FILL: { zh: string[]; en: string[] } = {
   en: [
     'captcha', 'verification code', 'security code', 'sms code', 'one-time code', 'otp',
     'password', 'consent', 'agree', 'i agree', 'privacy policy', 'terms and conditions', 'terms of use',
-    'terms & conditions', 'i accept', 'i declare', 'declaration',
+    'terms & conditions', 'i accept', 'i declare', 'declaration', 'address line 2', 'address line two', 'address line 3', 'address line three', 'second address line', 'address 2', 'address 3',
   ],
 };
 
@@ -76,6 +80,13 @@ const NEVER_FILL_EXEMPT = ['调剂', '调配', '外派', '服从', '异地', 're
 
 // Someone signing their name to a statement, whatever the statement is about.
 const DECLARATIONS = ['i declare', 'i certify', 'i confirm', 'i acknowledge', 'i attest', 'i agree', 'i hereby', 'hereby', '声明', '承诺', '本人确认', '本人保证'];
+
+/** A second address line by its name in the page, which the label may not say: the street fits the first. */
+const SPARE_ADDRESS_LINE = /(?:address|addr|street)(?:[\s_.-]*line)?[\s_.-]*[2-9](?![0-9])/i;
+
+export function namesSpareAddressLine(name: string | null | undefined): boolean {
+  return !!name && SPARE_ADDRESS_LINE.test(name);
+}
 
 /** True when the label looks like a captcha / password / consent / declaration control. */
 export function isNeverFill(label: string): boolean {

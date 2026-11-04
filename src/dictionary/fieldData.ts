@@ -118,7 +118,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'basics.currentLocation': s(
     '现居住地|现居地|居住地|当前所在地|目前所在地|现所在地|所在地|居住城市|现居城市|现居住城市',
-    'Current location|Current city|Location (City)|Location City|Where are you based|Where are you located|Where are you currently located|Where are you currently based|Current residence|City of residence|Place of residence',
+    'Location|Your location|Current location|Current city|Location (City)|Location City|Where are you based|Where are you located|Where are you currently located|Where are you currently based|Current residence|City of residence|Place of residence',
     '期望|意向|工作地|学校|院校|公司|单位|preferred|desired|expected|school|company|employer|work',
   ),
   'basics.age': s(

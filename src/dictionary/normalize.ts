@@ -23,7 +23,8 @@ const PUNCTUATION = /[*:()[\]?!;,。、]/g;
  * and decoration removed, whitespace collapsed (and dropped between adjacent CJK characters).
  */
 export function normalizeLabel(s: string): string {
-  let t = s.normalize('NFKC').toLowerCase();
+  // Accents on Latin letters only: the marks on Japanese kana are other code points, and they do change a word.
+  let t = s.normalize('NFKC').normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase();
   t = t.replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u2013\u2014]/g, '-');
   t = t.replace(/\(s\)/g, 's');
   for (const re of NOISE_PHRASES) t = t.replace(re, ' ');

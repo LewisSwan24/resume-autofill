@@ -147,8 +147,7 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
       if (!phone) return null;
       const cc = contact.phoneCountryCode.trim();
       // National numbers drop their trunk 0 behind a country code (+61 0412… → +61 412…).
-      const national = cc && cc !== '+86' ? phone.replace(/^0/, '') : phone;
-      return { raw: cc ? `${cc} ${national}` : national, source: 'contact.phoneCountryCode+phone' };
+      return { raw: withDialCode(cc, phone), source: 'contact.phoneCountryCode+phone' };
     }
     case 'contact.addressFull': {
       const a = contact.address;
@@ -228,7 +227,27 @@ export function optionLabel(domain: string | null, code: string, locale: Locale)
 
 // ---- intents --------------------------------------------------------------------------------------------
 
+function withDialCode(rawCode: string, phone: string): string {
+  // Already written in full: the number knows its country better than the code beside it.
+  if (phone.startsWith('+')) return phone;
+  const cc = rawCode && !rawCode.startsWith('+') ? `+${rawCode}` : rawCode;
+  const national = cc && cc !== '+86' ? phone.replace(/^0/, '') : phone;
+  return cc ? `${cc} ${national}` : national;
+}
+
+/** The code a phone widget has selected by itself, by its country picker. Null when it shows none. */
+function dialCodeShown(el: Element): string | null {
+  const widget = el.closest('.iti');
+  if (!widget) return null;
+  const separate = widget.querySelector('.iti__selected-dial-code')?.textContent ?? '';
+  const picker = widget.querySelector('.iti__selected-country, .iti__selected-flag');
+  const said = `${separate} ${picker?.getAttribute('title') ?? ''} ${picker?.getAttribute('aria-label') ?? ''}`;
+  return /\+\s*(\d{1,4})/.exec(said)?.[1] ?? null;
+}
+
 export interface IntentOptions {
+  /** The applicant's own dial code, for a phone widget that has picked another country. */
+  dialCode?: string;
   /** Attachment files by id (the run payload's `files`). */
   files?: Record<string, FileData>;
   /** The home address, to tell which of several places of one name is meant. */
@@ -414,6 +433,11 @@ export function toIntent(
       // text, longtext, number
       if (typeof raw === 'object') return null;
       const text = String(raw);
+      if (def.key === 'contact.phone' && opts.dialCode && isTextLike(control)) {
+        const shown = dialCodeShown(control.el);
+        // A bare number would be read as a number of the country the widget shows.
+        if (shown && shown !== opts.dialCode.replace(/\D/g, '')) return { kind: 'text', text: withDialCode(opts.dialCode, text) };
+      }
       if (def.key === 'contact.addressCity' && opts.home && hasPickList(control) && !control.multiple) {
         const home = opts.home;
         return { kind: 'choice', display: text, query: text, match: (options) => matchPlace(text, home, options) };

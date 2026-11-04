@@ -4,6 +4,7 @@ import {
   isExactOnlySynonym,
   isExcluded,
   isNeverFill,
+  namesSpareAddressLine,
   isOtherPersonHeading,
   isResumeParser,
   matchSection,
@@ -174,6 +175,8 @@ function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null
 /** Candidates for one control within `section` (null = unknown section: no bonus / penalty). */
 export function scoreField(ctx: FieldContext, section: SectionKey | null): FieldScores {
   if (ctx.evidence.some((e) => isNeverFill(e.text))) return { neverFill: true, candidates: [] };
+  const el = ctx.control.el;
+  if (namesSpareAddressLine(el.getAttribute('name')) || namesSpareAddressLine(el.id)) return { neverFill: true, candidates: [] };
   if (ctx.control.kind === 'file' && ctx.evidence.some((e) => isResumeParser(e.text))) return { neverFill: true, candidates: [] };
 
   // A legend / nearby heading that merely repeats the section title says nothing about the field itself
@@ -210,7 +213,8 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
   const top = candidates[0];
   if (top && top.confidence > AMBIGUOUS_CAP) {
     const close = candidates.filter((c) => top.score - c.score < AMBIGUITY_MARGIN);
-    if (close.length > 1) for (const c of close) c.confidence = Math.min(c.confidence, AMBIGUOUS_CAP);
+    // All of them: a key below the tie must not outrank it by having been left uncapped.
+    if (close.length > 1) for (const c of candidates) c.confidence = Math.min(c.confidence, AMBIGUOUS_CAP);
   }
   return { neverFill: false, candidates };
 }
@@ -304,9 +308,10 @@ export function classifyAll(contexts: FieldContext[]): Classification[] {
     scores,
     sections.map((s) => s.section),
   );
-  // Given a bare number, such a widget guesses the country.
+  // Given a bare number, such a widget guesses the country. With a code box beside it, the code goes there.
+  const hasCodeBox = assigned.some((cls) => cls.fieldKey === 'contact.phoneCountryCode');
   return assigned.map((cls, i) =>
-    cls.fieldKey === 'contact.phone' && takesDialCode(contexts[i]!.control.el)
+    cls.fieldKey === 'contact.phone' && !hasCodeBox && takesDialCode(contexts[i]!.control.el)
       ? { ...cls, fieldKey: 'contact.phoneFull' as const }
       : cls,
   );

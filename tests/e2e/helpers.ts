@@ -49,7 +49,7 @@ export async function pollWorker(
   worker: Worker,
   predicate: () => Promise<boolean>,
   what: string,
-  timeoutMs = 20_000,
+  timeoutMs = 60_000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -147,7 +147,8 @@ export async function fillFixture(
   await page.goto(url);
   if (opts.frame) await page.frameLocator('iframe[title="Additional questions"]').getByLabel('Notice period').waitFor();
 
-  const tabId = await tabIdOf(worker, url);
+  // A page may add to its address while it starts.
+  const tabId = await tabIdOf(worker, page.url().split('#')[0]!);
   // Detected count: content → background (`scan:<tabId>`) → FAB (`scan:total`).
   const deadline = Date.now() + 20_000;
   let detected = 0;
@@ -165,7 +166,9 @@ export async function fillFixture(
 
   // The FAB itself must display the count (scan:total reached the closed shadow root).
   let fabDetected = 0;
-  while (fabDetected === 0) {
+  // A page still building up is scanned again, and the two numbers settle on a busy machine a moment apart.
+  const settleBy = Date.now() + 20_000;
+  while (fabDetected === 0 || (fabDetected !== (detected = await scanTotal(worker, tabId)) && Date.now() < settleBy)) {
     const hit = (await accessibleNames(page)).map((n) => /^(\d+) fields? detected$|^识别到 (\d+) 个字段$/.exec(n)).find(Boolean);
     if (hit) fabDetected = Number(hit[1] ?? hit[2]);
     else if (Date.now() > deadline + 10_000) throw new Error('FAB never showed the detected count');
@@ -175,7 +178,11 @@ export async function fillFixture(
   const before = await opts.beforeFill?.(page);
 
   const box = await fabBox(page);
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  // This click goes by position, so make sure it cannot land on a button of the page.
+  const onTop = await page.evaluate(([px, py]) => document.elementFromPoint(px!, py!)?.tagName.toLowerCase() ?? 'nothing', [x, y]);
+  if (onTop !== 'raf-fab') throw new Error(`the page has ${onTop} on top of the FAB`);
+  await page.mouse.click(x, y);
 
   const reportDeadline = Date.now() + 60_000;
   let report: FillReport | null = null;

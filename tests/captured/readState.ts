@@ -78,12 +78,19 @@ export function inspectInPage(locators: Locators): Inspection {
 
   // ---- every control, for the "nothing else changed" check
   const listButton = 'button[aria-haspopup="listbox"]';
-  const isControl = (el: Element): el is FormEl => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton);
+  // A plain button that opens a list has nothing to show it for one, except a verdict naming it.
+  const namedButtons = new Set(
+    Object.values(locators)
+      .filter((s) => !/^(?:exists|entries):/.test(s))
+      .flatMap((s) => queryAll(s).filter((el) => el.tagName === 'BUTTON')),
+  );
+  const isControl = (el: Element): el is FormEl => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton) || namedButtons.has(el);
   const included = (el: FormEl): boolean => typeOf(el) !== 'hidden' && !/^g-recaptcha-response|^h-captcha-response/.test(el.name || el.id || '');
   const keys = new Map<Element, string>();
   const used = new Map<string, number>();
   const snapshot: Record<string, string> = {};
-  for (const el of queryAll(`input,select,textarea,${listButton}`)) {
+  for (const el of [...queryAll(`input,select,textarea,${listButton}`), ...namedButtons]) {
+    if (keys.has(el)) continue;
     if (!isControl(el) || !included(el)) continue;
     const type = typeOf(el);
     const identity = el.id ? `#${el.id}` : el.name ? `@${el.name}` : '';

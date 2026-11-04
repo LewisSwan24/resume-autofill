@@ -7,6 +7,7 @@ import { resolveCode } from '../dictionary/options';
 import {
   ANSWER_BUTTON_SELECTOR,
   ARIA_COMBOBOX_SELECTOR,
+  isPromptButton,
   LIBRARY_OVERLAY_SELECTOR,
   LIBRARY_ROOT_SELECTOR,
   detectDateGranularity,
@@ -139,6 +140,53 @@ function nativeKey(map: Map<unknown, Map<string, HTMLInputElement[]>>, form: unk
   return list;
 }
 
+/**
+ * A box hidden from screen readers: a companion a widget renders for validation, or a trap for robots. Not a field
+ * either way. The exception is the whole page behind an open dialog, hidden from the top of the body down.
+ */
+function isHiddenFromReaders(el: Element): boolean {
+  const block = el.closest('[aria-hidden="true"]');
+  if (!block) return false;
+  if (block.parentElement !== el.ownerDocument.body) return true;
+  const dialog = el.ownerDocument.querySelector('[role=dialog], [role=alertdialog], [aria-modal="true"], dialog[open]');
+  return !dialog || block.contains(dialog);
+}
+
+/** Whether a radio button with no name answers the same question as those before it. */
+function sameQuestion(group: HTMLInputElement[], next: HTMLInputElement, scope: Document | ShadowRoot): boolean {
+  const all = [...group, next];
+  // The same answer again is the next question.
+  const labels = all.map(optionLabel).filter(Boolean);
+  if (new Set(labels).size !== labels.length) return false;
+  const box = commonAncestor(all);
+  if (!box.contains(next) || box.getRootNode() !== scope) return false;
+  // Radio buttons further on are for the next call to decide. Anything else in here is another field.
+  const fields = Array.from(box.querySelectorAll<HTMLInputElement>(NATIVE_SELECTOR)).filter((f) => f.type !== 'hidden' && f.type !== 'radio');
+  if (fields.length > 0) return false;
+  const holds = (branch: Element): number => all.filter((r) => branch === r || branch.contains(r)).length;
+  const branches = Array.from(box.children);
+  const first = branches.findIndex((b) => holds(b) > 0);
+  let last = first;
+  branches.forEach((b, i) => {
+    if (holds(b) > 0) last = i;
+  });
+  return branches.every((b, i) => {
+    if (holds(b) > 1) return false;
+    // Between the answers there is room for their labels, and text that is not a label asks something else.
+    return holds(b) === 1 || i < first || i > last || b.tagName === 'LABEL' || !text(b.textContent);
+  });
+}
+
+function groupLooseRadios(radios: HTMLInputElement[], scope: Document | ShadowRoot): HTMLInputElement[][] {
+  const groups: HTMLInputElement[][] = [];
+  for (const radio of radios) {
+    const current = groups[groups.length - 1];
+    if (current && sameQuestion(current, radio, scope)) current.push(radio);
+    else groups.push([radio]);
+  }
+  return groups;
+}
+
 function isRichtextHost(el: Element): boolean {
   const v = el.getAttribute('contenteditable');
   if (v === null) return false;
@@ -209,6 +257,14 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
     candidates.set(el, draft);
   }
 
+  // A plain button that only says "pick one", with a list behind it.
+  for (const el of Array.from(scope.querySelectorAll<HTMLElement>('button'))) {
+    if (!isPromptButton(el) || blocked.has(el) || insideAny(el, blocked) || el.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
+    if (isDisabledEl(el) || !isVisible(el) || el.closest(PAGE_CHROME_SELECTOR)) continue;
+    blocked.add(el);
+    candidates.set(el, { el, kind: 'select', lib: 'aria' });
+  }
+
   // Answer buttons: Yes and No side by side, usually with one hidden input behind them.
   const buttonGroups = new Set<HTMLElement>();
   for (const button of Array.from(scope.querySelectorAll<HTMLElement>(ANSWER_BUTTON_SELECTOR))) {
@@ -228,6 +284,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
   const radios = new Map<unknown, Map<string, HTMLInputElement[]>>();
   const checkboxes = new Map<unknown, Map<string, HTMLInputElement[]>>();
   const radioGroups = new Map<Element, HTMLInputElement[]>();
+  const looseRadios: HTMLInputElement[] = [];
   const nativeGroups: { kind: 'radio' | 'checkbox'; inputs: HTMLInputElement[] }[] = [];
 
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>(NATIVE_SELECTOR))) {
@@ -237,13 +294,16 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
       const type = el.type.toLowerCase();
       if (EXCLUDED_INPUT_TYPES.has(type)) continue;
       if (type === 'radio') {
+        const rg = el.name ? null : el.closest('[role=radiogroup]');
+        if (!el.name && !rg) {
+          looseRadios.push(el);
+          continue;
+        }
         const group = el.name
           ? nativeKey(radios, el.form, el.name)
           : (() => {
-              const rg = el.closest('[role=radiogroup]');
-              if (!rg) return [] as HTMLInputElement[];
-              let list = radioGroups.get(rg);
-              if (!list) radioGroups.set(rg, (list = []));
+              let list = radioGroups.get(rg!);
+              if (!list) radioGroups.set(rg!, (list = []));
               return list;
             })();
         if (group.length === 0) nativeGroups.push({ kind: 'radio', inputs: group });
@@ -268,8 +328,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
           inputType: type,
           dateGranularity: type === 'month' ? 'month' : 'day',
         });
-      } else if (!el.closest('[aria-hidden="true"]')) {
-        // aria-hidden: a companion a widget renders for validation, or a trap for robots. Not a field either way.
+      } else if (!isHiddenFromReaders(el)) {
         candidates.set(el, { el, kind: 'text', lib: 'native', inputType: type });
       }
     } else if (el instanceof HTMLSelectElement) {
@@ -282,13 +341,15 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
         options: selectOptions(el),
       });
     } else if (el instanceof HTMLTextAreaElement) {
-      if (isDisabledEl(el) || !isVisible(el)) continue;
+      if (isDisabledEl(el) || !isVisible(el) || isHiddenFromReaders(el)) continue;
       candidates.set(el, { el, kind: 'textarea', lib: 'native' });
     } else if (isRichtextHost(el)) {
       if (isDisabledEl(el) || !isVisible(el)) continue;
       candidates.set(el, { el, kind: 'richtext', lib: 'native' });
     }
   }
+
+  for (const inputs of groupLooseRadios(looseRadios, scope)) nativeGroups.push({ kind: 'radio', inputs });
 
   for (const { kind, inputs } of nativeGroups) {
     if (inputs.every(isDisabledEl) || !inputs.some(isInputVisible)) continue;

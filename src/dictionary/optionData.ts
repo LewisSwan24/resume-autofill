@@ -107,7 +107,7 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
   diversity: g({
     yes: '是|有|Yes|Yes, Aboriginal|Yes, Torres Strait Islander|Yes, Aboriginal and Torres Strait Islander|Yes, both|Yes, I am|Yes, I do|Yes, I have a disability|Yes, I identify|Yes, I have',
     no: '否|无|没有|No|None|No, neither|Neither|No, I am not|No, I do not|No, I don\'t have a disability|I am not|No, I am not Aboriginal or Torres Strait Islander|Not Aboriginal or Torres Strait Islander',
-    prefer_not_to_say: '不愿透露|不愿回答|不想回答|拒绝回答|不便透露|Prefer not to say|Prefer not to answer|I don\'t wish to answer|I do not wish to answer|Decline to answer|Decline to state|Choose not to disclose|Prefer not to disclose|Not disclosed|Rather not say|I prefer not to say|Prefer not to respond',
+    prefer_not_to_say: '不愿透露|不愿回答|不想回答|拒绝回答|不便透露|I decline to self-identify|Decline to self-identify|I decline to self-identify for protected veteran status|Prefer not to say|Prefer not to answer|I don\'t wish to answer|I do not wish to answer|Decline to answer|Decline to state|Choose not to disclose|Prefer not to disclose|Not disclosed|Rather not say|I prefer not to say|Prefer not to respond',
   }),
 
   yesNo: g({

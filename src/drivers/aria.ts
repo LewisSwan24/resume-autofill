@@ -7,11 +7,12 @@ import { isVisible } from '../engine/visibility';
 import { isRetired, visibleOptions, type DropdownOption } from './dropdown';
 import { fireBlur, fireInput, focusElement, pressKey, setNativeValue, simulateClick } from './events';
 import { ANSWER_BUTTON_SELECTOR, ariaValueScope } from './libraries';
+import { slotOf, type Slot } from './slot';
 import type { Driver, DriverContext, FillIntent, FillResult, OptionMatch, OptionMatcher } from './types';
 import { waitFor } from './wait';
 
-const LISTBOX = '[role=listbox]';
-const OPTION = '[role=option]';
+const LISTBOX = '[role=listbox], [role=menu], :has(> [role=menuitem])';
+const OPTION = '[role=option], [role=menuitem]';
 const SINGLE_VALUE = '[class*="single-value"], [class*="singleValue"]';
 const MULTI_VALUE = '[class*="multi-value__label"], [class*="multiValue"] > :first-child';
 
@@ -130,7 +131,9 @@ const infos = (labels: string[]): OptionInfo[] => labels.map((label) => ({ label
 // ------------------------------------------------------------------ one fill
 
 class Session {
-  readonly input: HTMLInputElement | null;
+  input: HTMLInputElement | null;
+  private readonly slot: Slot;
+  private followed = false;
   /** Lists already on screen before we touched anything belong to something else. */
   private readonly before: Set<HTMLElement>;
   private readonly initialText: string;
@@ -140,13 +143,23 @@ class Session {
   typed: string | null = null;
 
   constructor(
-    readonly el: HTMLElement,
+    public el: HTMLElement,
     readonly ctx: DriverContext,
   ) {
+    this.slot = slotOf(el);
     this.input = inputOf(el);
     this.initialText = this.input?.value ?? '';
     this.shownBefore = readItems(el);
     this.before = new Set(listsOnScreen(el).filter((l) => l !== referencedList(el)));
+  }
+
+  /** Taking a row may swap the box for a new element, and the new one is what shows the choice. */
+  follow(): void {
+    const next = this.slot.find();
+    if (!next || next === this.el) return;
+    this.el = next;
+    this.input = inputOf(next);
+    this.followed = true;
   }
 
   list(): HTMLElement | null {
@@ -188,7 +201,8 @@ class Session {
   }
 
   clearTyped(): void {
-    if (this.typed === null || !this.input) return;
+    // A box the page has rebuilt no longer holds what was typed.
+    if (this.typed === null || !this.input || this.followed) return;
     setNativeValue(this.input, this.initialText);
     fireInput(this.input, null, 'deleteContentBackward');
     this.typed = null;
@@ -258,6 +272,7 @@ async function select(s: Session, pick: Picked): Promise<boolean> {
 }
 
 function isCommitted(s: Session, label: string): boolean {
+  s.follow();
   const shown = readItems(s.el);
   if (!shown.some((v) => sameChoice(v, label))) return false;
   // Nothing changed and the list is still up, and what was there only resembles the choice: the click did not take.
@@ -275,7 +290,7 @@ function matchersOf(intent: FillIntent): { query: string; match: OptionMatcher }
 }
 
 async function selectAll(s: Session, missing: { query: string; match: OptionMatcher }[], picks: Picked[]): Promise<FillResult> {
-  const { el, ctx } = s;
+  const { ctx } = s;
   const opened = await s.open();
   if (!opened && !s.canType()) return failed('list did not open');
 
@@ -294,7 +309,7 @@ async function selectAll(s: Session, missing: { query: string; match: OptionMatc
     const ok = await s.wait(() => (isCommitted(s, pick.label) ? true : null), SETTLE_MS);
     if (!ok) return failed(`selection of "${pick.label}" did not stick`);
   }
-  return { ok: true, observed: readText(el) };
+  return { ok: true, observed: readText(s.el) };
 }
 
 async function fill(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
@@ -317,13 +332,14 @@ async function fill(control: Control, intent: FillIntent, ctx: DriverContext): P
     if (!result?.ok) s.clearTyped();
     await s.close();
   }
-  if (!result.ok) return { ...result, observed: readText(el) };
+  if (!result.ok) return { ...result, observed: readText(s.el) };
 
   // Some widgets take a value back when the field is left.
   await new Promise((resolve) => setTimeout(resolve, AFTER_LEAVING_MS));
-  const shown = readItems(el);
+  s.follow();
+  const shown = readItems(s.el);
   const kept = picks.every((p) => shown.some((v) => sameChoice(v, p.label)));
-  return kept ? { ok: true, observed: readText(el) } : failed('the value did not survive leaving the field', readText(el));
+  return kept ? { ok: true, observed: readText(s.el) } : failed('the value did not survive leaving the field', readText(s.el));
 }
 
 // ------------------------------------------------------------------ answer buttons

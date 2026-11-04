@@ -111,10 +111,12 @@ function editDistance(a: string, b: string): number {
 /** "Current" and "currency" share a stem and differ too much for a typo. */
 const MAX_TYPO_SHARE = 0.2;
 
-const singular = (w: string): string => w.replace(/ies$/, 'y').replace(/s$/, '');
+const singular = (w: string): string => w.replace(/ies$/, 'y').replace(/(ss|x|ch|sh)es$/, '$1').replace(/s$/, '');
 
+/** Typing rarely misses the first letter, and one letter away from there is often another word: "Sender", "Estate". */
 function isTypoOf(a: string, b: string): boolean {
   const [sa, sb] = [singular(a), singular(b)];
+  if (sa[0] !== sb[0]) return false;
   return editDistance(sa, sb) <= MAX_TYPO_SHARE * Math.max(sa.length, sb.length);
 }
 
@@ -132,7 +134,9 @@ function sharesItsWords(a: string, b: string): boolean {
   const wordsOf = (t: string) => t.split(/[^a-z0-9]+/).filter((w) => w && !SMALL_WORDS.has(w) && !FILE_ACT_WORDS.has(w));
   const [wa, wb] = [wordsOf(a), wordsOf(b)];
   if (wa.length === 0 || wb.length === 0) return true;
-  if (jaroWinkler(wa.join(''), wb.join('')) >= 0.95) return true;
+  // Small words count here: "date of birth" written together is "dateofbirth".
+  const [ja, jb] = [a, b].map((t) => t.replace(/[^a-z0-9]+/g, ''));
+  if (a.split(/[^a-z0-9]+/).filter(Boolean).length !== b.split(/[^a-z0-9]+/).filter(Boolean).length && singular(ja!) === singular(jb!)) return true;
   const [fewer, more] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
   if (fewer.length >= MANY_WORDS) return true;
   return fewer.every((w) => more.some((m) => isTypoOf(w, m)));

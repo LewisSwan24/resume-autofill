@@ -17,7 +17,7 @@ for (const sample of listSamples()) {
       // A step read in place has no recording: its snapshot, and nothing else.
       const body = readFileSync(path.join(sample.dir, 'page.html'), 'utf8');
       await context.route(/^https?:\/\//, (route) =>
-        route.request().url() === sample.url ? route.fulfill({ contentType: 'text/html', body }) : route.abort(),
+        route.request().url() === sample.url ? route.fulfill({ contentType: 'text/html; charset=utf-8', body }) : route.abort(),
       );
     }
     // `serviceWorkers: 'block'` would stop the extension too, so only the page's registrations are refused.
@@ -33,6 +33,10 @@ for (const sample of listSamples()) {
       url: sample.url,
       beforeFill: async (page) => {
         await page.locator(firstField).first().waitFor({ state: 'attached', timeout: 20_000 });
+        if (sample.expected.__banner) {
+          await page.locator(sample.expected.__banner).first().click();
+          await page.locator(sample.expected.__banner).first().waitFor({ state: 'hidden' });
+        }
         return inspect(page, locators);
       },
     });

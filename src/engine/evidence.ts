@@ -46,9 +46,13 @@ export function isOptionLikeLabel(text: string): boolean {
 // ---- text helpers ---------------------------------------------------------------------------------------
 
 /** Trim, collapse whitespace, strip leading / trailing `:：*`; '' when empty or longer than 80 chars. */
+/** What an upload box says about its state, which names nothing. */
+const FILE_STATUS = /^(?:total \d+ files? selected|\d+ files? (?:selected|chosen)|no files? (?:selected|chosen))$/i;
+
 export function cleanEvidenceText(raw: string | null | undefined, max: number = MAX_TEXT): string {
   let t = (raw ?? '').replace(/[\s\u00a0]+/g, ' ').trim();
   t = t.replace(/^[\s*＊✱]+/, '').replace(/[\s:：*＊✱]+$/, '');
+  if (FILE_STATUS.test(t)) return '';
   return t.length > 0 && t.length <= max ? t : '';
 }
 
@@ -239,8 +243,15 @@ function acceptNearby(raw: string): string | null {
  * First short text block before the control: previous siblings, then the siblings of each ancestor
  * (max 4 levels). Stops at the previous field, and never climbs into an ancestor that holds another field.
  */
+/** The question at the start of a block that goes on with help: its first child, if that is short enough to be one. */
+function leadingText(block: Element): string {
+  const first = block.firstElementChild;
+  return first && !isParagraph(first.textContent) ? (first.textContent ?? '') : '';
+}
+
 function nearbyText(c: Ctx): string | null {
   let node: Element = c.el;
+  let skippedHelp = false;
   for (let level = 0; level <= MAX_NEARBY_LEVELS; level++) {
     for (let s: Node | null = node.previousSibling; s; s = s.previousSibling) {
       if (s.nodeType === 3) {
@@ -257,7 +268,14 @@ function nearbyText(c: Ctx): string | null {
       if (containsField(sib)) return null;
       if (isHeadingLike(sib)) continue;
       const raw = textWithoutControls(sib);
-      if (isParagraph(raw)) return null;
+      if (isParagraph(raw)) {
+        // Help under a question and above its answers. A box of its own has no such room for a question.
+        if (!c.optionGroup || skippedHelp) return null;
+        skippedHelp = true;
+        const lead = acceptNearby(leadingText(sib));
+        if (lead) return lead;
+        continue;
+      }
       const t = acceptNearby(raw);
       if (t) return t;
     }
@@ -276,6 +294,7 @@ const DIAL_CODE = /^\+\d{1,4}(?:\s|$|\()/;
 function selectedText(control: Control): string {
   const el = control.el;
   if (el instanceof HTMLSelectElement) return (el.selectedOptions[0]?.textContent ?? '').trim();
+  if (el instanceof HTMLInputElement) return el.value.trim();
   const shown = el.querySelector(
     '.ant-select-selection-item, .el-select__selected-item:not(.is-transparent):not(.el-select__input-wrapper)',
   );
@@ -325,6 +344,14 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     if (wrap && (!target || c.ids.has(target))) {
       const text = labelTextOf(wrap, c.el);
       push('label-wrap', text, isOptionLikeLabel(cleanEvidenceText(text)) ? { label: true, weight: OPTION_LIKE_LABEL_WEIGHT } : { label: true });
+    }
+  }
+  // A label around the input can name it by reference instead of by its text.
+  if (!c.optionGroup) {
+    const refs = (c.el.closest('label[aria-labelledby]')?.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+    for (const id of refs) {
+      const n = c.root.getElementById(id);
+      if (n) push('aria-labelledby', textWithoutControls(n));
     }
   }
   // aria-labelledby / aria-label

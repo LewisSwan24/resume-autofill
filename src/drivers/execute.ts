@@ -1,5 +1,6 @@
 // Execute one planned fill step: pick the driver, try (at most) twice, read back, build the report.
 import type { Control, FieldKey, FieldReport, SectionKey } from '../engine/types';
+import { slotOf, type Slot } from './slot';
 import { closeDropdown } from './dropdown';
 import { valuesEquivalent } from './equivalence';
 import { getDriver } from './registry';
@@ -108,14 +109,19 @@ async function attempt(
 }
 
 /**
- * Some pages rebuild a field when it is left: a new element with the same id. Point the control at it.
- * Whether it kept the value is for the caller to check. With no id, nothing shows which element took over.
+ * Some pages rebuild a field when it is left: a new element with the same id, or one in the same place.
+ * Point the control at it. Whether it kept the value is for the caller to check.
  */
-function followRebuilt(control: Control, doc: Document): void {
+function followRebuilt(control: Control, doc: Document, slot: Slot | null): void {
   const old = control.el;
-  if (old.isConnected || !old.id) return;
-  const next = doc.getElementById(old.id);
-  if (next && next.tagName === old.tagName && next.getAttribute('type') === old.getAttribute('type')) control.el = next;
+  if (old.isConnected) return;
+  const next = old.id ? doc.getElementById(old.id) : null;
+  if (next && next.tagName === old.tagName && next.getAttribute('type') === old.getAttribute('type')) {
+    control.el = next;
+    return;
+  }
+  const inPlace = slot?.find();
+  if (inPlace) control.el = inPlace;
 }
 
 function safeRead(driver: Driver, control: Control): string | null {
@@ -155,14 +161,20 @@ export async function executeStep(
     const driver = (opts.resolveDriver ?? getDriver)(control);
     if (!driver) return report;
 
-    followRebuilt(control, doc);
+    followRebuilt(control, doc, null);
+    const before = control.el;
+    // A checkbox or radio is read through the inputs found on the scan, and a file box may go once it has its file.
+    const slot = control.kind === 'text' || control.kind === 'textarea' || control.kind === 'select' ? slotOf(before) : null;
     let result = await attempt(driver, control, step.intent, doc, 1, timeoutMs, graceMs);
     const terminal = result.outcome === 'no_option' || result.outcome === 'needs_review';
-    if (!result.ok && !terminal) result = await attempt(driver, control, step.intent, doc, 2, timeoutMs, graceMs);
+    if (!result.ok && !terminal) {
+      followRebuilt(control, doc, slot);
+      result = await attempt(driver, control, step.intent, doc, 2, timeoutMs, graceMs);
+    }
 
-    const before = control.el;
-    followRebuilt(control, doc);
-    report.observed = safeRead(driver, control) ?? result.observed;
+    followRebuilt(control, doc, slot);
+    // What the driver saw on the old element says nothing about the new one.
+    report.observed = safeRead(driver, control) ?? (before === control.el ? result.observed : null);
     // What was written has to be what the new element came back with.
     const rebuiltOther = before !== control.el && !valuesEquivalent(result.observed ?? '', report.observed);
     // A widget can accept a write and wipe it a moment later. Empty means unchecked for a checkbox, not a loss.

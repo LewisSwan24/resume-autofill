@@ -213,3 +213,115 @@ test('waits too when the user uploaded by hand just before filling', async () =>
   });
   expect(seen).not.toBe('Parsed Name');
 });
+
+/**
+ * A code box as one hosted form builds it: the list shows a few rows around the current choice, typing narrows it,
+ * and taking a row swaps the input for a new element under a new id.
+ */
+async function mountCodeBox(): Promise<void> {
+  await page.evaluate(() => {
+    const ROWS = ['+1 US - United States', '+1 CA - Canada', '+61 AU - Australia', '+61 CX - Christmas Island', '+64 NZ - New Zealand'];
+    const form = document.createElement('form');
+    form.innerHTML = `<div id="code-row"><label for="other-box">Nickname</label><input id="other-box" type="text">
+      <div id="code-slot"></div><label for="phone-box">Phone number</label><input id="phone-box" type="text"></div>`;
+    document.body.append(form);
+    const slot = form.querySelector<HTMLElement>('#code-slot')!;
+    let serial = 30;
+    const build = (value: string): void => {
+      slot.innerHTML = '';
+      const id = `field-${serial++}`;
+      const input = document.createElement('input');
+      input.id = id;
+      input.type = 'text';
+      input.value = value;
+      input.setAttribute('role', 'combobox');
+      input.setAttribute('aria-haspopup', 'listbox');
+      input.setAttribute('aria-autocomplete', 'list');
+      input.setAttribute('aria-expanded', 'false');
+      input.setAttribute('aria-label', 'Code search');
+      slot.append(input);
+      const show = (rows: string[]): void => {
+        slot.querySelector('[role=listbox]')?.remove();
+        const list = document.createElement('ul');
+        list.id = `${id}-list`;
+        list.setAttribute('role', 'listbox');
+        for (const text of rows) {
+          const row = document.createElement('li');
+          row.setAttribute('role', 'option');
+          row.textContent = text;
+          row.addEventListener('click', () => build(text.split(' - ')[0]!));
+          list.append(row);
+        }
+        slot.append(list);
+        input.setAttribute('aria-controls', list.id);
+        input.setAttribute('aria-expanded', 'true');
+      };
+      input.addEventListener('click', () => show(ROWS.slice(0, 2)));
+      input.addEventListener('input', () => show(ROWS.filter((r) => r.includes(input.value))));
+    };
+    build('+1 US');
+  });
+}
+
+test('follows a search box that the page replaces under a new id when a row is taken', async () => {
+  await mountCodeBox();
+  const report = await execIntent(page, 'Code search', {
+    kind: 'choice',
+    display: '+61',
+    query: '+61',
+    options: { matchLabel: '+61 AU - Australia' },
+  });
+  expect(report).toMatchObject({ outcome: 'filled', observed: '+61 AU' });
+  expect(await page.locator('#code-slot input').inputValue()).toBe('+61 AU');
+});
+
+/** A plain button with a prompt: the list shows up as menu items, and the button then says the choice. */
+async function mountPromptButton(listRole: string | null = 'menu'): Promise<void> {
+  await page.evaluate((role) => {
+    const form = document.createElement('form');
+    form.innerHTML = '<div id="gender-row"><div>Gender</div><button type="button" id="pick"><div>Please select</div></button></div>';
+    document.body.append(form);
+    const button = form.querySelector<HTMLButtonElement>('#pick')!;
+    button.addEventListener('click', () => {
+      if (document.querySelector('#gender-menu')) {
+        document.querySelector('#gender-menu')!.remove();
+        return;
+      }
+      const list = document.createElement('ul');
+      list.id = 'gender-menu';
+      if (role) list.setAttribute('role', role);
+      for (const text of ['Male', 'Female', 'Decline to self-identify']) {
+        const row = document.createElement('li');
+        row.setAttribute('role', 'menuitem');
+        row.textContent = text;
+        row.addEventListener('click', () => {
+          button.querySelector('div')!.textContent = text;
+          list.remove();
+        });
+        list.append(row);
+      }
+      form.append(list);
+    });
+  }, listRole);
+}
+
+test('a plain button with a prompt: picks from the menu it opens', async () => {
+  await mountPromptButton();
+  const report = await execIntent(page, 'Gender', choice('Female', 'Female'));
+  expect(report).toMatchObject({ outcome: 'filled', observed: 'Female' });
+  await expect(page.locator('#gender-menu')).toHaveCount(0);
+});
+
+test('a plain button with a prompt: no match closes the menu and leaves the prompt', async () => {
+  await mountPromptButton();
+  const report = await execIntent(page, 'Gender', choice('Nonbinary', 'Nonbinary'));
+  expect(report.outcome).toBe('no_option');
+  await expect(page.locator('#gender-menu')).toHaveCount(0);
+  await expect(page.locator('#pick')).toHaveText('Please select');
+});
+
+test('a plain button with a prompt: menu items in a list that has no role of its own', async () => {
+  await mountPromptButton(null);
+  const report = await execIntent(page, 'Gender', choice('Female', 'Female'));
+  expect(report).toMatchObject({ outcome: 'filled', observed: 'Female' });
+});

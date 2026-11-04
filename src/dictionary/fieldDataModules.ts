@@ -285,6 +285,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'emergencyContact.name': s(
     '紧急联系人|紧急联系人姓名|紧急联络人|应急联系人|紧急联系人名称|联系人|联系人姓名|联络人姓名|姓名',
     'Emergency contact|Emergency contact name|Emergency contact person|Name of emergency contact|Contact name|Next of kin|Next of kin name|Name',
+    '邮箱|地址|email|e-mail|address',
   ),
   'emergencyContact.relationship': s(
     '与紧急联系人关系|紧急联系人关系|与本人关系|关系|联系人关系|与联系人关系|应急联系人关系',

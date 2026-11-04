@@ -149,7 +149,16 @@ export const LIBRARY_ROOT_SELECTOR = [
 ].join(', ');
 
 /** Comboboxes outside the libraries above. A native select says role=combobox too, but is handled as a select. */
-export const ARIA_COMBOBOX_SELECTOR = '[role=combobox]:not(select), button[aria-haspopup="listbox"]';
+/** A plain button that says nothing but "pick one" opens a list, and is the only sign of one. */
+const PICK_ONE = /^(?:please\s+)?(?:select|choose|pick)(?:\s+(?:one|an?\s+option|option))?\s*(?:\.{3}|…)?$|^请选择$/i;
+
+export function isPromptButton(el: Element): boolean {
+  if (el.tagName !== 'BUTTON' || (el.getAttribute('type') ?? 'submit').toLowerCase() !== 'button') return false;
+  return PICK_ONE.test((el.textContent ?? '').replace(/\s+/g, ' ').trim());
+}
+
+export const ARIA_COMBOBOX_SELECTOR =
+  '[role=combobox]:not(select), button[aria-haspopup="listbox"], input[aria-haspopup="listbox"][aria-autocomplete="list"], input[aria-haspopup="listbox"][aria-autocomplete="both"]';
 
 export const ANSWER_BUTTON_SELECTOR = 'button[aria-pressed]';
 

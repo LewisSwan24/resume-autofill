@@ -27,6 +27,8 @@ export interface CapturedField {
   fieldKey?: string;
   /** Not a field of its own: the page changes it when another one is filled. It must show this, with no report row. */
   follows?: true;
+  /** Only the running page shows what this box is, by a value a snapshot does not keep. Replays still check it. */
+  liveOnlyKey?: true;
 }
 
 export interface LocatedEntry {
@@ -60,6 +62,8 @@ export interface CapturedExpected {
   __knownGapsMax: number;
   /** Must not change, and may not be reported filled. */
   __leaveEmpty?: Record<string, LeaveEmpty>;
+  /** A banner the applicant answers first, which covers the FAB. Clicked in the replay only, where nothing leaves. */
+  __banner?: string;
   /** Must equal the number of wrong guesses, as with `__knownGapsMax`. */
   __wrongGuessesMax?: number;
   fields: Record<string, CapturedField>;
@@ -252,7 +256,9 @@ export function scoreSample(
     if (right && row) falselyFailed.push(`${row.fieldId}: reported ${row.outcome}`);
   }
 
-  const covered = new Set(Object.keys(checked).flatMap((label) => after.coverage[label] ?? []));
+  // A field the page rebuilt under a new id was covered under its old one, which no control holds any more.
+  const gone = (key: string): boolean => !(key in after.snapshot);
+  const covered = new Set(Object.keys(checked).flatMap((label) => [...(before.coverage[label] ?? []).filter(gone), ...(after.coverage[label] ?? [])]));
   const extras = changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key));
 
   const gaps = allGaps.filter(([label]) => !(label in checked)).map(([label]) => label);

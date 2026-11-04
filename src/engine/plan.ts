@@ -101,6 +101,7 @@ export function planFill(
     const intent = toIntent(def, resolved.raw, ctx.control, resume.locale, {
       files,
       home: resume.contact.address,
+      dialCode: resume.contact.phoneCountryCode.trim(),
       genderAnswer: resume.diversity.genderAnswer,
     });
     if (!intent) {

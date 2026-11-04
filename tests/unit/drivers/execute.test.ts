@@ -307,6 +307,193 @@ describe('executeStep', () => {
       expect(r.outcome).toBe('action_failed');
     });
 
+    describe('with no id, or a new one, to go by', () => {
+      /** On blur the page swaps the input for a new element in the same place. */
+      function swapping(html: string, value: (typed: string) => string, newId?: string): Control {
+        const c = firstControl(html);
+        c.el.addEventListener('blur', () => {
+          const old = c.el as HTMLInputElement;
+          const next = document.createElement('input');
+          next.type = old.type;
+          if (newId) next.id = newId;
+          next.value = value(old.value);
+          old.replaceWith(next);
+        });
+        return c;
+      }
+
+      it('follows the one input left in its box', async () => {
+        const c = swapping('<div><input type="text"></div><div><input type="text" value="Other"></div>', (typed) => typed);
+        const old = c.el;
+        const r = await executeStep(text, c, document);
+        expect(r).toMatchObject({ outcome: 'filled', observed: 'Zhiyuan' });
+        expect(c.el).not.toBe(old);
+        expect(c.el.isConnected).toBe(true);
+      });
+
+      it('follows an input that came back under a new id', async () => {
+        const c = swapping('<div><input id="field-1" type="text"></div><div><input type="text"></div>', (typed) => typed, 'field-2');
+        const r = await executeStep(text, c, document);
+        expect(r).toMatchObject({ outcome: 'filled', observed: 'Zhiyuan' });
+      });
+
+      it('follows by place among inputs that share a parent', async () => {
+        const c = swapping('<form><input type="text"><input type="text" value="Other"></form>', (typed) => typed);
+        const r = await executeStep(text, c, document);
+        expect(r).toMatchObject({ outcome: 'filled', observed: 'Zhiyuan' });
+      });
+
+      it('fails when the input that took over came back empty', async () => {
+        const c = swapping('<div><input type="text"></div><div><input type="text"></div>', () => '');
+        const r = await executeStep(text, c, document);
+        expect(r.outcome).toBe('action_failed');
+      });
+
+      it('does not take a neighbour for it when the row moved to the end of the form', async () => {
+        const c = firstControl('<form><input type="text"><input type="email" id="e" value="me@example.com"><input type="text" id="other" value="Other"></form>');
+        const form = c.el.parentElement!;
+        c.el.addEventListener('blur', () => {
+          const next = document.createElement('input');
+          next.type = 'text';
+          c.el.remove();
+          form.append(next);
+        });
+        const r = await executeStep(text, c, document);
+        expect(r.outcome).toBe('action_failed');
+        expect((document.querySelector('#other') as HTMLInputElement).value).toBe('Other');
+      });
+
+      it('never writes into a neighbour on the second attempt', async () => {
+        const c = firstControl('<form><input type="text" id="a"><input type="text" id="b" value="me@example.com"></form>');
+        const a = c.el;
+        const form = a.parentElement!;
+        const go: Driver = {
+          id: 'typing', lib: 'native', kinds: ['text'], match: () => true,
+          fill: async (control) => {
+            (control.el as HTMLInputElement).value = 'Zhiyuan';
+            if (control.el === a) {
+              a.remove();
+              const late = document.createElement('input');
+              late.type = 'text';
+              form.append(late);
+              return { ok: false, observed: null };
+            }
+            return { ok: true, observed: 'Zhiyuan' };
+          },
+          read: (control) => (control.el as HTMLInputElement).value,
+        };
+        await executeStep(text, c, document, { resolveDriver: () => go });
+        expect((document.querySelector('#b') as HTMLInputElement).value).toBe('me@example.com');
+      });
+
+      it('does not follow to an input that turned up somewhere else', async () => {
+        const c = firstControl('<div id="row"><input type="tel"></div><div id="far"></div>');
+        c.el.addEventListener('blur', () => {
+          const row = c.el.parentElement!;
+          row.remove();
+          const next = document.createElement('input');
+          next.type = 'tel';
+          next.value = 'Zhiyuan';
+          document.querySelector('#far')!.append(next);
+        });
+        const r = await executeStep(text, c, document);
+        expect(r.outcome).toBe('action_failed');
+      });
+
+      it('does not follow to a box that says it is something else', async () => {
+        const c = firstControl('<div><label for="c">City</label><input id="c" name="city" type="text"></div><div><input type="text" name="other"></div>');
+        const box = c.el.parentElement!;
+        const go: Driver = {
+          id: 'typing', lib: 'native', kinds: ['text'], match: () => true,
+          fill: async (control) => {
+            const el = control.el as HTMLInputElement;
+            el.value = 'Brisbane';
+            if (el.name !== 'city') return { ok: true, observed: 'Brisbane' };
+            box.innerHTML = '<label for="r">Referral code</label><input id="r" name="referral_code" type="text">';
+            return { ok: false, observed: null };
+          },
+          read: (control) => (control.el as HTMLInputElement).value,
+        };
+        const r = await executeStep(text, c, document, { resolveDriver: () => go });
+        expect((document.querySelector('#r') as HTMLInputElement).value).toBe('');
+        expect(r.outcome).not.toBe('filled');
+      });
+
+      it('follows a box whose generated name changes and whose label stays', async () => {
+        const c = firstControl('<div><label for="c">City</label><input id="c" name="rnAbnpJH60" type="text"></div><div><input type="text"></div>');
+        c.el.addEventListener('blur', () => {
+          c.el.parentElement!.innerHTML = '<label for="d">City</label><input id="d" name="xQ7hTz2Lm1" type="text" value="Zhiyuan">';
+        });
+        const r = await executeStep(text, c, document);
+        expect(r).toMatchObject({ outcome: 'filled', observed: 'Zhiyuan' });
+      });
+
+      it('does not follow a rebuilt checkbox, whose answer is read from the old one', async () => {
+        const c = firstControl('<div><input id="t" type="checkbox"><label for="t">Keep me posted</label></div><div><input type="checkbox"></div>');
+        const old = c.el as HTMLInputElement;
+        const go: Driver = {
+          id: 'ticking', lib: 'native', kinds: ['checkbox'], match: () => true,
+          fill: async () => {
+            old.checked = true;
+            const next = document.createElement('input');
+            next.type = 'checkbox';
+            old.replaceWith(next);
+            return { ok: true, observed: 'true' };
+          },
+          read: () => (old.checked ? 'true' : null),
+        };
+        const r = await executeStep(step({ intent: { kind: 'check', checked: true } }), { ...c, kind: 'checkbox' }, document, { resolveDriver: () => go });
+        expect(r.outcome).toBe('action_failed');
+      });
+
+      it('a file box replaced after taking its file is still filled', async () => {
+        const c = firstControl('<div><input id="f" type="file"></div><div><input type="file"></div>');
+        const old = c.el as HTMLInputElement;
+        const go: Driver = {
+          id: 'upload', lib: 'native', kinds: ['file'], match: () => true,
+          fill: async () => {
+            const next = document.createElement('input');
+            next.type = 'file';
+            old.replaceWith(next);
+            return { ok: true, observed: 'cv.pdf' };
+          },
+          read: (control) => (control.el === old ? 'cv.pdf' : null),
+        };
+        const file = { name: 'cv.pdf', mime: 'application/pdf', dataUrl: 'data:application/pdf;base64,AA==' };
+        const r = await executeStep(step({ intent: { kind: 'file', file } as never }), { ...c, kind: 'file' }, document, { resolveDriver: () => go });
+        expect(r.outcome).toBe('filled');
+      });
+
+      it('a select that came back empty is not filled', async () => {
+        const c = firstControl('<div><select><option value="">Choose</option><option>Australia</option></select></div><div><select><option>Other</option></select></div>');
+        const old = c.el as HTMLSelectElement;
+        old.addEventListener('change', () => {
+          const next = document.createElement('select');
+          next.innerHTML = '<option value="">Choose</option><option>Australia</option>';
+          old.replaceWith(next);
+        });
+        const fake: Driver = {
+          id: 'select', lib: 'native', kinds: ['select'], match: () => true,
+          fill: async (control) => {
+            const el = control.el as HTMLSelectElement;
+            el.value = 'Australia';
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { ok: true, observed: 'Australia' };
+          },
+          read: (control) => (control.el as HTMLSelectElement).value || null,
+        };
+        const r = await executeStep(text, c, document, { resolveDriver: () => fake });
+        expect(r.outcome).toBe('action_failed');
+      });
+
+      it('does not take a neighbour for it when the number of inputs changed', async () => {
+        const c = firstControl('<form><input type="text"><input type="text" value="Zhiyuan"></form>');
+        c.el.addEventListener('blur', () => c.el.remove());
+        const r = await executeStep(text, c, document);
+        expect(r.outcome).toBe('action_failed');
+      });
+    });
+
     it('still fails when the field went away with no new element', async () => {
       const c = firstControl('<input id="given" type="text">');
       c.el.addEventListener('blur', () => c.el.remove());

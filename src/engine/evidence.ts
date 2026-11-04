@@ -16,12 +16,21 @@ export const STRICT_HEADING_SELECTOR =
 
 const FORM_ITEM_SELECTOR = '.ant-form-item, .el-form-item';
 const MAX_TEXT = 80;
-const MAX_NEARBY = 40;
+/** Forms ask whole questions, and a label or the line above a control is meant to be read as one. */
+const MAX_LABEL_TEXT = 200;
+const MAX_NEARBY = 120;
 const MAX_NEARBY_LEVELS = 4;
 /** Weight of a form-item label shared by several controls (e.g. phone country code + number). */
 const SHARED_LABEL_WEIGHT = 0.6;
 /** Weight of a wrapping label that merely names an answer (是 / 否 / Yes / No): the field's own label wins. */
 const OPTION_LIKE_LABEL_WEIGHT = 0.55;
+
+const TEXT_LIMITS: Partial<Record<EvidenceSource, number>> = {
+  'label-for': MAX_LABEL_TEXT,
+  'label-wrap': MAX_LABEL_TEXT,
+  'aria-labelledby': MAX_LABEL_TEXT,
+  'nearby-text': MAX_NEARBY,
+};
 
 /** True for labels that read as an answer to a yes/no question rather than as the question. */
 export function isOptionLikeLabel(text: string): boolean {
@@ -31,15 +40,27 @@ export function isOptionLikeLabel(text: string): boolean {
 // ---- text helpers ---------------------------------------------------------------------------------------
 
 /** Trim, collapse whitespace, strip leading / trailing `:：*`; '' when empty or longer than 80 chars. */
-export function cleanEvidenceText(raw: string | null | undefined): string {
+export function cleanEvidenceText(raw: string | null | undefined, max: number = MAX_TEXT): string {
   let t = (raw ?? '').replace(/[\s\u00a0]+/g, ' ').trim();
-  t = t.replace(/^[\s*＊]+/, '').replace(/[\s:：*＊]+$/, '');
-  return t.length > 0 && t.length <= MAX_TEXT ? t : '';
+  t = t.replace(/^[\s*＊✱]+/, '').replace(/[\s:：*＊✱]+$/, '');
+  return t.length > 0 && t.length <= max ? t : '';
+}
+
+/**
+ * A label wrapped around its control: the words before the control, when there are any. What follows it
+ * is often the widget's own messages, kept in the label so that clicking them focuses the control.
+ */
+function labelTextOf(label: Element, control: Element): string {
+  const range = control.ownerDocument.createRange();
+  range.selectNodeContents(label);
+  range.setEndBefore(control);
+  const before = textWithoutControls(range.cloneContents());
+  return cleanEvidenceText(before, MAX_LABEL_TEXT) ? before : textWithoutControls(label);
 }
 
 /** Text of an element ignoring form controls, widgets, buttons and scripts inside it. */
-export function textWithoutControls(el: Element): string {
-  const clone = el.cloneNode(true) as Element;
+export function textWithoutControls(el: Element | DocumentFragment): string {
+  const clone = el.cloneNode(true) as Element | DocumentFragment;
   clone
     .querySelectorAll(`input, select, textarea, option, button, script, style, svg, [contenteditable], ${LIBRARY_ROOT_SELECTOR}`)
     .forEach((n) => n.remove());
@@ -103,6 +124,9 @@ function makeCtx(control: Control): Ctx {
     }
     const role = el.closest('[role=radiogroup], [role=group]');
     if (role && !hosts.includes(role)) hosts.push(role);
+    if (control.lib === 'aria') {
+      for (const hidden of Array.from(el.querySelectorAll('input[name]'))) ids.add(hidden.getAttribute('name')!);
+    }
   } else {
     hosts = elIsField ? [el] : [el, ...Array.from(el.querySelectorAll(FIELD_SELECTOR))];
     for (const h of hosts) if (h.id) ids.add(h.id);
@@ -192,8 +216,8 @@ function isHeadingLike(el: Element): boolean {
 const SKIP_NEARBY_TAGS = new Set(['SCRIPT', 'STYLE', 'BR', 'OPTION', 'OPTGROUP', 'BUTTON', 'SVG', 'TEMPLATE']);
 
 function acceptNearby(raw: string): string | null {
-  const t = cleanEvidenceText(raw);
-  if (!t || t.length > MAX_NEARBY || isAddButtonText(t) || isDeleteText(t)) return null;
+  const t = cleanEvidenceText(raw, MAX_NEARBY);
+  if (!t || isAddButtonText(t) || isDeleteText(t)) return null;
   return t;
 }
 
@@ -264,7 +288,7 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
 
   const push = (source: EvidenceSource, raw: string | null | undefined, opts: { label?: boolean; weight?: number } = {}) => {
     if (opts.label && raw && /[*＊]/.test(raw)) asterisk = true;
-    const text = cleanEvidenceText(raw);
+    const text = cleanEvidenceText(raw, TEXT_LIMITS[source]);
     if (text) out.push({ source, text, weight: opts.weight ?? EVIDENCE_WEIGHTS[source] });
   };
 
@@ -279,7 +303,7 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     const wrap = c.el.closest('label');
     const target = wrap?.getAttribute('for');
     if (wrap && (!target || c.ids.has(target))) {
-      const text = textWithoutControls(wrap);
+      const text = labelTextOf(wrap, c.el);
       push('label-wrap', text, isOptionLikeLabel(cleanEvidenceText(text)) ? { label: true, weight: OPTION_LIKE_LABEL_WEIGHT } : { label: true });
     }
   }

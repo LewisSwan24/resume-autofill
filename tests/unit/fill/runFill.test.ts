@@ -77,6 +77,20 @@ describe('runFill', () => {
     expect([...second.controls.keys()]).toEqual([...first.controls.keys()]);
   });
 
+  it('uploads files before writing anything else, whatever the page order', async () => {
+    document.body.innerHTML = `<form>
+      <h2>基本信息</h2><div><label for="nm">姓名</label><input id="nm"></div>
+      <h2>附件</h2><div><label for="cv">简历</label><input id="cv" type="file"></div>
+    </form>`;
+    const order: string[] = [];
+    for (const id of ['nm', 'cv']) document.getElementById(id)!.addEventListener('change', () => order.push(id));
+    document.getElementById('nm')!.addEventListener('input', () => order.push('nm'));
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(report.fields.find((f) => f.label === '简历')?.outcome).toBe('filled');
+    expect(order[0]).toBe('cv');
+    expect(order).toContain('nm');
+  });
+
   it('never clicks the submit button', async () => {
     const { clicks } = mount();
     await runFill(document, { resume: zh, files });

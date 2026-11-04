@@ -19,10 +19,27 @@ function dateParts(s: string): string[] | null {
   return parts;
 }
 
+const PHONE_RE = /^\+?[\d\s()./-]+$/;
+const MIN_PHONE_DIGITS = 8;
+const MAX_DIAL_CODE_DIGITS = 3;
+
+/** Phone widgets format as they write, and may put the dial code in place of the trunk 0. */
+function samePhone(expected: string, observed: string): boolean {
+  if (!PHONE_RE.test(expected) || !PHONE_RE.test(observed)) return false;
+  const want = expected.replace(/\D/g, '');
+  const got = observed.replace(/\D/g, '');
+  if (want.length < MIN_PHONE_DIGITS) return false;
+  if (want === got) return true;
+  if (!want.startsWith('0') || !observed.startsWith('+')) return false;
+  const national = want.slice(1);
+  const extra = got.length - national.length;
+  return extra >= 1 && extra <= MAX_DIAL_CODE_DIGITS && got.endsWith(national);
+}
+
 /**
  * Does what a control shows (`observed`) amount to what we intended to write (`expected`)?
  * Whitespace-, case- and width-insensitive; dates compare their digits, so `2020-09`,
- * `2020/9` and `2020年9月` are equivalent. `null` (nothing observable) never matches.
+ * `2020/9` and `2020年9月` are equivalent, and phone numbers compare their digits. `null` (nothing observable) never matches.
  */
 export function valuesEquivalent(expected: string, observed: string | null): boolean {
   if (observed === null) return false;
@@ -32,5 +49,6 @@ export function valuesEquivalent(expected: string, observed: string | null): boo
   const da = dateParts(a);
   const db = dateParts(b);
   if (da && db) return da.length === db.length && da.every((p, i) => p === db[i]);
-  return false;
+  if (da || db) return false;
+  return samePhone(a, b);
 }

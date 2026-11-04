@@ -103,6 +103,26 @@ test('a submit that does happen is stopped by the guard and shows up in the resu
   expect(seen.some((r) => r.path.startsWith('/submit'))).toBe(false);
 });
 
+test('a GraphQL read gets through, since some forms load that way, and a mutation does not', async ({ context }) => {
+  const guard = await guardWrites(context);
+  const page = await context.newPage();
+  await page.goto(`${base}/apply`);
+  const post = (path: string, body: string) =>
+    page.evaluate(
+      ([p, b]) => fetch(p!, { method: 'POST', headers: { 'content-type': 'application/json' }, body: b }).then(() => true, () => false),
+      [path, body],
+    );
+  expect(await post('/read', JSON.stringify({ operationName: 'Form', query: 'query Form($id: ID!) { form(id: $id) { title } }' }))).toBe(true);
+  expect(await post('/read-short', JSON.stringify({ query: '{ form { title } }' }))).toBe(true);
+  expect(await post('/write', JSON.stringify({ operationName: 'Save', query: 'mutation Save { save(text: "query") { id } }' }))).toBe(false);
+  expect(await post('/both', JSON.stringify({ query: 'query A { a } mutation B { b }' }))).toBe(false);
+  expect(await post('/batch', JSON.stringify([{ query: 'mutation Save { save { id } }' }]))).toBe(false);
+  expect(await post('/not-json', 'query=1')).toBe(false);
+  expect(seen.filter((r) => r.method === 'POST').map((r) => r.path)).toEqual(['/read', '/read-short']);
+  const mine = guard.blocked().map((b) => b.path).filter((p) => p !== '/beacon' && p !== '/autosave');
+  expect(mine.sort()).toEqual(['/batch', '/both', '/not-json', '/write']);
+});
+
 test('query strings are left out of the log, since they can hold what was typed', async ({ context }) => {
   const guard = await guardWrites(context);
   const page = await context.newPage();

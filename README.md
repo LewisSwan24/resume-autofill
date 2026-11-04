@@ -21,7 +21,7 @@ Built with WXT 0.21, React 19 and TypeScript (Manifest V3).
 | Milestone | Scope | Status |
 |---|---|---|
 | **M1** | Core engine, resume editor, side panel and floating button. 100% of fields are filled correctly on the synthetic test sites (native HTML, Ant Design, Element Plus). | Done |
-| **M2** | Adapt to real ATS platforms: Workday, SuccessFactors, PageUp, Greenhouse, Lever, Moka, Beisen, Feishu Recruiting and more. | Planned |
+| **M2** | Adapt to real ATS platforms. Greenhouse, Lever and Ashby are checked on real pages. Workday, SuccessFactors, PageUp, Moka, Beisen, Feishu Recruiting and more are still to come. | In progress |
 | **M3** | AI features: resume import, drafting answers to open-ended questions, Chinese/English translation, an application tracking workspace, better file upload and general polish. | Planned |
 
 ## Install
@@ -122,7 +122,8 @@ Open the options page from the extension details on `chrome://extensions`, or fr
 ## Known limitations (M1)
 
 - Date range pickers (one control for both start and end) are not supported. Single-date and year-month pickers are.
-- Only native HTML, Ant Design and Element Plus are supported. Other libraries come later.
+- Supported widgets are native HTML, Ant Design, Element Plus, react-select, and dropdowns and yes/no buttons with ARIA roles. Other libraries come later.
+- On Lever, "Current location" is a search box without ARIA roles, so it is not filled yet and is marked red. Custom questions there are read only from nearby text, so most are marked yellow for review.
 - There is no AI layer. Fields are recognized with dictionaries and rules, and anything unrecognized stays empty and is marked red.
 - There is no preview step: one click fills the page.
 - Extra entry cards (a second education, a second internship and so on) are created by recognizing the text of the page's "Add …" button. A button whose text is not in the dictionary will not be clicked.

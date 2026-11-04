@@ -349,6 +349,7 @@ export interface HarFile {
 export interface SidecarIo {
   read(name: string): string | null;
   write(name: string, text: string): void;
+  remove(name: string): void;
 }
 
 const SENSITIVE_HEADER =
@@ -400,6 +401,13 @@ export function sanitizeHar(har: HarFile, scrub: Scrubber, io: SidecarIo): void 
   for (const page of har.log.pages ?? []) {
     if (page.title) page.title = scrub.text(page.title, { phones: 'all' });
   }
+  // A sent body that cannot be read (compressed telemetry) cannot be vouched for, and replay does not need it.
+  har.log.entries = har.log.entries.filter(({ request }) => {
+    const file = request.postData?._file;
+    if (!file || io.read(file) !== null) return true;
+    io.remove(file);
+    return false;
+  });
   for (const { request, response } of har.log.entries) {
     request.url = scrub.text(request.url);
     request.headers = scrubPairs(request.headers.filter((h) => !SENSITIVE_HEADER.test(h.name)), scrub);

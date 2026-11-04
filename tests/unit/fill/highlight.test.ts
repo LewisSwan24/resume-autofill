@@ -14,6 +14,16 @@ const input = (style = '') => {
 };
 
 describe('highlights', () => {
+  it('outlines the box a combobox is drawn as, not its tiny input', () => {
+    document.body.innerHTML = '<div class="select__control"><input role="combobox" id="c"></div>';
+    const el = document.getElementById('c') as HTMLElement;
+    applyHighlights([{ el, outcome: 'filled' }]);
+    expect((el.parentElement as HTMLElement).style.outline).toBe('2px solid #22c55e');
+    expect(el.style.outline).toBe('');
+    clearHighlights();
+    expect((el.parentElement as HTMLElement).style.outline).toBe('');
+  });
+
   it('uses the planned colours per outcome, a dashed review outline, a thicker error outline and none for no_data', () => {
     expect(outlineFor('filled')).toBe('2px solid #22c55e');
     expect(outlineFor('needs_review')).toBe('2px dashed #eab308');

@@ -22,6 +22,22 @@ export interface WriteGuard {
 
 const READ_METHODS = new Set(['GET', 'HEAD']);
 
+const COMMENTS = /#[^\n]*/g;
+
+/** A JSON body holding one GraphQL query and no mutation. Some forms load their questions this way. */
+function isGraphqlRead(body: string | null): boolean {
+  if (!body) return false;
+  let query: unknown;
+  try {
+    query = (JSON.parse(body) as { query?: unknown }).query;
+  } catch {
+    return false;
+  }
+  if (typeof query !== 'string') return false;
+  const text = query.replace(COMMENTS, '').trim();
+  return /^(?:query\b|\{)/.test(text) && !/\b(?:mutation|subscription)\b/.test(text);
+}
+
 /** Call before opening any page. Lets reads through; stops writes, sockets and service workers. */
 export async function guardWrites(context: BrowserContext): Promise<WriteGuard> {
   const log = new Map<string, BlockedRequest>();
@@ -30,7 +46,7 @@ export async function guardWrites(context: BrowserContext): Promise<WriteGuard> 
   await context.route(/^https?:\/\//, (route) => {
     const request = route.request();
     const method = request.method();
-    if (READ_METHODS.has(method)) return route.continue();
+    if (READ_METHODS.has(method) || isGraphqlRead(request.postData())) return route.continue();
     const { host, pathname } = new URL(request.url());
     const key = `${method} ${host}${pathname}`;
     const entry = log.get(key) ?? { method, host, path: pathname, count: 0 };

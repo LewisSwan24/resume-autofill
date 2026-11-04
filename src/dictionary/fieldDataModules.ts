@@ -29,7 +29,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'education.degree': s(
     '学历|学位|学历/学位|最高学历|最高学位|学历层次|学历学位|学历水平|受教育程度|教育程度|文化程度|毕业学历',
-    'Degree|Degree level|Degree type|Qualification|Qualification level|Level of education|Education level|Highest level of education|Highest qualification|Level of study|Type of degree|Degree/qualification',
+    'Degree|Degree level|Degree type|Qualification|Qualification level|Level of education|Education level|Highest level of education|Highest level of tertiary education|Highest qualification|Level of study|Type of degree|Degree/qualification',
     '编号|证书|number|certificate|专业|major|name of degree',
   ),
   'education.educationType': s(
@@ -94,7 +94,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'work.company': s(
     '公司|公司名称|单位|单位名称|工作单位|就职单位|任职公司|所在公司|实习单位|实习公司|雇主|用人单位|企业名称|公司全称|机构|机构名称',
-    'Company|Company name|Employer|Employer name|Organisation|Organization|Organisation name|Name of organisation|Business name|Workplace|Previous employer|Current employer|Most recent employer',
+    'Company|Company name|Current company|Employer|Employer name|Organisation|Organization|Organisation name|Name of organisation|Business name|Workplace|Previous employer|Current employer|Most recent employer',
     '地址|电话|邮箱|行业|规模|城市|网站|性质|address|phone|email|industry|size|city|website|location|type',
   ),
   'work.position': s(

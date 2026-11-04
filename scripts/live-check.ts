@@ -57,6 +57,11 @@ try {
   console.log(`outcomes: ${JSON.stringify(result.report.counts)}`);
   console.log(`writes blocked: ${result.blocked.reduce((n, b) => n + b.count, 0)}, sockets closed: ${result.socketsClosed}`);
   for (const b of result.blocked) console.log(`  ${b.count} x ${b.method} ${b.host}${b.path}`);
+  if (process.env.LIVE_DEBUG) {
+    for (const f of result.report.fields) {
+      console.log(`  · ${f.outcome} ${f.fieldKey ?? '-'} (${f.confidence}) "${f.label}" -> ${f.observed ?? f.value ?? ''} ${(f.candidates ?? []).map((c) => c.label).join(' | ')}`);
+    }
+  }
   if (result.navigatedTo.length > 0) {
     failed = true;
     console.log(`left the page: ${result.navigatedTo.join(', ')}`);

@@ -1,9 +1,11 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
 import { OPTION_SYNONYMS, hasCjk, matchOption } from '../dictionary';
-import type { FileData, FillIntent } from '../drivers/types';
+import type { FileData, FillIntent, OptionMatch } from '../drivers/types';
 import type { Locale, Region, Resume } from '../schema';
 import type { FieldKeyDef } from '../schema/fieldKeys';
-import type { Control, FieldKey, SectionKey } from './types';
+import type { Control, FieldKey, OptionInfo, SectionKey } from './types';
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** What resolveValue hands to toIntent: scalars, string lists, regions, or a file id (attachments). */
 export type RawValue = string | number | boolean | string[] | Region;
@@ -120,6 +122,12 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
       const given = basics.givenName.trim();
       const raw = isCjkResume(resume) ? `${family}${given}` : [given, family].filter(Boolean).join(' ');
       return raw ? { raw, source: 'basics.familyName+givenName' } : null;
+    }
+    case 'basics.currentLocation': {
+      // Asked as "where are you based": the home address answers it, but only down to the city.
+      if (clean(basics.currentLocation) !== null) return null;
+      const { country, province, city } = contact.address;
+      return province.trim() || city.trim() ? { raw: { country, province, city }, source: 'contact.address' } : null;
     }
     case 'basics.age': {
       const age = ageOf(basics.birthDate, opts.now ?? new Date());
@@ -265,6 +273,20 @@ function regionPath(region: Region): string[] {
   return parts;
 }
 
+/** Several places of one name: keep those the rest of the address also names, broadest part first. */
+function matchPlace(name: string, region: Region, options: OptionInfo[]): OptionMatch {
+  const m = matchOption(null, name, options);
+  if (m.status !== 'ambiguous') return m;
+  let hits = m.candidates;
+  for (const part of [region.country, region.province]) {
+    const word = part?.trim().toLowerCase();
+    if (!word) continue;
+    const named = hits.filter((i) => new RegExp(`(?:^|[^\\p{L}])${escapeRegExp(word)}(?:$|[^\\p{L}])`, 'iu').test(options[i]!.label));
+    if (named.length > 0) hits = named;
+  }
+  return hits.length === 1 ? { status: 'matched', index: hits[0]!, confidence: 0.8 } : { status: 'ambiguous', candidates: hits };
+}
+
 function regionText(region: Region, locale: Locale): string {
   const path = regionPath(region);
   return locale === 'zh-CN' ? path.join('') : [...path].reverse().join(', ');
@@ -328,7 +350,10 @@ export function toIntent(
       const path = regionPath(region);
       if (path.length === 0) return null;
       if (kind === 'cascader') return { kind: 'cascade', display: regionText(region, locale), path };
-      if (hasPickList(control)) return choice(null, path[path.length - 1]!, path[path.length - 1]!);
+      if (hasPickList(control)) {
+        const name = path[path.length - 1]!;
+        return { kind: 'choice', display: name, query: name, match: (options) => matchPlace(name, region, options) };
+      }
       return { kind: 'text', text: regionText(region, locale) };
     }
     case 'date': {

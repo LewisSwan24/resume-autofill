@@ -70,6 +70,12 @@ describe('planFill on a small zh form', () => {
     expect(reportOf(p, '验证码')).toMatchObject({ outcome: 'unmatched', fieldKey: null });
   });
 
+  it('leaves a control with nothing to call it by out of the report', () => {
+    const p = plan(`${text('姓名', 'a')}<div><input type="file" tabindex="-1"></div>`);
+    expect(p.plan.reports.map((r) => r.label)).toEqual(['姓名']);
+    expect(p.plan.steps).toEqual([]);
+  });
+
   it('reports unknown labels as unmatched', () => {
     const p = plan(html);
     expect(reportOf(p, '完全无关的字段')).toMatchObject({ outcome: 'unmatched', fieldKey: null });

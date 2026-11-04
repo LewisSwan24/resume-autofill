@@ -192,6 +192,83 @@ describe('evidence weights and types', () => {
     expect(s.cls[0]!.confidence).toBeLessThan(FILL_THRESHOLD);
   });
 
+  describe('a form with no section headings, as most hosted forms are', () => {
+    const fill = (s: Scanned, i: number) => {
+      expect(s.cls[i]!.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+      return s.cls[i]!.fieldKey;
+    };
+
+    it('reads a bare label as the applicant once another field shows the form is about the applicant', () => {
+      const s = scan(`${text('First Name', 'a')}${text('Last Name', 'b')}${text('Email', 'c')}${text('Phone', 'd')}${text('City', 'e')}`);
+      expect(fill(s, 2)).toBe('contact.email');
+      expect(fill(s, 3)).toBe('contact.phone');
+      expect(fill(s, 4)).toBe('contact.addressCity');
+    });
+
+    it('reads three bare labels the same way, with nothing else to go on', () => {
+      const s = scan(`${text('Full name', 'a')}${text('Email', 'b')}${text('Phone', 'c')}`);
+      expect(fill(s, 0)).toBe('basics.fullName');
+      expect(fill(s, 1)).toBe('contact.email');
+      expect(fill(s, 2)).toBe('contact.phone');
+    });
+
+    it('counts a resume upload as showing whose form it is', () => {
+      const s = scan(`${text('Name', 'a')}${text('Email', 'b')}${row('Resume', '<input id="c" type="file">', 'c')}`);
+      expect(fill(s, 0)).toBe('basics.fullName');
+      expect(fill(s, 1)).toBe('contact.email');
+    });
+
+    it.each(['Location (City)', 'Where are you currently located?', 'Current location', 'Where are you based?'])(
+      '%j asks where you are based',
+      (label) => {
+        const s = scan(`${text('First Name', 'a')}${text('Last Name', 'b')}${text(label, 'c')}`);
+        expect(fill(s, 2)).toBe('basics.currentLocation');
+      },
+    );
+
+    it('reads common questions as what they ask', () => {
+      const s = scan(`${text('Full name', 'a')}${text('Email', 'b')}${text('Phone', 'c')}
+        ${text('Current company', 'd')}
+        ${text('What is the highest level of tertiary education you have completed?', 'e')}`);
+      expect(fill(s, 3)).toBe('work.company');
+      expect(fill(s, 4)).toBe('education.degree');
+    });
+
+    it('still asks about one or two bare labels', () => {
+      const s = scan(`${text('姓名', 'a')}${text('手机', 'b')}`);
+      expect(s.cls[0]!.confidence).toBeLessThan(FILL_THRESHOLD);
+      expect(s.cls[1]!.confidence).toBeLessThan(FILL_THRESHOLD);
+    });
+
+    it('leaves a labelled section to its own keys', () => {
+      const s = scan(`${text('First Name', 'a')}${text('Last Name', 'b')}<h3>Emergency contact</h3>${text('Name', 'c')}${text('Phone', 'd')}`);
+      expect(s.cls[2]!.fieldKey).toBe('emergencyContact.name');
+      expect(s.cls[3]!.fieldKey).toBe('emergencyContact.phone');
+    });
+  });
+
+  describe('an upload box the page reads to fill the form itself', () => {
+    const file = (label: string, id: string) => row(label, `<input id="${id}" type="file">`, id);
+
+    it.each(['Autofill from resume', 'Upload your resume to autofill', 'Auto-fill with resume', '上传简历自动解析', '简历解析'])(
+      '%j is left alone even when it is the only upload box',
+      (label) => {
+        const s = scan(file(label, 'a'));
+        expect(s.cls[0]!.fieldKey).toBeNull();
+        expect(s.cls[0]!.reason).toBe('never_fill');
+      },
+    );
+
+    it('a plain upload box is still the resume', () => {
+      expect(scan(file('Resume/CV', 'a')).cls[0]!.fieldKey).toBe('attachments.resume');
+      expect(scan(file('上传简历', 'a')).cls[0]!.fieldKey).toBe('attachments.resume');
+    });
+
+    it('the wording only counts on an upload box', () => {
+      expect(scan(text('Autofill from resume', 'a')).cls[0]!.reason).not.toBe('never_fill');
+    });
+  });
+
   it('scoreField reports top candidates sorted by confidence', () => {
     const s = scan(`<h3>基本信息</h3>${text('邮箱', 'a')}`);
     const { candidates, neverFill } = scoreField(s.contexts[0]!, 'basics');

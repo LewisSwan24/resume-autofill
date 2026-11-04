@@ -25,3 +25,25 @@ describe('valuesEquivalent', () => {
     expect(valuesEquivalent('2020', '2020')).toBe(true);
   });
 });
+
+describe('valuesEquivalent: phone numbers a widget formats as it writes', () => {
+  it.each([
+    ['0412345678', '0412 345 678'],
+    ['0412345678', '(04) 1234-5678'],
+    ['+61 412 345 678', '+61412345678'],
+    ['0412345678', '+61 412 345 678'],
+  ])('%j reads back as %j', (expected, observed) => {
+    expect(valuesEquivalent(expected, observed)).toBe(true);
+  });
+
+  it.each([
+    ['0412345678', '0412 345 679'],
+    ['0412345678', '412 345 678 9'],
+    ['0412345678', '412345678'],
+    ['12345678', '1234 5678 90'],
+    ['2020-09-01', '20200901'],
+    ['123 Queen Street', '123 Queen St'],
+  ])('%j does not read back as %j', (expected, observed) => {
+    expect(valuesEquivalent(expected, observed)).toBe(false);
+  });
+});

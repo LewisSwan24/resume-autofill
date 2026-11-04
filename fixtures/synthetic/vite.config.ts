@@ -23,6 +23,7 @@ export default defineConfig({
         nativeFrame: page('./native/frame.html'),
         antd: page('./antd/index.html'),
         element: page('./element/index.html'),
+        aria: page('./aria/index.html'),
       },
     },
   },

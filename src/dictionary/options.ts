@@ -134,6 +134,10 @@ function matchSynonymGroup(domain: string, code: string, cands: Cand[]): OptionM
   return result(hits, CONF_SYNONYM_CONTAINMENT);
 }
 
+/** What follows a place name: a comma, or a region code ending the label or followed by a comma. */
+const REGION_AFTER_PLACE = /^(?:\s*,|\s+[A-Z]{2,4}(?:\s*,|\s*$))/;
+const CONF_PLACE = 0.8;
+
 const DIAL_CODE = /^\+?(\d{1,4})$/;
 
 /**
@@ -188,6 +192,18 @@ export function matchOption(
     const re = new RegExp(`\\+${dial[1]}(?![\\d-])`);
     const hit = result(cands.filter((c) => re.test(c.norm)), CONF_DIAL_CODE);
     if (hit) return hit;
+  }
+
+  // A place followed by its region: "Brisbane" ↔ "Brisbane QLD, Australia". Before containment, so a
+  // second place of that name makes it ambiguous rather than leaving whichever is short enough.
+  if (text.length >= MIN_FUZZY_LENGTH && !hasCjk(text)) {
+    const prefix = text.toLowerCase();
+    const hits = cands.filter((c) => {
+      const label = options[c.index]!.label.trim();
+      return label.toLowerCase().startsWith(prefix) && REGION_AFTER_PLACE.test(label.slice(text.length));
+    });
+    const place = result(hits, CONF_PLACE);
+    if (place) return place;
   }
 
   // (c) unique containment, length ratio ≥ 0.5

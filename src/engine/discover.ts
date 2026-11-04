@@ -2,9 +2,12 @@
 // Library widgets (antd / Element Plus) are matched first and consume their inner inputs;
 // everything else is reported as a native control.
 import {
+  ANSWER_BUTTON_SELECTOR,
+  ARIA_COMBOBOX_SELECTOR,
   LIBRARY_OVERLAY_SELECTOR,
   LIBRARY_ROOT_SELECTOR,
   detectDateGranularity,
+  isAriaMultiple,
   isUnsupportedLibraryRoot,
   matchLibraryWidget,
   type LibraryWidget,
@@ -155,7 +158,35 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[]): void {
     candidates.set(el, buildWidgetDraft(el, widget));
   }
 
-  // 2. Native controls.
+  // 2. Comboboxes outside those libraries consume their inner inputs too.
+  for (const el of Array.from(scope.querySelectorAll<HTMLElement>(ARIA_COMBOBOX_SELECTOR))) {
+    if (insideAny(el, blocked) || el.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
+    blocked.add(el);
+    if (isDisabledEl(el) || !isVisible(el)) continue;
+    const draft: Draft = { el, kind: 'select', lib: 'aria' };
+    if (isAriaMultiple(el)) draft.multiple = true;
+    candidates.set(el, draft);
+  }
+
+  // Answer buttons: two or more pressable buttons side by side, usually with a hidden input behind them.
+  const toggleGroups = new Set<HTMLElement>();
+  for (const button of Array.from(scope.querySelectorAll<HTMLElement>(ANSWER_BUTTON_SELECTOR))) {
+    const group = button.parentElement;
+    if (!group || insideAny(group, blocked) || button.closest('[role=toolbar]')) continue;
+    if (group.querySelectorAll(`:scope > ${ANSWER_BUTTON_SELECTOR}`).length >= 2) toggleGroups.add(group);
+  }
+  for (const group of toggleGroups) {
+    blocked.add(group);
+    if (!isVisible(group)) continue;
+    const options = Array.from(group.querySelectorAll<HTMLElement>(`:scope > ${ANSWER_BUTTON_SELECTOR}`)).map((b) => ({
+      label: text(b.textContent),
+      disabled: isDisabledEl(b),
+    }));
+    if (options.every((o) => o.disabled)) continue;
+    candidates.set(group, { el: group, kind: 'radio', lib: 'aria', options });
+  }
+
+  // 3. Native controls.
   const radios = new Map<unknown, Map<string, HTMLInputElement[]>>();
   const checkboxes = new Map<unknown, Map<string, HTMLInputElement[]>>();
   const radioGroups = new Map<Element, HTMLInputElement[]>();
@@ -199,7 +230,8 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[]): void {
           inputType: type,
           dateGranularity: type === 'month' ? 'month' : 'day',
         });
-      } else {
+      } else if (el.getAttribute('aria-hidden') !== 'true') {
+        // aria-hidden: a companion a widget renders for validation, not a field of its own.
         candidates.set(el, { el, kind: 'text', lib: 'native', inputType: type });
       }
     } else if (el instanceof HTMLSelectElement) {
@@ -245,7 +277,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[]): void {
     }
   }
 
-  // 3. Emit in document order, descending into open shadow roots at the host position.
+  // 4. Emit in document order, descending into open shadow roots at the host position.
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>('*'))) {
     const draft = candidates.get(el);
     if (draft) out.push(draft);

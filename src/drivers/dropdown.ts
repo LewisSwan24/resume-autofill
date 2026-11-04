@@ -17,7 +17,7 @@ function classTokens(el: Element): string[] {
 }
 
 /** Hidden by class (`ant-select-dropdown-hidden`), aria-hidden, or mid leave-animation (`*-leave-active`). */
-function isRetired(el: Element): boolean {
+export function isRetired(el: Element): boolean {
   for (let n: Element | null = el; n; n = n.parentElement) {
     if (n.getAttribute('aria-hidden') === 'true') return true;
     for (const token of classTokens(n)) {

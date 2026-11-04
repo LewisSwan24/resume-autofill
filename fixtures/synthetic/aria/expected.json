@@ -1,0 +1,23 @@
+{
+  "__resume": "en-AU",
+  "__review": ["currentLocation", "visaType"],
+  "firstName": "Zhiyuan",
+  "lastName": "Lin",
+  "email": "zhiyuan.lin@example.com",
+  "phone": "0412345678",
+  "country": "+61",
+  "degree": "Master",
+  "sponsorship": "No",
+  "cities": ["Brisbane"],
+  "university": "The University of Queensland",
+  "heard": "LinkedIn",
+  "employment": "Graduate program",
+  "city": "Brisbane QLD, Australia",
+  "currentLocation": "",
+  "visaType": "",
+  "privacy": "",
+  "authorised": "Yes",
+  "workedHere": "",
+  "resume": ["Zhiyuan-Lin-Resume.pdf"],
+  "autofillResume": []
+}

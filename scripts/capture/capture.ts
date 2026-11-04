@@ -1,7 +1,7 @@
 // Records one application page into fixtures/captured/<ats>/<name>/: a HAR for replay, a static snapshot,
 // screenshots and meta.json, all sanitised and audited. It only loads the page: no filling, no clicks.
 // A `beforeRecord` hook (the manual login) runs before the HAR starts, so credentials are never recorded.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { BrowserContext, Page } from '@playwright/test';
 import { Scrubber, auditHar, auditHtml, sanitizeHar, sanitizeStaticHtml, type Finding, type HarFile, type SidecarIo } from './sanitize.ts';
@@ -109,6 +109,9 @@ export function sidecarIo(dir: string): SidecarIo {
     },
     write(name, text) {
       writeFileSync(path.join(dir, path.basename(name)), text);
+    },
+    remove(name) {
+      rmSync(path.join(dir, path.basename(name)), { force: true });
     },
   };
 }

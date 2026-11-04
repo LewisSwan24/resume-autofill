@@ -51,6 +51,14 @@ describe('resolveValue', () => {
     expect(resolveValue('education.school', zh, 5, 'education')).toBeNull();
   });
 
+  it('answers where you are based from the address when no location is given, down to the city', () => {
+    const value = resolveValue('basics.currentLocation', en, 0, 'basics');
+    expect(value?.source).toBe('contact.address');
+    expect(value?.raw).toEqual({ country: 'Australia', province: 'QLD', city: 'Brisbane' });
+    const asked = zh.basics.currentLocation;
+    expect(resolveValue('basics.currentLocation', zh, 0, 'basics')?.raw).toEqual(asked);
+  });
+
   it('keeps booleans, numbers, lists, regions and the derived age', () => {
     expect(resolveValue('workRights.requiresSponsorship', en, 0, 'workRights')?.raw).toBe(false);
     expect(resolveValue('jobIntention.cities', zh, 0, 'jobIntention')?.raw).toEqual(['深圳', '杭州']);
@@ -166,6 +174,15 @@ describe('toIntent', () => {
     // a single checkbox cannot hold a non-bool key; a text box gets the label
     expect(intent('education.school', 'X', control('checkbox'))).toBeNull();
     expect(intent('jobIntention.acceptRelocation', true, control('text'))).toEqual({ kind: 'text', text: '是' });
+  });
+
+  it('region on a search box: the rest of the address tells places of one name apart', () => {
+    const region = { country: 'Australia', province: 'QLD', city: 'Brisbane' };
+    const pick = (...labels: string[]) => picked(intent('basics.currentLocation', region, control('select'), 'en-AU'), opts(...labels));
+    expect(pick('Brisbane, Queensland, Australia', 'Brisbane, California, United States')).toBe('Brisbane, Queensland, Australia');
+    expect(pick('Brisbane, QLD, Australia', 'Brisbane, WA, Australia')).toBe('Brisbane, QLD, Australia');
+    expect(pick('Brisbane, Ontario, Canada', 'Brisbane, California, United States')).toBe('ambiguous');
+    expect(pick('Brisbane, QLD, Australia', 'Brisbane, QLD 4000, Australia')).toBe('ambiguous');
   });
 
   it('region: cascade path, joined text per locale, choice on a select', () => {

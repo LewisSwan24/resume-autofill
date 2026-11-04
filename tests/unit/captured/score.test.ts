@@ -93,6 +93,41 @@ describe('scoreSample', () => {
     expect(out.join()).toMatch(/unexpected change text#other/);
   });
 
+  describe('a gap only a live page can fill, since its answers come from a search service', () => {
+    const gap = { City: { selector: '#city', reason: 'r', contains: 'Brisbane', live: true as const } };
+    const score = (mode: string, city: string) => {
+      const after = filled({
+        readings: { City: city },
+        snapshot: { 'text#city': city },
+        coverage: { City: ['text#city'] },
+      });
+      return scoreSample(sample(expected({ __knownGaps: gap, __knownGapsMax: 1 })), mode, emptyPage, after, report());
+    };
+
+    it('stays a gap in a replay', () => {
+      const s = score('harness', '');
+      expect(s.gaps).toEqual(['City']);
+      expect(accuracyOf(s)).toBeLessThan(100);
+      expect(scoreProblems(s, expected({ __knownGaps: gap, __knownGapsMax: 1 }))).toEqual([]);
+    });
+
+    it('counts as correct on a live page when it holds the answer', () => {
+      const s = score('live', 'Brisbane, Queensland, Australia');
+      expect(s.gaps).toEqual([]);
+      expect(s.correct).toBe(4);
+      expect(s.extras).toEqual([]);
+      expect(scoreProblems(s, expected({ __knownGaps: gap, __knownGapsMax: 1 }))).toEqual([]);
+    });
+
+    it('is missing on a live page when it stays empty', () => {
+      expect(score('live', '').missing).toEqual(['City']);
+    });
+
+    it('is wrong on a live page when it holds something else', () => {
+      expect(score('live', 'Sydney').wrong.map((w) => w.label)).toEqual(['City']);
+    });
+  });
+
   it('counts known gaps as not correct', () => {
     const e = expected({ __knownGaps: { Other: { selector: '#other', reason: 'no driver' } }, __knownGapsMax: 1 });
     const score = scoreSample(sample(e), 'harness', emptyPage, filled({ coverage: { Other: ['text#other'] } }), report());

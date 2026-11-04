@@ -108,6 +108,7 @@ const ADDRESS_KEYS = [
 export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'basics.fullName': ['basics.familyName', 'basics.givenName'],
   'basics.age': ['basics.birthDate'],
+  'basics.currentLocation': ['contact.addressCountry', 'contact.addressProvince', 'contact.addressCity'],
   'contact.phoneFull': ['contact.phone', 'contact.phoneCountryCode'],
   'contact.addressFull': ADDRESS_KEYS,
   'education.endDate': ['education.current'],

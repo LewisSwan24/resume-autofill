@@ -239,6 +239,9 @@ function sidecarStore() {
     files,
     io: {
       read: (name: string) => files[name] ?? null,
+      remove: (name: string) => {
+        delete files[name];
+      },
       write: (name: string, text: string) => {
         files[name] = text;
       },
@@ -277,6 +280,18 @@ describe('sanitizeHar', () => {
     const placeholder = /REDACTED-\d+/.exec(e.request.url)![0];
     expect(e.request.queryString[0]!.value).toBe(placeholder);
     expect(e.response.content.text).toContain(placeholder);
+  });
+
+  it('drops a request whose sent body cannot be read, as telemetry often is', () => {
+    const har = makeHar();
+    const store = sidecarStore();
+    const count = har.log.entries.length;
+    const binary = { ...har.log.entries[0]! };
+    binary.request = { ...binary.request, method: 'POST', postData: { mimeType: 'text/plain', _file: 'gone-sidecar' } };
+    har.log.entries.push(binary);
+    sanitizeHar(har, new Scrubber(), store.io);
+    expect(har.log.entries).toHaveLength(count);
+    expect(auditHar(har, store.io).filter((f) => f.kind === 'unreadable')).toEqual([]);
   });
 
   it('rewrites text sidecars and leaves binary sidecars untouched', () => {

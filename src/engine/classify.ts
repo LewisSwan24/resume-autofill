@@ -4,6 +4,7 @@ import {
   isExactOnlySynonym,
   isExcluded,
   isNeverFill,
+  isResumeParser,
   matchSection,
   normalizeLabel,
   normalizedSimilarity,
@@ -34,6 +35,8 @@ const NAME_ID_DISTINCT_WEIGHT = 0.8;
 /** Candidates this close to the best are ambiguous: none may exceed AMBIGUOUS_CAP (→ needs review). */
 const AMBIGUITY_MARGIN = 0.02;
 export const AMBIGUOUS_CAP = 0.7;
+/** This many bare labels (name, email, phone...) under no heading read as one person's details. */
+const MIN_BARE_LABELS_FOR_ONE_PERSON = 3;
 /** Similarities below this are ignored. */
 const MIN_SIMILARITY = 0.45;
 const MIN_CANDIDATE = 0.3;
@@ -170,6 +173,7 @@ function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null
 /** Candidates for one control within `section` (null = unknown section: no bonus / penalty). */
 export function scoreField(ctx: FieldContext, section: SectionKey | null): FieldScores {
   if (ctx.evidence.some((e) => isNeverFill(e.text))) return { neverFill: true, candidates: [] };
+  if (ctx.control.kind === 'file' && ctx.evidence.some((e) => isResumeParser(e.text))) return { neverFill: true, candidates: [] };
 
   // A legend / nearby heading that merely repeats the section title says nothing about the field itself
   // (unless it is all we have).
@@ -236,11 +240,53 @@ export function classifySection(ctx: FieldContext): SectionResult {
 
 // ---- entry point ----------------------------------------------------------------------------------------
 
+const isApplicantKey = (key: FieldKey): boolean => {
+  const module = key.split('.')[0];
+  return module === 'basics' || module === 'contact';
+};
+
+/** The one applicant key among the candidates tied for the top, if the control has such a tie. */
+function tiedApplicantCandidate(scores: FieldScores): ScoredCandidate | null {
+  const top = scores.candidates[0];
+  if (!top) return null;
+  const tied = scores.candidates.filter((c) => top.score - c.score < AMBIGUITY_MARGIN);
+  if (tied.length < 2) return null;
+  const own = tied.filter((c) => isApplicantKey(c.fieldKey));
+  return own.length === 1 && own[0]!.score > AMBIGUOUS_CAP ? own[0]! : null;
+}
+
+/**
+ * A bare "Email" under no heading may be anyone's, so alone it goes to review. On a page that is clearly
+ * the applicant's own form it is the applicant's: some other field asks about the applicant outright,
+ * or several bare labels together read as one person's details.
+ */
+function settleBareLabels(scores: FieldScores[], sections: SectionResult[]): void {
+  const bare = scores.flatMap((_, i) => (!sections[i]!.section || sections[i]!.inferred ? [i] : []));
+  const ties = bare.flatMap((i) => {
+    const cand = tiedApplicantCandidate(scores[i]!);
+    return cand ? [{ i, cand }] : [];
+  });
+  const outright = bare.some((i) => {
+    const top = scores[i]!.candidates[0];
+    if (!top || top.confidence < FILL_THRESHOLD) return false;
+    return isApplicantKey(top.fieldKey) || top.fieldKey === 'attachments.resume';
+  });
+  if (!outright && ties.length < MIN_BARE_LABELS_FOR_ONE_PERSON) return;
+  for (const { i, cand } of ties) {
+    const s = scores[i]!;
+    cand.confidence = Math.min(1, cand.score);
+    s.candidates = [cand, ...s.candidates.filter((c) => c !== cand)];
+    const def = getFieldKeyDef(cand.fieldKey);
+    sections[i] = { section: def?.sections[0] ?? null, confidence: round3(cand.confidence * INFERRED_SECTION_FACTOR), inferred: true };
+  }
+}
+
 /** Classification of every control: sections, scores, then one global assignment (see assign.ts). */
 export function classifyAll(contexts: FieldContext[]): Classification[] {
   const sections = contexts.map(classifySection);
   // An inferred section is reported but never fed back into scoring (it would confirm its own guess).
   const scores = contexts.map((ctx, i) => scoreField(ctx, sections[i]!.inferred ? null : sections[i]!.section));
+  settleBareLabels(scores, sections);
   return assign(
     contexts,
     scores,

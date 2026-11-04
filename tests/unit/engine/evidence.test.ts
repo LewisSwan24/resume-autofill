@@ -216,6 +216,41 @@ describe('nearby text', () => {
   });
 });
 
+describe('questions as application forms write them', () => {
+  const LONG = 'Do you have full legal working rights within Australia or New Zealand and do not require further visa sponsorship now or in the future?';
+
+  it('keeps a long question when it is the label of the control', () => {
+    const ev = evidenceAt(`<label for="q">${LONG}<span>*</span></label><input id="q">`, '#q');
+    expect(texts(ev, 'label-for')).toEqual([LONG]);
+  });
+
+  it('still drops a paragraph posing as a label', () => {
+    const ev = evidenceAt(`<label for="q">${LONG.repeat(3)}</label><input id="q">`, '#q');
+    expect(texts(ev, 'label-for')).toEqual([]);
+  });
+
+  it('reads a one-line question above a control as its label', () => {
+    const ev = evidenceAt(
+      '<div><div class="q"><div>What are your current work rights in Australia?<span>✱</span></div></div><div><div><select id="q"><option>Yes</option></select></div></div></div>',
+      '#q',
+    );
+    expect(texts(ev, 'nearby-text')).toEqual(['What are your current work rights in Australia?']);
+  });
+
+  it('takes a wrapping label up to the control, not the messages after it', () => {
+    const ev = evidenceAt(
+      '<label><div>Current location <span>✱</span></div><div><input id="q"><div>No location found. Try another</div></div></label>',
+      '#q',
+    );
+    expect(texts(ev, 'label-wrap')).toEqual(['Current location']);
+  });
+
+  it('keeps a wrapping label whose text follows the control', () => {
+    const ev = evidenceAt('<label><input id="q" type="text"> Nickname</label>', '#q');
+    expect(texts(ev, 'label-wrap')).toEqual(['Nickname']);
+  });
+});
+
 describe('cleaning and ordering', () => {
   it('trims, collapses whitespace and strips trailing colons / asterisks', () => {
     expect(cleanEvidenceText('  Full\n  name :  ')).toBe('Full name');

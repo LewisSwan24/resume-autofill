@@ -77,7 +77,9 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   for (const ctx of scan.contexts) controls.set(ctx.control.id, ctx.control);
 
   const results: FieldReport[] = [...plan.reports];
-  for (const step of plan.steps) {
+  // Files first: many forms read an uploaded resume and write over their fields with what they find.
+  const steps = [...plan.steps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
+  for (const step of steps) {
     const control = controls.get(step.fieldId);
     if (!control) {
       results.push({

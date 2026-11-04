@@ -148,6 +148,27 @@ export const LIBRARY_ROOT_SELECTOR = [
   ...LIBRARY_WIDGETS.map((w) => w.root),
 ].join(', ');
 
+/** Comboboxes outside the libraries above. A native select says role=combobox too, but is handled as a select. */
+export const ARIA_COMBOBOX_SELECTOR = '[role=combobox]:not(select), button[aria-haspopup="listbox"]';
+
+export const ANSWER_BUTTON_SELECTOR = 'button[aria-pressed]';
+
+/**
+ * The part of the page that shows this combobox's value. react-select keeps it beside the input, inside
+ * its control box; a box holding another combobox is some page wrapper instead.
+ */
+export function ariaValueScope(el: HTMLElement): HTMLElement {
+  const box = el.closest<HTMLElement>('[class*="__control"], [class*="-control"]');
+  return box && box.querySelectorAll(ARIA_COMBOBOX_SELECTOR).length === 1 ? box : el;
+}
+
+export function isAriaMultiple(el: HTMLElement): boolean {
+  return (
+    el.getAttribute('aria-multiselectable') === 'true' ||
+    ariaValueScope(el).querySelector('[class*="is-multi"], [class*="multi-value"]') !== null
+  );
+}
+
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {
   return LIBRARY_UNSUPPORTED.find((u) => el.matches(u.root));
 }

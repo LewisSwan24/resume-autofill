@@ -32,6 +32,8 @@ export interface LocatedEntry {
 /** Keeps what the field should hold, so moving it back to `fields` is a small edit. */
 export interface KnownGap extends CapturedField {
   reason: string;
+  /** Answers come from a search service a replay does not have: a gap in a replay, a field on the live page. */
+  live?: true;
 }
 
 export interface CapturedExpected {
@@ -110,6 +112,8 @@ export interface SampleScore {
   /** Changed although nothing in `fields` covers them. Never acceptable. */
   extras: ControlChange[];
   gaps: string[];
+  /** Gaps counted as fields because this run was on the live page. */
+  liveFields: number;
   /** A selector that no longer finds anything: the page changed or the sample is stale. */
   stale: string[];
   trapsFilled: string[];
@@ -151,7 +155,11 @@ export function scoreSample(
   const stale: string[] = [];
   let correct = 0;
 
-  for (const [label, field] of Object.entries(expected.fields)) {
+  const allGaps = Object.entries(expected.__knownGaps ?? {});
+  const liveFields = mode === 'live' ? allGaps.filter(([, gap]) => gap.live) : [];
+  const checked: Record<string, CapturedField> = { ...expected.fields, ...Object.fromEntries(liveFields) };
+
+  for (const [label, field] of Object.entries(checked)) {
     const actual = after.readings[label] ?? null;
     if (matches(field, actual)) correct++;
     else if (isEmptyReading(actual)) missing.push(label);
@@ -159,10 +167,10 @@ export function scoreSample(
     if (!field.exists && (after.coverage[label] ?? []).length === 0) stale.push(label);
   }
 
-  const covered = new Set(Object.keys(expected.fields).flatMap((label) => after.coverage[label] ?? []));
+  const covered = new Set(Object.keys(checked).flatMap((label) => after.coverage[label] ?? []));
   const extras = changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key));
 
-  const gaps = Object.keys(expected.__knownGaps ?? {});
+  const gaps = allGaps.filter(([label]) => !(label in checked)).map(([label]) => label);
   for (const label of [...gaps, ...Object.keys(expected.__review ?? {})]) {
     if ((after.coverage[label] ?? []).length === 0) stale.push(label);
   }
@@ -185,7 +193,8 @@ export function scoreSample(
   return {
     sample: `${sample.ats}/${sample.name}`,
     mode,
-    fields: Object.keys(expected.fields).length,
+    fields: Object.keys(checked).length,
+    liveFields: liveFields.length,
     correct,
     missing,
     wrong,
@@ -209,8 +218,8 @@ export function scoreProblems(score: SampleScore, expected: CapturedExpected): s
   for (const label of score.trapsFilled) out.push(`trap filled: ${label}`);
   out.push(...score.reviewProblems);
   for (const label of score.falselyFilled) out.push(`reported filled with nothing read back: ${label}`);
-  if (score.gaps.length !== expected.__knownGapsMax) {
-    out.push(`known gaps: ${score.gaps.length}, but __knownGapsMax is ${expected.__knownGapsMax}. Gaps may only shrink, and the number moves with them`);
+  if (score.gaps.length + score.liveFields !== expected.__knownGapsMax) {
+    out.push(`known gaps: ${score.gaps.length + score.liveFields}, but __knownGapsMax is ${expected.__knownGapsMax}. Gaps may only shrink, and the number moves with them`);
   }
   return out;
 }

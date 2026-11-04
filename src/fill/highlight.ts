@@ -1,4 +1,5 @@
 // Highlighting of filled / suspicious fields with inline outlines (and restoring them afterwards).
+import { ARIA_COMBOBOX_SELECTOR, ariaValueScope } from '../drivers/libraries';
 import type { Outcome } from '../engine/types';
 import { HIGHLIGHT_COLORS } from '../ui/tokens';
 
@@ -35,9 +36,11 @@ const saved = new Map<HTMLElement, Saved>();
 
 /** Outline each element by outcome; the first highlight of an element remembers its inline style. */
 export function applyHighlights(entries: readonly HighlightEntry[]): void {
-  for (const { el, outcome } of entries) {
+  for (const { el: control, outcome } of entries) {
     const outline = outlineFor(outcome);
     if (outline === null) continue;
+    // A combobox input can be 2px wide inside the box it is drawn as.
+    const el = control.matches(ARIA_COMBOBOX_SELECTOR) ? ariaValueScope(control) : control;
     if (!saved.has(el)) saved.set(el, { outline: el.style.outline, outlineOffset: el.style.outlineOffset });
     el.style.outline = outline;
     el.style.outlineOffset = '2px';

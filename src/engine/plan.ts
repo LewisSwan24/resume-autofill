@@ -68,6 +68,8 @@ export function planFill(
     if (!cls) return;
     const report = baseReport(ctx, cls);
 
+    // Nothing to show the user but an internal id, and nothing to fill it from.
+    if (ctx.evidence.length === 0) return;
     if (cls.reason === 'never_fill') {
       reports.push({ ...report, fieldKey: null, confidence: 1 });
       return;

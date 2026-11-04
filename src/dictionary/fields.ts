@@ -47,6 +47,18 @@ export const NEVER_FILL: { zh: string[]; en: string[] } = {
   ],
 };
 
+// Upload boxes the page reads to fill the form itself: uploading there would overwrite what was just filled.
+const RESUME_PARSER = [
+  'autofill', 'auto-fill', 'auto fill', 'parse resume', 'parse your resume', 'resume parser',
+  '自动解析', '简历解析', '解析简历', '智能解析', '一键解析', '自动填写', '自动填充',
+];
+
+/** True when an upload box's label says the page will read the file and fill the form from it. */
+export function isResumeParser(label: string): boolean {
+  const t = normalizeLabel(label);
+  return !!t && RESUME_PARSER.some((w) => containsPhrase(t, normalizeLabel(w), 'prefix'));
+}
+
 // Questions that legitimately contain "同意/consent/agree" wording but are ordinary profile fields.
 const NEVER_FILL_EXEMPT = ['调剂', '调配', '外派', '服从', '异地', 'relocat', 'sponsor', 'work rights', 'work authori', 'background check', 'reference check'];
 

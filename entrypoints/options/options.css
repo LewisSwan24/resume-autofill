@@ -1,13 +1,10 @@
-/* Options page styles: compact, neutral, no UI library. */
-:root {
-  --raf-bg: #f4f5f7;
-  --raf-card: #fff;
-  --raf-border: #d9dde3;
-  --raf-text: #1f2430;
-  --raf-muted: #6b7280;
-  --raf-accent: #2563eb;
-  --raf-danger: #c62828;
-  --raf-ok: #1b7f3b;
+/*
+ * Options page styles: compact, neutral, no UI library.
+ * All colours, fonts, radii, spacing, shadows, motion and z-indices come from the shared `--raf-*` tokens
+ * (src/ui/theme.css, imported before this file). Do not add literal colours here.
+ */
+
+html {
   color-scheme: light;
 }
 
@@ -17,55 +14,56 @@
 
 body {
   margin: 0;
-  background: var(--raf-bg);
-  color: var(--raf-text);
-  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--raf-color-bg);
+  color: var(--raf-color-text);
+  font: var(--raf-font-size-md) / var(--raf-line-height) var(--raf-font-sans);
 }
 
 h1 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--raf-font-size-xl);
 }
 
 h2 {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
+  margin: 0 0 var(--raf-space-2);
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
 }
 
 .raf-header {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--raf-card);
-  border-bottom: 1px solid var(--raf-border);
+  gap: var(--raf-space-3);
+  padding: var(--raf-space-3) var(--raf-space-4);
+  background: var(--raf-color-surface);
+  border-bottom: var(--raf-border-width) solid var(--raf-color-border);
+  box-shadow: var(--raf-shadow-1);
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: var(--raf-z-sticky);
 }
 
 .raf-status {
   margin-left: auto;
-  font-size: 12px;
-  color: var(--raf-muted);
+  font-size: var(--raf-font-size-sm);
+  color: var(--raf-color-text-muted);
   min-height: 1em;
 }
 .raf-status.is-saved {
-  color: var(--raf-ok);
+  color: var(--raf-color-success);
 }
 .raf-status.is-invalid,
 .raf-status.is-error {
-  color: var(--raf-danger);
+  color: var(--raf-color-danger);
 }
 
 .raf-body {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--raf-space-3);
   max-width: 1200px;
   margin: 0 auto;
-  padding: 12px 16px 32px;
+  padding: var(--raf-space-3) var(--raf-space-4) calc(var(--raf-space-6) + var(--raf-space-2));
   align-items: start;
 }
 .raf-body-single {
@@ -76,29 +74,29 @@ h2 {
 .raf-main {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--raf-space-3);
   min-width: 0;
 }
 
 .raf-card {
-  background: var(--raf-card);
-  border: 1px solid var(--raf-border);
-  border-radius: 6px;
-  padding: 10px 12px;
+  background: var(--raf-color-surface);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  padding: var(--raf-space-3);
 }
 
 .raf-pad {
-  padding: 16px;
+  padding: var(--raf-space-4);
 }
 
 .raf-muted {
-  color: var(--raf-muted);
+  color: var(--raf-color-text-muted);
 }
 .raf-error {
-  color: var(--raf-danger);
+  color: var(--raf-color-danger);
 }
 .raf-ok {
-  color: var(--raf-ok);
+  color: var(--raf-color-success);
 }
 
 /* ------------------------------------------------------------- controls */
@@ -111,10 +109,10 @@ select,
 textarea {
   width: 100%;
   min-width: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--raf-border);
-  border-radius: 4px;
-  background: #fff;
+  padding: var(--raf-space-1) var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-color-surface);
   color: inherit;
   font: inherit;
 }
@@ -123,65 +121,70 @@ textarea {
 }
 input:focus,
 select:focus,
-textarea:focus {
-  outline: 2px solid color-mix(in srgb, var(--raf-accent) 40%, transparent);
-  border-color: var(--raf-accent);
+textarea:focus,
+button:focus-visible {
+  outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
+  border-color: var(--raf-color-primary);
 }
 input:disabled,
 select:disabled {
-  background: #f0f1f3;
-  color: var(--raf-muted);
+  background: var(--raf-color-surface-hover);
+  color: var(--raf-color-text-muted);
 }
 
 button,
 .raf-button {
   display: inline-block;
-  padding: 3px 10px;
-  border: 1px solid var(--raf-border);
-  border-radius: 4px;
-  background: #fff;
+  padding: var(--raf-space-1) var(--raf-space-3);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-color-surface);
   color: inherit;
   font: inherit;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background-color var(--raf-motion-duration) var(--raf-motion-easing),
+    border-color var(--raf-motion-duration) var(--raf-motion-easing);
 }
 button:hover:not(:disabled),
 .raf-button:hover {
-  border-color: var(--raf-accent);
-  color: var(--raf-accent);
+  border-color: var(--raf-color-primary);
+  color: var(--raf-color-primary);
 }
 button:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: var(--raf-opacity-disabled);
 }
 button.raf-primary {
-  background: var(--raf-accent);
-  border-color: var(--raf-accent);
-  color: #fff;
+  background: var(--raf-color-primary);
+  border-color: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
 }
 button.raf-primary:hover:not(:disabled) {
-  color: #fff;
-  filter: brightness(1.08);
+  background: var(--raf-color-primary-hover);
+  border-color: var(--raf-color-primary-hover);
+  color: var(--raf-color-primary-text);
 }
 button.raf-danger,
 .raf-danger {
-  color: var(--raf-danger);
+  color: var(--raf-color-danger);
 }
 button.raf-danger:hover:not(:disabled) {
-  border-color: var(--raf-danger);
-  color: var(--raf-danger);
+  border-color: var(--raf-color-danger);
+  color: var(--raf-color-danger);
 }
 
 .raf-row {
   display: flex;
-  gap: 6px;
+  gap: var(--raf-space-2);
   align-items: center;
   flex-wrap: wrap;
 }
 .raf-check {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--raf-space-1);
   white-space: nowrap;
 }
 
@@ -189,22 +192,22 @@ button.raf-danger:hover:not(:disabled) {
 
 .raf-resumes {
   list-style: none;
-  margin: 0 0 8px;
+  margin: 0 0 var(--raf-space-2);
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--raf-space-1);
 }
 .raf-resume {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--raf-space-2);
   width: 100%;
   text-align: left;
 }
 .raf-resume.is-selected {
-  border-color: var(--raf-accent);
-  background: color-mix(in srgb, var(--raf-accent) 8%, #fff);
+  border-color: var(--raf-color-primary);
+  background: color-mix(in srgb, var(--raf-color-primary) 8%, var(--raf-color-surface));
 }
 .raf-resume-title {
   flex: 1;
@@ -212,33 +215,33 @@ button.raf-danger:hover:not(:disabled) {
   text-overflow: ellipsis;
 }
 .raf-badge {
-  padding: 0 6px;
-  border-radius: 8px;
-  background: #eceff3;
-  color: var(--raf-muted);
-  font-size: 11px;
+  padding: 0 var(--raf-space-2);
+  border-radius: var(--raf-radius-pill);
+  background: color-mix(in srgb, var(--raf-color-text-muted) var(--raf-tint-strength), transparent);
+  color: var(--raf-color-text-muted);
+  font-size: var(--raf-font-size-xs);
 }
 .raf-badge-active {
-  background: #fff4d6;
-  color: #8a5a00;
+  background: color-mix(in srgb, var(--raf-color-warning) var(--raf-tint-strength), transparent);
+  color: var(--raf-color-warning);
 }
 .raf-new {
   display: flex;
-  gap: 6px;
+  gap: var(--raf-space-2);
 }
 .raf-new select {
   flex: 1;
 }
 
 .raf-side .raf-field {
-  margin-bottom: 6px;
+  margin-bottom: var(--raf-space-2);
 }
 
 /* ------------------------------------------------------------- editor header */
 
 .raf-resume-head {
   display: flex;
-  gap: 10px;
+  gap: var(--raf-space-3);
   align-items: flex-end;
   flex-wrap: wrap;
 }
@@ -252,23 +255,23 @@ button.raf-danger:hover:not(:disabled) {
 .raf-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--raf-space-1);
 }
 .raf-tabs button {
-  border-radius: 14px;
-  padding: 2px 10px;
+  border-radius: var(--raf-radius-pill);
+  padding: 0 var(--raf-space-3);
 }
 .raf-tabs button.is-selected {
-  background: var(--raf-accent);
-  border-color: var(--raf-accent);
-  color: #fff;
+  background: var(--raf-color-primary);
+  border-color: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
 }
 .raf-count {
-  margin-left: 4px;
-  padding: 0 5px;
-  border-radius: 8px;
-  background: rgb(0 0 0 / 12%);
-  font-size: 11px;
+  margin-left: var(--raf-space-1);
+  padding: 0 var(--raf-space-1);
+  border-radius: var(--raf-radius-pill);
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-size: var(--raf-font-size-xs);
 }
 
 /* ------------------------------------------------------------- fields */
@@ -276,12 +279,12 @@ button.raf-danger:hover:not(:disabled) {
 .raf-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px 12px;
+  gap: var(--raf-space-2) var(--raf-space-3);
 }
 .raf-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--raf-space-1);
   min-width: 0;
   border: 0;
   padding: 0;
@@ -291,24 +294,24 @@ button.raf-danger:hover:not(:disabled) {
   grid-column: 1 / -1;
 }
 .raf-label {
-  font-size: 12px;
-  color: var(--raf-muted);
+  font-size: var(--raf-font-size-sm);
+  color: var(--raf-color-text-muted);
   padding: 0;
 }
 .raf-invalid input,
 .raf-invalid select,
 .raf-invalid textarea {
-  border-color: var(--raf-danger);
+  border-color: var(--raf-color-danger);
 }
 .raf-inline {
   display: flex;
-  gap: 8px;
+  gap: var(--raf-space-2);
   align-items: center;
 }
 .raf-region {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--raf-space-2);
 }
 
 /* ------------------------------------------------------------- repeatable entries */
@@ -316,33 +319,33 @@ button.raf-danger:hover:not(:disabled) {
 .raf-entries {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--raf-space-3);
 }
 .raf-entry {
-  border: 1px solid var(--raf-border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  background: #fafbfc;
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  padding: var(--raf-space-2) var(--raf-space-3);
+  background: var(--raf-color-bg);
 }
 .raf-entry-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--raf-space-2);
+  margin-bottom: var(--raf-space-2);
 }
 .raf-entry-summary {
   flex: 1;
-  color: var(--raf-muted);
+  color: var(--raf-color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .raf-entry-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--raf-space-1);
 }
 .raf-entry-actions button {
-  padding: 1px 8px;
+  padding: 0 var(--raf-space-2);
 }
 .raf-add {
   align-self: flex-start;
@@ -352,21 +355,21 @@ button.raf-danger:hover:not(:disabled) {
 
 .raf-attachments {
   list-style: none;
-  margin: 0 0 8px;
+  margin: 0 0 var(--raf-space-2);
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--raf-space-2);
 }
 .raf-attach {
   display: grid;
   grid-template-columns: 140px minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: var(--raf-space-2);
   align-items: center;
 }
 .raf-attach-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--raf-space-2);
 }
 .raf-attach-error {
   grid-column: 2 / -1;

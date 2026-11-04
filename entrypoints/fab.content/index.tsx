@@ -1,5 +1,7 @@
 // FAB + summary card, top frame only, inside a CLOSED shadow root hosted by `<raf-fab>`.
 // Styles (style.css) live in the shadow root only (`cssInjectionMode: 'ui'`).
+// Tokens first (src/ui/theme.css), then the component rules; both land in the shadow root only.
+import '../../src/ui/theme.css';
 import './style.css';
 import ReactDOM from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
@@ -11,6 +13,8 @@ export default defineContentScript({
   allFrames: false, // top frame only
   runAt: 'document_idle',
   cssInjectionMode: 'ui',
+  // Don't announce ourselves (and our extension id) to the page via window.postMessage.
+  noScriptStartedPostMessage: true,
   async main(ctx) {
     if (window.top !== window || !document.body) return;
     // Defensive: never mount twice (e.g. after an extension reload without a page refresh).

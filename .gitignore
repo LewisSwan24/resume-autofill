@@ -19,3 +19,12 @@ fixtures/captured/
 
 # In-page driver test harness bundle (tests/drivers/harness)
 tests/drivers/harness/dist/
+
+# Design-system extraction scratch files
+docs/design-system/_work/
+
+# Internal docs (design notes, plans, reviews, handoff) and research stay local
+docs/
+research/
+# Local automation tools (Chrome CDP relay etc.)
+tools/

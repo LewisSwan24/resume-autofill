@@ -12,6 +12,7 @@ export * from './handlers';
 export * from './ids';
 export * from './intent';
 export * from './listener';
+export * from './needs';
 export * from './watcher';
 
 /** Start the content script in `doc`; returns a stop function (extension context invalidated). */

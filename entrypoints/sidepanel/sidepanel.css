@@ -1,88 +1,45 @@
 /*
  * Side panel styles.
- * Every colour, font, radius, spacing, shadow and size lives in a `--raf-*` custom property defined once
- * in `:root` below (neutral placeholders; a design system replaces the values only). Rules below must not
- * contain literal colours, font names, lengths (other than 0) or shadows.
- * Names shared with the options page: bg, card, border, text, muted, accent, danger, ok.
+ * Colours, fonts, radii, spacing, shadows, motion and z-indices come from the shared `--raf-*` tokens
+ * (src/ui/theme.css, imported before this file). Rules below must not contain literal colours, font names or shadows.
+ * The `:root` block only holds sizes that are genuinely local to the report table.
  */
 :root {
-  /* colour */
-  --raf-bg: #f4f5f7;
-  --raf-card: #fff;
-  --raf-border: #d9dde3;
-  --raf-text: #1f2430;
-  --raf-muted: #6b7280;
-  --raf-accent: #2563eb;
-  --raf-danger: #c62828;
-  --raf-ok: #1b7f3b;
-  --raf-warning: #b26a00;
-  --raf-on-accent: #fff;
-  --raf-input-bg: #fff;
-  --raf-row-hover-bg: #eef2fb;
-  --raf-row-actions-bg: #fafbfc;
-  /* share of the tone colour mixed into chip / pressed-filter backgrounds */
-  --raf-tint: 14%;
-  --raf-focus-ring-alpha: 40%;
-  --raf-disabled-opacity: 0.5;
-  --raf-secondary-opacity: 0.7;
-  --raf-hover-brightness: 1.08;
-
-  /* typography */
-  --raf-font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --raf-font-size: 13px;
-  --raf-font-size-sm: 11px;
-  --raf-font-size-lg: 16px;
-  --raf-line-height: 1.45;
-  --raf-weight-strong: 600;
-
-  /* shape and spacing */
-  --raf-radius-sm: 4px;
-  --raf-radius-md: 6px;
-  --raf-radius-pill: 999px;
-  --raf-border-width: 1px;
-  --raf-focus-ring-width: 2px;
-  --raf-space-1: 4px;
-  --raf-space-2: 8px;
-  --raf-space-3: 12px;
-  --raf-space-4: 16px;
-  --raf-shadow-header: 0 1px 2px rgb(0 0 0 / 6%);
-
-  /* sizes */
   --raf-cell-pad-y: 6px;
   --raf-cell-pad-x: 6px;
   --raf-col-label-min-width: 6em;
   --raf-col-confidence-width: 4.5em;
   --raf-icon-button-size: 22px;
   --raf-edit-input-basis: 8em;
-  --raf-z-header: 2;
-
-  color-scheme: light;
 }
 
+html {
+  color-scheme: light;
+}
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--raf-bg);
-  color: var(--raf-text);
-  font: var(--raf-font-size) / var(--raf-line-height) var(--raf-font);
+  background: var(--raf-color-bg);
+  color: var(--raf-color-text);
+  font: var(--raf-font-size-md) / var(--raf-line-height) var(--raf-font-sans);
 }
 
 h1 {
   margin: 0;
-  font-size: var(--raf-font-size-lg);
+  font-size: var(--raf-font-size-xl);
 }
 
 .raf-muted {
-  color: var(--raf-muted);
+  color: var(--raf-color-text-muted);
 }
 .raf-error {
-  color: var(--raf-danger);
+  color: var(--raf-color-danger);
 }
 .raf-ok {
-  color: var(--raf-ok);
+  color: var(--raf-color-success);
 }
 .raf-pad {
   padding: var(--raf-space-4);
@@ -95,9 +52,9 @@ input[type='text'] {
   width: 100%;
   min-width: 0;
   padding: var(--raf-space-1) var(--raf-space-2);
-  border: var(--raf-border-width) solid var(--raf-border);
+  border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-sm);
-  background: var(--raf-input-bg);
+  background: var(--raf-color-surface);
   color: inherit;
   font: inherit;
 }
@@ -105,36 +62,37 @@ select:focus,
 input:focus,
 button:focus-visible,
 .raf-row-data:focus-visible {
-  outline: var(--raf-focus-ring-width) solid color-mix(in srgb, var(--raf-accent) var(--raf-focus-ring-alpha), transparent);
-  border-color: var(--raf-accent);
+  outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
+  border-color: var(--raf-color-primary);
 }
 
 button {
   display: inline-block;
   padding: var(--raf-space-1) var(--raf-space-2);
-  border: var(--raf-border-width) solid var(--raf-border);
+  border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-sm);
-  background: var(--raf-card);
+  background: var(--raf-color-surface);
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
 button:hover:not(:disabled) {
-  border-color: var(--raf-accent);
-  color: var(--raf-accent);
+  border-color: var(--raf-color-primary);
+  color: var(--raf-color-primary);
 }
 button:disabled {
   cursor: default;
-  opacity: var(--raf-disabled-opacity);
+  opacity: var(--raf-opacity-disabled);
 }
 button.raf-primary {
-  background: var(--raf-accent);
-  border-color: var(--raf-accent);
-  color: var(--raf-on-accent);
+  background: var(--raf-color-primary);
+  border-color: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
 }
 button.raf-primary:hover:not(:disabled) {
-  color: var(--raf-on-accent);
-  filter: brightness(var(--raf-hover-brightness));
+  background: var(--raf-color-primary-hover);
+  border-color: var(--raf-color-primary-hover);
+  color: var(--raf-color-primary-text);
 }
 
 /* ------------------------------------------------------------- layout */
@@ -142,14 +100,14 @@ button.raf-primary:hover:not(:disabled) {
 .raf-header {
   position: sticky;
   top: 0;
-  z-index: var(--raf-z-header);
+  z-index: var(--raf-z-sticky);
   display: flex;
   flex-direction: column;
   gap: var(--raf-space-2);
   padding: var(--raf-space-3) var(--raf-space-4);
-  background: var(--raf-card);
-  border-bottom: var(--raf-border-width) solid var(--raf-border);
-  box-shadow: var(--raf-shadow-header);
+  background: var(--raf-color-surface);
+  border-bottom: var(--raf-border-width) solid var(--raf-color-border);
+  box-shadow: var(--raf-shadow-1);
 }
 .raf-main {
   display: flex;
@@ -173,7 +131,7 @@ button.raf-primary:hover:not(:disabled) {
 }
 .raf-label {
   font-size: var(--raf-font-size-sm);
-  color: var(--raf-muted);
+  color: var(--raf-color-text-muted);
 }
 
 /* ------------------------------------------------------------- filters */
@@ -188,30 +146,30 @@ button.raf-primary:hover:not(:disabled) {
   padding: 0 var(--raf-space-2);
 }
 .raf-filter[aria-pressed='true'] {
-  background: var(--raf-accent);
-  border-color: var(--raf-accent);
-  color: var(--raf-on-accent);
+  background: var(--raf-color-primary);
+  border-color: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
 }
 .raf-filter-success[aria-pressed='true'] {
-  background: var(--raf-ok);
-  border-color: var(--raf-ok);
+  background: var(--raf-color-success);
+  border-color: var(--raf-color-success);
 }
 .raf-filter-warning[aria-pressed='true'] {
-  background: var(--raf-warning);
-  border-color: var(--raf-warning);
+  background: var(--raf-color-warning);
+  border-color: var(--raf-color-warning);
 }
 .raf-filter-danger[aria-pressed='true'] {
-  background: var(--raf-danger);
-  border-color: var(--raf-danger);
+  background: var(--raf-color-danger);
+  border-color: var(--raf-color-danger);
 }
 .raf-filter-muted[aria-pressed='true'] {
-  background: var(--raf-muted);
-  border-color: var(--raf-muted);
+  background: var(--raf-color-text-muted);
+  border-color: var(--raf-color-text-muted);
 }
 .raf-count {
   margin-left: var(--raf-space-1);
   font-size: var(--raf-font-size-sm);
-  opacity: var(--raf-secondary-opacity);
+  opacity: var(--raf-opacity-muted);
 }
 
 /* ------------------------------------------------------------- table */
@@ -220,16 +178,16 @@ button.raf-primary:hover:not(:disabled) {
   width: 100%;
   border-collapse: collapse;
   table-layout: auto;
-  background: var(--raf-card);
-  border: var(--raf-border-width) solid var(--raf-border);
+  background: var(--raf-color-surface);
+  border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-md);
 }
 .raf-table th {
   white-space: nowrap;
   text-align: left;
   font-size: var(--raf-font-size-sm);
-  font-weight: var(--raf-weight-strong);
-  color: var(--raf-muted);
+  font-weight: var(--raf-font-weight-strong);
+  color: var(--raf-color-text-muted);
 }
 .raf-table th,
 .raf-table td {
@@ -239,17 +197,17 @@ button.raf-primary:hover:not(:disabled) {
 }
 .raf-row-data {
   cursor: pointer;
-  border-top: var(--raf-border-width) solid var(--raf-border);
+  border-top: var(--raf-border-width) solid var(--raf-color-border);
 }
 .raf-row-data:hover {
-  background: var(--raf-row-hover-bg);
+  background: color-mix(in srgb, var(--raf-color-primary) 8%, var(--raf-color-surface));
 }
 .raf-row-actions {
-  background: var(--raf-row-actions-bg);
+  background: var(--raf-color-bg);
 }
 .raf-table .raf-cell-label {
   min-width: var(--raf-col-label-min-width);
-  font-weight: var(--raf-weight-strong);
+  font-weight: var(--raf-font-weight-strong);
   overflow-wrap: normal;
   word-break: normal;
 }
@@ -282,21 +240,21 @@ button.raf-primary:hover:not(:disabled) {
   border-radius: var(--raf-radius-pill);
   font-size: var(--raf-font-size-sm);
   white-space: nowrap;
-  --raf-chip-color: var(--raf-muted);
+  --raf-chip-color: var(--raf-color-text-muted);
   color: var(--raf-chip-color);
-  background: color-mix(in srgb, var(--raf-chip-color) var(--raf-tint), transparent);
+  background: color-mix(in srgb, var(--raf-chip-color) var(--raf-tint-strength), transparent);
 }
 .raf-chip-success {
-  --raf-chip-color: var(--raf-ok);
+  --raf-chip-color: var(--raf-color-success);
 }
 .raf-chip-warning {
-  --raf-chip-color: var(--raf-warning);
+  --raf-chip-color: var(--raf-color-warning);
 }
 .raf-chip-danger {
-  --raf-chip-color: var(--raf-danger);
+  --raf-chip-color: var(--raf-color-danger);
 }
 .raf-chip-muted {
-  --raf-chip-color: var(--raf-muted);
+  --raf-chip-color: var(--raf-color-text-muted);
 }
 
 /* ------------------------------------------------------------- action row */

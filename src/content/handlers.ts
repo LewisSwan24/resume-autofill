@@ -6,7 +6,9 @@ import type { Control, FieldReport, FillReport } from '../engine/types';
 import { applyHighlights, clearHighlights, focusField } from '../fill/highlight';
 import { highlightRun, runFill, type FillPayload, type FillRun } from '../fill/runFill';
 import type { Resume } from '../schema';
+import type { FrameNeeds } from '../engine/fieldDeps';
 import { buildApplyIntent } from './intent';
+import { computeFrameNeeds } from './needs';
 
 export interface FrameHandlerDeps {
   doc: Document;
@@ -18,6 +20,7 @@ export interface FrameHandlerDeps {
   /** Overrides for tests. */
   runFill?: (doc: Document, payload: FillPayload, opts: { idFor: (el: HTMLElement) => string }) => Promise<FillRun>;
   executeStep?: typeof executeStep;
+  computeNeeds?: (doc: Document, idFor: (el: HTMLElement) => string) => FrameNeeds;
 }
 
 export interface ApplyRequest {
@@ -27,6 +30,8 @@ export interface ApplyRequest {
 }
 
 export interface FrameHandlers {
+  /** What this frame could fill (scan only; touches neither the page nor any resume data). */
+  needs(): FrameNeeds;
   fill(payload: { resume: Resume; files: Record<string, FileData> }): Promise<FillReport>;
   focus(fieldId: string): boolean;
   apply(request: ApplyRequest): Promise<FieldReport>;
@@ -62,6 +67,8 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
 
   return {
     isBusy: () => busy > 0,
+
+    needs: () => (deps.computeNeeds ?? computeFrameNeeds)(deps.doc, deps.idFor),
 
     fill(payload) {
       // A second request while one is running joins it instead of driving the page twice.

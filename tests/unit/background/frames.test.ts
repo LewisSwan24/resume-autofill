@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { FrameTimeoutError, collectFrameReports, listFrameIds, withTimeout } from '../../../src/background/frames';
+import { FrameTimeoutError, NOTHING_TO_FILL, collectFrameReports, listFrameIds, withTimeout } from '../../../src/background/frames';
 import type { FillReport } from '../../../src/engine/types';
 import { emptyCounts } from '../../../src/fill/report';
 
@@ -92,6 +92,44 @@ describe('collectFrameReports', () => {
       expect(parts.map((p) => p.frameId)).toEqual([1]);
       expect(skipped[0]).toBeInstanceOf(FrameTimeoutError);
     });
+  });
+});
+
+describe('collectFrameReports with prepare', () => {
+  it('skips frames whose prepare resolves null (send is never called) and hands the prepared value to send', async () => {
+    const sent: [number, string][] = [];
+    const skipped: [number, unknown][] = [];
+    const parts = await collectFrameReports<string>(
+      [0, 1, 2],
+      async (frameId, prepared) => {
+        sent.push([frameId, prepared]);
+        return rep(`f${frameId}`);
+      },
+      {
+        prepare: async (frameId) => (frameId === 1 ? null : `needs-${frameId}`),
+        onSkip: (id, reason) => skipped.push([id, reason]),
+      },
+    );
+    expect(sent).toEqual([[0, 'needs-0'], [2, 'needs-2']]);
+    expect(parts.map((p) => p.frameId)).toEqual([0, 2]);
+    expect(skipped).toEqual([[1, NOTHING_TO_FILL]]);
+  });
+
+  it('skips frames whose prepare rejects or times out, with its own budget', async () => {
+    const skipped: number[] = [];
+    const parts = await collectFrameReports<number>(
+      [0, 1, 2],
+      async (frameId) => rep(`f${frameId}`),
+      {
+        prepareTimeoutMs: 15,
+        timeoutMs: 1000,
+        prepare: (frameId) =>
+          frameId === 0 ? Promise.reject(new Error('no receiver')) : frameId === 1 ? new Promise(() => undefined) : Promise.resolve(1),
+        onSkip: (id) => skipped.push(id),
+      },
+    );
+    expect(parts.map((p) => p.frameId)).toEqual([2]);
+    expect(skipped).toEqual([0, 1]);
   });
 });
 

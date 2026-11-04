@@ -1,0 +1,69 @@
+/*
+ * Design tokens (neutral placeholders) - keep identical to src/ui/tokens.ts (tests/unit/ui/tokens.test.ts enforces it).
+ * Replace both files with Lewis's design system; the three UIs only read these --raf-* custom properties.
+ *
+ * Selectors: `:root` = options page and side panel; `:host` = the FAB's closed shadow root host;
+ * `.raf-root` = the FAB's inner container, which re-declares every token INSIDE the shadow tree so that
+ * page CSS (e.g. `raf-fab { --raf-color-primary: red }`) can never override them.
+ */
+:root,
+:host,
+.raf-root {
+  --raf-color-bg: #f6f7f9;
+  --raf-color-surface: #ffffff;
+  --raf-color-surface-hover: #f0f2f5;
+  --raf-color-text: #1f2329;
+  --raf-color-text-muted: #6b7280;
+  --raf-color-primary: #2563eb;
+  --raf-color-primary-hover: #1d4ed8;
+  --raf-color-primary-text: #ffffff;
+  --raf-color-border: #e1e4ea;
+  --raf-color-success: #1b7f3b;
+  --raf-color-warning: #b26a00;
+  --raf-color-danger: #c62828;
+  --raf-color-focus: #7aa5ff;
+  --raf-font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --raf-font-size-xs: 11px;
+  --raf-font-size-sm: 12px;
+  --raf-font-size-md: 13px;
+  --raf-font-size-lg: 14px;
+  --raf-font-size-xl: 16px;
+  --raf-font-weight-regular: 400;
+  --raf-font-weight-medium: 500;
+  --raf-font-weight-strong: 600;
+  --raf-line-height: 1.45;
+  --raf-radius-sm: 4px;
+  --raf-radius-md: 6px;
+  --raf-radius-lg: 12px;
+  --raf-radius-pill: 999px;
+  --raf-space-1: 4px;
+  --raf-space-2: 8px;
+  --raf-space-3: 12px;
+  --raf-space-4: 16px;
+  --raf-space-5: 20px;
+  --raf-space-6: 24px;
+  --raf-shadow-1: 0 1px 2px rgb(16 24 40 / 10%), 0 1px 3px rgb(16 24 40 / 8%);
+  --raf-shadow-2: 0 8px 24px rgb(16 24 40 / 18%), 0 2px 6px rgb(16 24 40 / 12%);
+  --raf-motion-duration: 140ms;
+  --raf-motion-easing: ease;
+  --raf-motion-duration-spinner: 800ms;
+  --raf-z-index: 2147483647;
+  --raf-z-sticky: 2;
+  --raf-border-width: 1px;
+  --raf-focus-ring-width: 2px;
+  --raf-focus-ring-offset: 2px;
+  --raf-tint-strength: 14%;
+  --raf-opacity-muted: 0.72;
+  --raf-opacity-disabled: 0.5;
+  --raf-opacity-busy: 0.85;
+  --raf-size-icon-button: 28px;
+  --raf-size-glyph: 16px;
+  --raf-size-spinner-width: 2px;
+  --raf-size-fab-height: 44px;
+  --raf-size-fab-icon: 28px;
+  --raf-size-fab-offset-x: 24px;
+  --raf-size-fab-offset-y: 24px;
+  --raf-size-card-width: 320px;
+  --raf-size-card-max-height: 70vh;
+  --raf-size-card-list-max-height: 220px;
+}

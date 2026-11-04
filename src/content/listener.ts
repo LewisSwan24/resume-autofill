@@ -12,6 +12,13 @@ export function createContentListener(handlers: FrameHandlers): ContentListener 
     if (!isFromExtension(sender) || sender.tab != null || !isValidMessage(message)) return false;
 
     switch (message.type) {
+      case 'frame:needs': {
+        // Scan only: no resume data is involved, nothing is filled.
+        Promise.resolve()
+          .then(() => handlers.needs())
+          .then(sendResponse, () => sendResponse(undefined));
+        return true;
+      }
       case 'frame:fill': {
         const { resume, files } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;

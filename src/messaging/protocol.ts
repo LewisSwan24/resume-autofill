@@ -1,6 +1,7 @@
 // Messaging protocol between content scripts, the background service worker and extension pages.
 // Every message is `{ type: string, ... }`; see docs/plans/2026-11-04-m1-implementation-plan.md §0.5.
 import { browser } from 'wxt/browser';
+import type { FrameNeeds } from '../engine/fieldDeps';
 import type { FieldReport, FillReport } from '../engine/types';
 import type { FileData } from '../drivers/types';
 import type { Resume } from '../schema';
@@ -13,6 +14,8 @@ export type ContentToBg = { type: 'scan:result'; count: number; url: string };
 /** background → a specific frame of a tab (via `tabs.sendMessage(tabId, msg, { frameId })`) */
 export type BgToFrame =
   | { type: 'scan:total'; total: number }
+  /** Ask what the frame could fill (no resume data attached); answered with FrameNeeds. */
+  | { type: 'frame:needs' }
   | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData> }
   | { type: 'frame:focus'; fieldId: string }
   | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string };
@@ -45,6 +48,7 @@ export interface FillRequestResponse {
 /** Response payload per message type; messages not listed are fire-and-forget (`void`). */
 export interface ResponseMap {
   'fill:request': FillRequestResponse;
+  'frame:needs': FrameNeeds;
   'frame:fill': FillReport;
   'field:apply': FieldReport;
   'frame:apply': FieldReport;
@@ -63,6 +67,7 @@ const TYPE_TABLE = {
   'scan:total': true,
   'fill:request': true,
   'scan:query': true,
+  'frame:needs': true,
   'frame:fill': true,
   'report:updated': true,
   'field:focus': true,

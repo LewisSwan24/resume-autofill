@@ -27,6 +27,7 @@ import { ModuleForm } from './ModuleForm';
 import { ResumeList } from './ResumeList';
 import { DataPanel, SettingsPanel } from './SidePanels';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
+import '../../src/ui/theme.css';
 import './options.css';
 
 export interface AppProps {

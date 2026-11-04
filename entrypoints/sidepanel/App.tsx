@@ -10,6 +10,7 @@ import { useActiveTab } from './useActiveTab';
 import { useFieldActions } from './useFieldActions';
 import { useProfile } from './useProfile';
 import { useReport } from './useReport';
+import '../../src/ui/theme.css';
 import './sidepanel.css';
 
 const NO_FIELDS: readonly FieldReport[] = [];

@@ -1,9 +1,9 @@
 /*
  * FAB + summary card styles. Injected into the closed shadow root only (`cssInjectionMode: 'ui'`).
  *
- * Design-system contract: every colour, font, radius, spacing, shadow, z-index and size is a
- * `--raf-*` custom property declared ONCE in the `:host` block below. The values are neutral
- * placeholders; swap them (or override from the design system) without touching the rules.
+ * Design tokens (colour, type, radius, spacing, shadow, motion, z-index, sizes) are NOT declared here: they
+ * come from src/ui/theme.css, imported before this file in index.tsx, and apply to `:host` and again to
+ * `.raf-root` (inside the shadow tree, so page CSS cannot override them). Only the rules live here.
  *
  * Geometry contract (relied on by e2e): the host box is exactly the FAB button while the card is
  * closed or open, because the card is absolutely positioned relative to the button wrapper.
@@ -13,76 +13,11 @@
   /* Reset everything inheritable from the page (we do not use WXT's reset: see index.tsx). */
   all: initial;
 
-  /* ---- colour ---- */
-  --raf-color-bg: #f6f7f9;
-  --raf-color-surface: #ffffff;
-  --raf-color-surface-hover: #f0f2f5;
-  --raf-color-text: #1f2329;
-  --raf-color-text-muted: #6b7280;
-  --raf-color-primary: #2f6fed;
-  --raf-color-primary-hover: #245bd0;
-  --raf-color-primary-text: #ffffff;
-  --raf-color-border: #e1e4ea;
-  --raf-color-success: #1a9d5b;
-  --raf-color-warning: #c77a00;
-  --raf-color-danger: #d23a3a;
-  --raf-color-focus: #7aa5ff;
-  /* Share of a semantic colour mixed into transparent for soft chip/tag backgrounds. */
-  --raf-tint-strength: 14%;
-  --raf-opacity-muted: 0.72;
-  --raf-opacity-disabled: 0.85;
-
-  /* ---- typography ---- */
-  --raf-font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --raf-font-size-xs: 11px;
-  --raf-font-size-sm: 12px;
-  --raf-font-size-md: 14px;
-  --raf-font-weight-regular: 400;
-  --raf-font-weight-medium: 600;
-  --raf-line-height: 1.4;
-
-  /* ---- shape ---- */
-  --raf-radius-sm: 6px;
-  --raf-radius-md: 10px;
-  --raf-radius-lg: 14px;
-  --raf-radius-pill: 999px;
-  --raf-border-width: 1px;
-  --raf-focus-ring-width: 2px;
-  --raf-focus-ring-offset: 2px;
-
-  /* ---- spacing (4px scale) ---- */
-  --raf-space-1: 4px;
-  --raf-space-2: 8px;
-  --raf-space-3: 12px;
-  --raf-space-4: 16px;
-  --raf-space-5: 20px;
-  --raf-space-6: 24px;
-
-  /* ---- elevation ---- */
-  --raf-shadow-1: 0 1px 2px rgb(16 24 40 / 12%), 0 1px 3px rgb(16 24 40 / 10%);
-  --raf-shadow-2: 0 8px 24px rgb(16 24 40 / 18%), 0 2px 6px rgb(16 24 40 / 12%);
-
-  /* ---- layer + placement + sizes ---- */
-  --raf-z-index: 2147483647;
-  --raf-fab-offset-x: 24px;
-  --raf-fab-offset-y: 24px;
-  --raf-fab-height: 44px;
-  --raf-icon-size: 28px;
-  --raf-glyph-size: 16px;
-  --raf-spinner-width: 2px;
-  --raf-card-width: 320px;
-  --raf-card-max-height: 70vh;
-  --raf-card-list-max-height: 220px;
-  --raf-card-gap: 8px;
-  --raf-tap-size: 28px;
-  --raf-motion-duration: 140ms;
-  --raf-spinner-duration: 800ms;
-
   /* ---- host placement (important: beats page styles targeting unknown elements) ---- */
   display: block !important;
   position: fixed !important;
-  right: var(--raf-fab-offset-x) !important;
-  bottom: var(--raf-fab-offset-y) !important;
+  right: var(--raf-size-fab-offset-x) !important;
+  bottom: var(--raf-size-fab-offset-y) !important;
   z-index: var(--raf-z-index) !important;
   width: max-content !important;
   height: auto !important;
@@ -128,7 +63,7 @@
   display: flex;
   align-items: center;
   gap: var(--raf-space-2);
-  height: var(--raf-fab-height);
+  height: var(--raf-size-fab-height);
   padding: 0 var(--raf-space-4) 0 var(--raf-space-2);
   border: 0;
   border-radius: var(--raf-radius-pill);
@@ -136,7 +71,7 @@
   color: var(--raf-color-primary-text);
   box-shadow: var(--raf-shadow-2);
   white-space: nowrap;
-  transition: background-color var(--raf-motion-duration) ease, opacity var(--raf-motion-duration) ease;
+  transition: background-color var(--raf-motion-duration) var(--raf-motion-easing), opacity var(--raf-motion-duration) var(--raf-motion-easing);
 }
 
 .raf-fab:hover:not(:disabled) {
@@ -145,7 +80,7 @@
 
 .raf-fab:disabled {
   cursor: progress;
-  opacity: var(--raf-opacity-disabled);
+  opacity: var(--raf-opacity-busy);
 }
 
 /* Nothing detected: stay visible but recede. */
@@ -161,15 +96,15 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: var(--raf-icon-size);
-  height: var(--raf-icon-size);
+  width: var(--raf-size-fab-icon);
+  height: var(--raf-size-fab-icon);
   border-radius: var(--raf-radius-pill);
   background: color-mix(in srgb, var(--raf-color-primary-text) 22%, transparent);
 }
 
 .raf-fab__glyph {
-  width: var(--raf-glyph-size);
-  height: var(--raf-glyph-size);
+  width: var(--raf-size-glyph);
+  height: var(--raf-size-glyph);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -178,12 +113,12 @@
 }
 
 .raf-spinner {
-  width: var(--raf-glyph-size);
-  height: var(--raf-glyph-size);
-  border: var(--raf-spinner-width) solid color-mix(in srgb, currentColor 30%, transparent);
+  width: var(--raf-size-glyph);
+  height: var(--raf-size-glyph);
+  border: var(--raf-size-spinner-width) solid color-mix(in srgb, currentColor 30%, transparent);
   border-top-color: currentColor;
   border-radius: var(--raf-radius-pill);
-  animation: raf-spin var(--raf-spinner-duration) linear infinite;
+  animation: raf-spin var(--raf-motion-duration-spinner) linear infinite;
 }
 
 @keyframes raf-spin {
@@ -199,8 +134,8 @@
 }
 
 .raf-fab__title {
-  font-size: var(--raf-font-size-md);
-  font-weight: var(--raf-font-weight-medium);
+  font-size: var(--raf-font-size-lg);
+  font-weight: var(--raf-font-weight-strong);
   line-height: var(--raf-line-height);
 }
 
@@ -215,11 +150,11 @@
 .raf-card {
   position: absolute;
   right: 0;
-  bottom: calc(100% + var(--raf-card-gap));
+  bottom: calc(100% + var(--raf-space-2));
   display: flex;
   flex-direction: column;
-  width: var(--raf-card-width);
-  max-height: var(--raf-card-max-height);
+  width: var(--raf-size-card-width);
+  max-height: var(--raf-size-card-max-height);
   overflow: hidden;
   border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-lg);
@@ -241,16 +176,16 @@
 
 .raf-card__title {
   margin: 0;
-  font-size: var(--raf-font-size-md);
-  font-weight: var(--raf-font-weight-medium);
+  font-size: var(--raf-font-size-lg);
+  font-weight: var(--raf-font-weight-strong);
 }
 
 .raf-icon-button {
   display: grid;
   flex: none;
   place-items: center;
-  width: var(--raf-tap-size);
-  height: var(--raf-tap-size);
+  width: var(--raf-size-icon-button);
+  height: var(--raf-size-icon-button);
   padding: 0;
   border: 0;
   border-radius: var(--raf-radius-sm);
@@ -276,7 +211,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--raf-space-1);
-  font-weight: var(--raf-font-weight-medium);
+  font-weight: var(--raf-font-weight-strong);
   white-space: nowrap;
 }
 
@@ -324,12 +259,12 @@
   margin: 0;
   padding: var(--raf-space-2) var(--raf-space-4) var(--raf-space-1);
   font-size: var(--raf-font-size-xs);
-  font-weight: var(--raf-font-weight-medium);
+  font-weight: var(--raf-font-weight-strong);
   color: var(--raf-color-text-muted);
 }
 
 .raf-list {
-  max-height: var(--raf-card-list-max-height);
+  max-height: var(--raf-size-card-list-max-height);
   margin: 0;
   padding: 0 var(--raf-space-2) var(--raf-space-2);
   overflow-y: auto;
@@ -343,7 +278,7 @@
   gap: var(--raf-space-2);
   width: 100%;
   padding: var(--raf-space-1) var(--raf-space-2);
-  min-height: var(--raf-tap-size);
+  min-height: var(--raf-size-icon-button);
   border: 0;
   border-radius: var(--raf-radius-sm);
   background: transparent;
@@ -405,7 +340,7 @@
   font-size: var(--raf-font-size-sm);
   font-weight: var(--raf-font-weight-medium);
   text-align: center;
-  transition: background-color var(--raf-motion-duration) ease;
+  transition: background-color var(--raf-motion-duration) var(--raf-motion-easing);
 }
 
 .raf-button:hover {
@@ -424,7 +359,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .raf-spinner {
-    animation-duration: calc(var(--raf-spinner-duration) * 3);
+    animation-duration: calc(var(--raf-motion-duration-spinner) * 3);
   }
 
   .raf-fab,

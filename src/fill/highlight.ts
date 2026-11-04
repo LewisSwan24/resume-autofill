@@ -1,16 +1,11 @@
 // Highlighting of filled / suspicious fields with inline outlines (and restoring them afterwards).
 import type { Outcome } from '../engine/types';
+import { HIGHLIGHT_COLORS } from '../ui/tokens';
 
 export interface HighlightEntry {
   el: HTMLElement;
   outcome: Outcome;
 }
-
-export const HIGHLIGHT_COLORS = {
-  filled: '#22c55e',
-  review: '#eab308',
-  error: '#ef4444',
-} as const;
 
 /** Outline for an outcome, or null when the field is not highlighted (no_data / no_control). */
 export function outlineFor(outcome: Outcome): string | null {

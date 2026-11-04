@@ -73,6 +73,18 @@ describe('sendToFrame', () => {
   });
 });
 
+describe('sendToFrame frame:needs', () => {
+  it('carries no resume data and returns the typed needs', async () => {
+    const needs = { fieldKeys: ['contact.email'], repeatSections: [], attachmentKeys: [] };
+    const spy = vi.spyOn(browser.tabs, 'sendMessage').mockResolvedValue(needs as never);
+
+    const res = await sendToFrame(3, 5, { type: 'frame:needs' });
+
+    expect(spy).toHaveBeenCalledWith(3, { type: 'frame:needs' }, { frameId: 5 });
+    expect(res.fieldKeys).toEqual(['contact.email']);
+  });
+});
+
 describe('type-level contract', () => {
   it('compiles with the documented message shapes', () => {
     const toBg: UiToBg[] = [

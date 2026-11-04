@@ -17,6 +17,7 @@ describe('content listener', () => {
   beforeEach(() => {
     fakeBrowser.reset();
     handlers = {
+      needs: vi.fn().mockReturnValue({ fieldKeys: ['contact.email'], repeatSections: [], attachmentKeys: [] }),
       fill: vi.fn().mockResolvedValue({ fields: [] }),
       focus: vi.fn().mockReturnValue(true),
       apply: vi.fn().mockResolvedValue({ fieldId: 'c1' }),
@@ -24,6 +25,31 @@ describe('content listener', () => {
     };
     listener = createContentListener(handlers as unknown as FrameHandlers);
     respond = vi.fn<(response?: unknown) => void>();
+  });
+
+  it('frame:needs answers with the frame needs and never fills', async () => {
+    expect(listener({ type: 'frame:needs' }, bg(), respond)).toBe(true);
+    await flush();
+    expect(respond).toHaveBeenCalledWith({ fieldKeys: ['contact.email'], repeatSections: [], attachmentKeys: [] });
+    expect(handlers.needs).toHaveBeenCalledTimes(1);
+    expect(handlers.fill).not.toHaveBeenCalled();
+  });
+
+  it('frame:needs answers undefined when the scan throws, and only obeys the background', async () => {
+    handlers.needs.mockImplementation(() => {
+      throw new Error('scan failed');
+    });
+    expect(listener({ type: 'frame:needs' }, bg(), respond)).toBe(true);
+    await flush();
+    expect(respond).toHaveBeenCalledWith(undefined);
+
+    handlers.needs.mockClear();
+    respond.mockClear();
+    expect(listener({ type: 'frame:needs' }, { id: 'evil' }, respond)).toBe(false);
+    expect(listener({ type: 'frame:needs' }, {}, respond)).toBe(false);
+    expect(listener({ type: 'frame:needs' }, { id: browser.runtime.id, tab: { id: 1 } }, respond)).toBe(false);
+    expect(handlers.needs).not.toHaveBeenCalled();
+    expect(respond).not.toHaveBeenCalled();
   });
 
   it('runs frame:fill and answers with the report', async () => {

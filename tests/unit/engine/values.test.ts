@@ -289,6 +289,28 @@ describe('toIntent', () => {
     });
   });
 
+  describe('a state on a pick list', () => {
+    const state = (home: Region, ...labels: string[]) =>
+      picked(toIntent(def('contact.addressProvince'), home.province!, control('select'), 'en-AU', { home }), opts(...labels));
+    const qld: Region = { country: 'Australia', province: 'QLD', city: 'Brisbane' };
+
+    it('takes the name spelled out', () => {
+      expect(state(qld, 'Select One', 'New South Wales', 'Queensland', 'Victoria')).toBe('Queensland');
+    });
+
+    it('takes the short form when that is what the list has', () => {
+      expect(state(qld, 'NSW', 'QLD')).toBe('QLD');
+    });
+
+    it('takes nothing else', () => {
+      expect(state(qld, 'New South Wales', 'Victoria')).toBe('none');
+    });
+
+    it('does not spell out a short form from another country', () => {
+      expect(state({ country: 'United States', province: 'WA', city: 'Seattle' }, 'Western Australia', 'Oregon')).toBe('none');
+    });
+  });
+
   it('knows a country or state by its other spellings', () => {
     const home = { country: 'Australia', province: 'QLD', city: 'Brisbane' };
     const city = (...labels: string[]) =>

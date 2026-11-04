@@ -14,6 +14,7 @@ export function locatorsOf(expected: CapturedExpected): Locators {
   for (const [label, f] of Object.entries(expected.fields)) out[label] = f.exists ? `${EXISTS_PREFIX}${f.selector}` : f.selector;
   for (const [label, g] of Object.entries(expected.__knownGaps ?? {})) out[label] = g.selector;
   for (const [label, r] of Object.entries(expected.__review ?? {})) out[label] = r.selector;
+  for (const [label, r] of Object.entries(expected.__leaveEmpty ?? {})) out[label] = r.selector;
   return out;
 }
 
@@ -53,6 +54,11 @@ export function inspectInPage(locators: Locators): Inspection {
 
   const single = (el: FormEl): string | boolean | string[] => {
     const type = typeOf(el);
+    // A list that is only a button shows its choice as the button's own text.
+    if (type === 'button') return squash(el.textContent);
+    // A search-and-pick box keeps its choices as pills beside it: the text in it is not an answer.
+    const pills = el.closest('[data-automation-id="multiSelectContainer"]');
+    if (pills) return [...pills.querySelectorAll('[data-automation-id="selectedItem"] [data-automation-id="promptOption"]')].map((p) => squash(p.textContent)).join(', ');
     if (type === 'file') return [...((el as HTMLInputElement).files ?? [])].map((f) => f.name);
     if (type === 'checkbox' || type === 'radio') return (el as HTMLInputElement).checked;
     if (type === 'select') {
@@ -68,12 +74,13 @@ export function inspectInPage(locators: Locators): Inspection {
   };
 
   // ---- every control, for the "nothing else changed" check
-  const isControl = (el: Element): el is FormEl => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName);
+  const listButton = 'button[aria-haspopup="listbox"]';
+  const isControl = (el: Element): el is FormEl => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton);
   const included = (el: FormEl): boolean => typeOf(el) !== 'hidden' && !/^g-recaptcha-response|^h-captcha-response/.test(el.name || el.id || '');
   const keys = new Map<Element, string>();
   const used = new Map<string, number>();
   const snapshot: Record<string, string> = {};
-  for (const el of queryAll('input,select,textarea')) {
+  for (const el of queryAll(`input,select,textarea,${listButton}`)) {
     if (!isControl(el) || !included(el)) continue;
     const type = typeOf(el);
     const identity = el.id ? `#${el.id}` : el.name ? `@${el.name}` : '';
@@ -122,4 +129,29 @@ export function inspectInPage(locators: Locators): Inspection {
 
 export function inspect(target: Page | Frame, locators: Locators): Promise<Inspection> {
   return target.evaluate(inspectInPage, locators);
+}
+
+/**
+ * Controls the engine finds on this page that no verdict covers, and verdicts that find nothing. Needs the
+ * harness, because what counts as a control is the engine's own idea.
+ */
+export function unjudgedControls(target: Page | Frame, selectors: string[]): Promise<{ label: string; kind: string }[]> {
+  return target.evaluate((wanted) => {
+    const roots: ParentNode[] = [document];
+    for (const root of roots) {
+      for (const el of root.querySelectorAll('*')) if (el.shadowRoot) roots.push(el.shadowRoot);
+    }
+    const nodesOf = (selector: string): Element[] => roots.flatMap((r) => [...r.querySelectorAll(selector)]);
+    const judged = wanted.map((selector) => ({ selector, nodes: nodesOf(selector) }));
+    const { contexts } = window.__raf.scanDocument(document);
+    const out: { label: string; kind: string }[] = [];
+    for (const { control, evidence } of contexts) {
+      const covered = judged.some(({ nodes }) => nodes.some((n) => control.el.contains(n) || n.contains(control.el)));
+      if (!covered) out.push({ label: evidence[0]?.text ?? control.el.id ?? control.el.tagName, kind: control.kind });
+    }
+    for (const { selector, nodes } of judged) {
+      if (nodes.length === 0) out.push({ label: `verdict finds nothing: ${selector}`, kind: '-' });
+    }
+    return out;
+  }, selectors);
 }

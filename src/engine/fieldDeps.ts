@@ -111,6 +111,8 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'basics.currentLocation': ['contact.addressCountry', 'contact.addressProvince', 'contact.addressCity'],
   // On a list of places these tell the ones of one name apart (matchPlace in values.ts).
   'contact.addressCity': ['contact.addressCountry', 'contact.addressProvince'],
+  // A short form means different things in different countries (placeSpellings in the dictionary).
+  'contact.addressProvince': ['contact.addressCountry'],
   'contact.phoneFull': ['contact.phone', 'contact.phoneCountryCode'],
   'contact.addressFull': ADDRESS_KEYS,
   'education.endDate': ['education.current'],

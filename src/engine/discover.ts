@@ -183,6 +183,15 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
     }
   }
 
+  for (const { input, ...prompt } of adapter?.prompts ?? []) {
+    for (const el of Array.from(scope.querySelectorAll<HTMLElement>(input))) {
+      if (insideAny(el, blocked)) continue;
+      blocked.add(el);
+      if (isDisabledEl(el) || !isVisible(el)) continue;
+      candidates.set(el, { el, kind: 'select', lib: 'workday', prompt });
+    }
+  }
+
   // 2. Comboboxes outside those libraries consume their inner inputs too.
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>(ARIA_COMBOBOX_SELECTOR))) {
     if (insideAny(el, blocked) || el.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
@@ -324,7 +333,9 @@ export function discover(root: Document | ShadowRoot, opts: DiscoverOptions = {}
   const drafts: Draft[] = [];
   scanScope(root, drafts, adapter);
   let counter = 0;
-  return drafts.map(({ inputs, ...rest }) => {
+  const skip = adapter?.skip ?? [];
+  const wanted = drafts.filter((d) => !skip.some((s) => d.el.matches(s)));
+  return wanted.map(({ inputs, ...rest }) => {
     const control: Control = { id: opts.idFor ? opts.idFor(rest.el) : `c${++counter}`, ...rest };
     const question = adapter ? questionTextOf(rest.el, adapter) : null;
     if (question) control.questionText = question;

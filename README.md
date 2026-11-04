@@ -21,7 +21,7 @@ Built with WXT 0.21, React 19 and TypeScript (Manifest V3).
 | Milestone | Scope | Status |
 |---|---|---|
 | **M1** | Core engine, resume editor, side panel and floating button. 100% of fields are filled correctly on the synthetic test sites (native HTML, Ant Design, Element Plus). | Done |
-| **M2** | Adapt to real ATS platforms. Greenhouse, Lever and Ashby are checked on real pages. Workday, SuccessFactors, PageUp, Moka, Beisen, Feishu Recruiting and more are still to come. | In progress |
+| **M2** | Adapt to real ATS platforms. Greenhouse, Lever and Ashby are checked on real pages, and so is the first step of Workday. The later Workday steps, SuccessFactors, PageUp, Moka, Beisen, Feishu Recruiting and more are still to come. | In progress |
 | **M3** | AI features: resume import, drafting answers to open-ended questions, Chinese/English translation, an application tracking workspace, better file upload and general polish. | Planned |
 
 ## Install

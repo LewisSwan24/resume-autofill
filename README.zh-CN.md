@@ -21,7 +21,7 @@
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
 | **M1** | 核心引擎、简历编辑器、侧边栏和悬浮按钮。在合成测试站（原生 HTML、Ant Design、Element Plus）上，字段 100% 填对。 | 已完成 |
-| **M2** | 适配真实 ATS。Greenhouse、Lever、Ashby 已在真实页面上验证，Workday、SuccessFactors、PageUp、Moka、北森、飞书招聘等还在做。 | 进行中 |
+| **M2** | 适配真实 ATS。Greenhouse、Lever、Ashby 和 Workday 第一步已在真实页面上验证，Workday 后面几步、SuccessFactors、PageUp、Moka、北森、飞书招聘等还在做。 | 进行中 |
 | **M3** | 加入 AI 能力：简历导入、开放题起草、中英互译、投递工作台，同时完善文件上传并做整体打磨。 | 计划中 |
 
 ## 安装

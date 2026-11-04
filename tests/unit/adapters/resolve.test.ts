@@ -77,6 +77,75 @@ const hostedForm = (extra = ''): string => `<form>
     ${extra}
   </ul></form>`;
 
+describe('the wizard adapter', () => {
+  const step = (extra = ''): string => `<div data-automation-id="applyFlowPage">
+    <div data-automation-id="formField-legalName--firstName"><label for="g">Given Name</label><input type="text" id="g"></div>
+    <div data-automation-id="formField-source"><label for="source--source">How Did You Hear About Us?</label>
+      <div data-automation-id="multiSelectContainer"><div data-automation-id="multiselectInputContainer"><input id="source--source"></div></div></div>
+    <div data-automation-id="formField-preferredCheck"><label for="p">I have a preferred name</label><input id="p" type="checkbox"></div>
+    <div data-automation-id="formField-legalName--middleName"><label for="m">Middle Name</label><input id="m" type="text"></div>
+    <div data-automation-id="formField-phoneType"><label for="t">Phone Device Type</label><button aria-haspopup="listbox" id="t">Mobile</button></div>
+    <div data-automation-id="formField-extension"><label for="x">Phone Extension</label><input id="x" type="text"></div>
+    <div><label for="sms">SMS Opt-in</label><input id="sms" type="checkbox" data-automation-id="phone-sms-opt-in"></div>
+    ${extra}</div>`;
+
+  it('fits every tenant by address, and by the page on a domain of its own', () => {
+    const doc = document.implementation.createHTMLDocument('x');
+    const idOf = (href: string) => resolveAdapter(doc, ADAPTERS, href)?.id ?? null;
+    expect(idOf('https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/x/apply')).toBe('workday');
+    expect(idOf('https://acme.wd3.myworkdaysite.com/recruiting/acme/x')).toBe('workday');
+    expect(idOf('https://myworkdayjobs.com.evil.test/x')).toBeNull();
+    document.body.innerHTML = step();
+    expect(resolveAdapter(document, ADAPTERS, 'https://careers.acme.test/')?.id).toBe('workday');
+  });
+
+  it('turns a search-and-pick box into a pick list', () => {
+    document.body.innerHTML = step();
+    const box = discover(document).find((c) => c.el.id === 'source--source')!;
+    expect(box).toMatchObject({ kind: 'select', lib: 'workday' });
+    expect(box.prompt).toBeTruthy();
+  });
+
+  it('leaves out controls with nothing in a resume to fill them', () => {
+    document.body.innerHTML = step();
+    const ids = discover(document).map((c) => c.el.id);
+    for (const gone of ['p', 'm', 't', 'x']) expect(ids).not.toContain(gone);
+    expect(ids).toContain('g');
+  });
+
+  it.each([
+    ['Country / Territory', 'contact.addressCountry'],
+    ['Country / Territory Phone Code', 'contact.phoneCountryCode'],
+    ['Suburb/Locality', 'contact.addressCity'],
+    ['State or Territory', 'contact.addressProvince'],
+  ])('reads "%s" as %s', (label, key) => {
+    document.body.innerHTML = step(`<div><label for="q">${label}</label><input id="q" type="text"></div>`);
+    const { contexts, classifications } = scanDocument(document);
+    const i = contexts.findIndex((c) => c.control.el.id === 'q');
+    expect(classifications[i]!.fieldKey).toBe(key);
+  });
+
+  it('tells the country from the phone code beside it', () => {
+    document.body.innerHTML = step(`
+      <div><label for="c">Country / Territory</label>
+        <button id="c" name="country" type="button" aria-haspopup="listbox" aria-label="Country / Territory Australia Required">Australia</button></div>
+      <div data-automation-id="multiSelectContainer"><label for="p">Country / Territory Phone Code</label><input id="p" name="phoneNumber--countryPhoneCode" type="text"></div>`);
+    const { contexts, classifications } = scanDocument(document);
+    const of = (id: string) => classifications[contexts.findIndex((c) => c.control.el.id === id)]!;
+    expect(of('c').fieldKey).toBe('contact.addressCountry');
+    expect(of('c').confidence).toBeGreaterThan(0.75);
+    expect(of('p').fieldKey).toBe('contact.phoneCountryCode');
+    expect(of('p').confidence).toBeGreaterThan(0.75);
+  });
+
+  it('never fills an opt-in', () => {
+    document.body.innerHTML = step();
+    const { contexts, classifications } = scanDocument(document);
+    const i = contexts.findIndex((c) => c.control.el.id === 'sms');
+    expect(classifications[i]!.fieldKey).toBeNull();
+  });
+});
+
 describe('the hosted form adapter', () => {
   it('reads a custom question as the label of its control', () => {
     document.body.innerHTML = hostedForm();

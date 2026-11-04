@@ -134,7 +134,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'contact.phoneCountryCode': s(
     '国家区号|区号|国家代码|手机区号|国际区号|国家/地区代码|电话区号|国家码',
-    'Country code|Phone country code|Dialing code|Dialling code|Calling code|Country calling code|Mobile country code|International dialing code',
+    'Country code|Phone country code|Territory phone code|Dialing code|Dialling code|Calling code|Country calling code|Mobile country code|International dialing code',
     '邮编|邮政|post|zip',
   ),
   'contact.phone': s(

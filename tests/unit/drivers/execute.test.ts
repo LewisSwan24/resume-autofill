@@ -260,6 +260,83 @@ describe('executeStep', () => {
     expect((await s({ kind: 'cascade', display: 'A / B', path: ['A', 'B'] })).value).toBe('A / B');
   });
 
+  describe('a page that rebuilds the field when it is left', () => {
+    /** On blur the page swaps the input for a new element with the same id, holding `value`. */
+    function rebuilding(value: (typed: string) => string, attrs = 'type="text"'): Control {
+      const c = firstControl(`<input id="given" ${attrs}>`);
+      c.el.addEventListener('blur', () => {
+        const old = c.el as HTMLInputElement;
+        const next = document.createElement('input');
+        next.id = old.id;
+        next.type = old.type;
+        next.value = value(old.value);
+        old.replaceWith(next);
+      });
+      return c;
+    }
+    const text = step({ intent: { kind: 'text', text: 'Zhiyuan' } });
+
+    it('counts the value the new element holds, and follows it', async () => {
+      const c = rebuilding((typed) => typed);
+      const old = c.el;
+      const r = await executeStep(text, c, document);
+      expect(r).toMatchObject({ outcome: 'filled', observed: 'Zhiyuan' });
+      expect(c.el).not.toBe(old);
+      expect(c.el.isConnected).toBe(true);
+    });
+
+    it('fails when the new element came back empty', async () => {
+      const r = await executeStep(text, rebuilding(() => ''), document);
+      expect(r.outcome).toBe('action_failed');
+    });
+
+    it('fails when the new element holds something else', async () => {
+      const r = await executeStep(text, rebuilding(() => 'Someone'), document);
+      expect(r.outcome).toBe('action_failed');
+    });
+
+    it('does not take an element of another kind for it', async () => {
+      const c = firstControl('<input id="given" type="text">');
+      c.el.addEventListener('blur', () => {
+        const next = document.createElement('div');
+        next.id = 'given';
+        next.textContent = 'Zhiyuan';
+        c.el.replaceWith(next);
+      });
+      const r = await executeStep(text, c, document);
+      expect(r.outcome).toBe('action_failed');
+    });
+
+    it('still fails when the field went away with no new element', async () => {
+      const c = firstControl('<input id="given" type="text">');
+      c.el.addEventListener('blur', () => c.el.remove());
+      const r = await executeStep(text, c, document);
+      expect(r.outcome).toBe('action_failed');
+    });
+
+    it('an element with no id has no provable successor', async () => {
+      const c = firstControl('<input type="text">');
+      c.el.addEventListener('blur', () => {
+        const next = document.createElement('input');
+        next.value = (c.el as HTMLInputElement).value;
+        c.el.replaceWith(next);
+      });
+      const r = await executeStep(text, c, document);
+      expect(r.outcome).toBe('action_failed');
+    });
+
+    it('writes to the new element when the old one went before the turn came', async () => {
+      const c = firstControl('<input id="given" type="text">');
+      const next = document.createElement('input');
+      next.id = 'given';
+      next.type = 'text';
+      c.el.replaceWith(next);
+      const r = await executeStep(text, c, document);
+      expect(r.outcome).toBe('filled');
+      expect(next.value).toBe('Zhiyuan');
+    });
+  });
+
   it('drives the real native driver end to end (default registry)', async () => {
     const c = firstControl('<select><option value="">Select</option><option>Master</option></select>');
     const r = await executeStep(

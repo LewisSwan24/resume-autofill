@@ -407,6 +407,17 @@ export function toIntent(
         const home = opts.home;
         return { kind: 'choice', display: text, query: text, match: (options) => matchPlace(text, home, options) };
       }
+      if (def.key === 'contact.addressProvince' && hasPickList(control) && !control.multiple) {
+        const spellings = placeSpellings(text, opts.home?.country ?? '');
+        const match: OptionMatcher = (options) => {
+          for (const spelling of spellings) {
+            const m = matchOption(null, spelling, options);
+            if (m.status !== 'none') return m;
+          }
+          return { status: 'none' };
+        };
+        return { kind: 'choice', display: text, query: text, match };
+      }
       if (hasPickList(control)) return multiOrChoice(domain, [text], control);
       if (kind === 'cascader') return { kind: 'cascade', display: text, path: [text] };
       return { kind: 'text', text };

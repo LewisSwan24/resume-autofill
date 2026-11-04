@@ -21,6 +21,8 @@ export interface CapturedField {
    * input and show progress instead, so `selector` names any element, not a control, and must match one.
    */
   exists?: true;
+  /** With `exists`: the control this field is about, which `selector` does not name. */
+  control?: string;
   /** Checked on the static snapshot: the classification this control must get. */
   fieldKey?: string;
 }
@@ -36,6 +38,13 @@ export interface KnownGap extends CapturedField {
   live?: true;
 }
 
+/** A control that is right to leave alone. Every control on a sample's page needs a verdict. */
+export interface LeaveEmpty extends LocatedEntry {
+  reason: string;
+  /** The field this really is, when the resume just has nothing for it. Any other key is a wrong guess. */
+  fieldKey?: string;
+}
+
 export interface CapturedExpected {
   __resume: string;
   __adapter?: string;
@@ -47,6 +56,10 @@ export interface CapturedExpected {
   __knownGaps?: Record<string, KnownGap>;
   /** Must equal the number of gaps: fixing one forces this number down, adding one needs a deliberate edit. */
   __knownGapsMax: number;
+  /** Must not change, and may not be reported filled. */
+  __leaveEmpty?: Record<string, LeaveEmpty>;
+  /** Must equal the number of wrong guesses, as with `__knownGapsMax`. */
+  __wrongGuessesMax?: number;
   fields: Record<string, CapturedField>;
 }
 
@@ -55,6 +68,8 @@ export interface CapturedSample {
   name: string;
   dir: string;
   url: string;
+  /** Read in place behind a login, so there is no recording to replay: it runs on its snapshot. */
+  readInPlace: boolean;
   expected: CapturedExpected;
 }
 
@@ -68,8 +83,8 @@ export function listSamples(root: string = CAPTURED_DIR): CapturedSample[] {
       const dir = path.join(atsDir, name);
       const file = path.join(dir, 'expected.json');
       if (!existsSync(file)) continue;
-      const meta = JSON.parse(readFileSync(path.join(dir, 'meta.json'), 'utf8')) as { url: string };
-      out.push({ ats, name, dir, url: meta.url, expected: JSON.parse(readFileSync(file, 'utf8')) as CapturedExpected });
+      const meta = JSON.parse(readFileSync(path.join(dir, 'meta.json'), 'utf8')) as { url: string; harEntries?: number };
+      out.push({ ats, name, dir, url: meta.url, readInPlace: meta.harEntries === 0, expected: JSON.parse(readFileSync(file, 'utf8')) as CapturedExpected });
     }
   }
   return out;
@@ -120,6 +135,16 @@ export interface SampleScore {
   reviewProblems: string[];
   /** The report says filled but read nothing back. The report must not claim what it cannot see. */
   falselyFilled: string[];
+  /** The page holds the right value, yet the report says otherwise. A user would redo work that is done. */
+  falselyFailed: string[];
+  leaveEmpty: number;
+  /** Should have stayed empty, and did not. */
+  touched: string[];
+  /**
+   * A control with no such field that the engine still named a field for. Nothing was filled, but the user is
+   * shown a nonsense suggestion, and a higher score would have filled it.
+   */
+  wrongGuesses: string[];
   outcomes: FillReport['counts'];
 }
 
@@ -129,6 +154,31 @@ function matches(field: CapturedField, actual: Reading): boolean {
   if (field.exists) return actual === true;
   if (field.contains !== undefined) return typeof actual === 'string' && actual.includes(field.contains);
   return JSON.stringify(actual) === JSON.stringify(field.expect);
+}
+
+const squashLabel = (s: string): string => s.replace(/[*\s]+/g, ' ').trim().toLowerCase();
+
+/** The report's row for a field: by field key, or else by its label. A filled row wins over a later failed one. */
+function rowsOf(report: FillReport, label: string, fieldKey?: string): FillReport['fields'] {
+  const wanted = squashLabel(label);
+  return report.fields.filter((f) => {
+    if (fieldKey && f.fieldKey === fieldKey) return true;
+    return squashLabel(f.label ?? '').includes(wanted);
+  });
+}
+
+/** Every selector that gives a control on the page its verdict. */
+export function verdictSelectors(expected: CapturedExpected): string[] {
+  const of = (f: CapturedField): string[] => {
+    if (f.control) return [f.control];
+    return f.exists ? [] : [f.selector];
+  };
+  return [
+    ...Object.values(expected.fields).flatMap(of),
+    ...Object.values(expected.__knownGaps ?? {}).flatMap(of),
+    ...Object.values(expected.__review ?? {}).map((r) => r.selector),
+    ...Object.values(expected.__leaveEmpty ?? {}).map((r) => r.selector),
+  ];
 }
 
 export function changedControls(before: Inspection['snapshot'], after: Inspection['snapshot']): ControlChange[] {
@@ -153,6 +203,7 @@ export function scoreSample(
   const missing: string[] = [];
   const wrong: WrongField[] = [];
   const stale: string[] = [];
+  const falselyFailed: string[] = [];
   let correct = 0;
 
   const allGaps = Object.entries(expected.__knownGaps ?? {});
@@ -161,8 +212,12 @@ export function scoreSample(
 
   for (const [label, field] of Object.entries(checked)) {
     const actual = after.readings[label] ?? null;
-    if (matches(field, actual)) correct++;
-    else if (isEmptyReading(actual)) missing.push(label);
+    if (matches(field, actual)) {
+      correct++;
+      const rows = rowsOf(report, label, field.fieldKey);
+      if (rows.length === 0) falselyFailed.push(`${label}: no report row`);
+      else if (!rows.some((r) => r.outcome === 'filled')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}`);
+    } else if (isEmptyReading(actual)) missing.push(label);
     else wrong.push({ label, expected: field.contains ? `contains ${field.contains}` : field.expect, actual });
     if (!field.exists && (after.coverage[label] ?? []).length === 0) stale.push(label);
   }
@@ -190,6 +245,22 @@ export function scoreSample(
     return problems;
   });
 
+  const leaving = Object.keys(expected.__leaveEmpty ?? {});
+  const touched = leaving.filter((label) => {
+    const changed = JSON.stringify(after.readings[label] ?? null) !== JSON.stringify(before.readings[label] ?? null);
+    return changed || rowsOf(report, label).some((r) => r.outcome === 'filled');
+  });
+
+  const named: [string, string | undefined][] = [
+    ...Object.entries(expected.__leaveEmpty ?? {}).map(([label, e]): [string, string | undefined] => [label, e.fieldKey]),
+    ...allGaps.map(([label, g]): [string, string | undefined] => [label, g.fieldKey]),
+  ];
+  const wrongGuesses = named.flatMap(([label, right]) =>
+    rowsOf(report, label)
+      .filter((r) => r.fieldKey && r.fieldKey !== right)
+      .map((r) => `${label}: ${r.fieldKey}`),
+  );
+
   return {
     sample: `${sample.ats}/${sample.name}`,
     mode,
@@ -204,6 +275,10 @@ export function scoreSample(
     trapsFilled,
     reviewProblems,
     falselyFilled: report.fields.filter((f) => f.outcome === 'filled' && !f.observed && !/^(true|false)$/.test(f.value ?? '')).map((f) => f.label),
+    falselyFailed,
+    leaveEmpty: leaving.length,
+    touched,
+    wrongGuesses,
     outcomes: report.counts,
   };
 }
@@ -218,6 +293,12 @@ export function scoreProblems(score: SampleScore, expected: CapturedExpected): s
   for (const label of score.trapsFilled) out.push(`trap filled: ${label}`);
   out.push(...score.reviewProblems);
   for (const label of score.falselyFilled) out.push(`reported filled with nothing read back: ${label}`);
+  for (const row of score.falselyFailed) out.push(`false report ${row}`);
+  for (const label of score.touched) out.push(`should stay empty: ${label}`);
+  const allowed = expected.__wrongGuessesMax ?? 0;
+  if (score.wrongGuesses.length !== allowed) {
+    out.push(`wrong guesses: ${score.wrongGuesses.length}, but __wrongGuessesMax is ${allowed} (${score.wrongGuesses.join('; ')})`);
+  }
   if (score.gaps.length + score.liveFields !== expected.__knownGapsMax) {
     out.push(`known gaps: ${score.gaps.length + score.liveFields}, but __knownGapsMax is ${expected.__knownGapsMax}. Gaps may only shrink, and the number moves with them`);
   }
@@ -243,14 +324,17 @@ export function recordScore(score: SampleScore, file: string = ACCURACY_FILE): v
   writeFileSync(file, JSON.stringify(rows, null, 2));
 }
 
+const wrongCount = (r: SampleScore): number => r.wrong.length + r.extras.length;
+const falseReports = (r: SampleScore): number => r.falselyFilled.length + r.falselyFailed.length;
+
 /** The per-ATS table for the local acceptance report. */
 export function renderAccuracyTable(rows: SampleScore[]): string {
   const sorted = [...rows].sort((a, b) => `${a.sample} ${a.mode}`.localeCompare(`${b.sample} ${b.mode}`));
   const lines = [
-    '| 样本 | 运行方式 | 字段 | 填对 | 准确率 | 错填 | 漏填 | 已知缺口 | 待确认 | 操作失败 |',
-    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| 样本 | 运行方式 | 应填 | 填对 | 填对率 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 |',
+    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
     ...sorted.map((r) =>
-      `| ${r.sample} | ${r.mode} | ${r.fields + r.gaps.length} | ${r.correct} | ${accuracyOf(r)}% | ${r.wrong.length + r.extras.length} | ${r.missing.length} | ${r.gaps.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} |`,
+      `| ${r.sample} | ${r.mode} | ${r.fields + r.gaps.length} | ${r.correct} | ${accuracyOf(r)}% | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} |`,
     ),
   ];
   return `${lines.join('\n')}\n`;
@@ -258,5 +342,5 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
 
 /** One line per sample and mode, printed by the specs and used for the accuracy table. */
 export function scoreLine(score: SampleScore): string {
-  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%, wrong ${score.wrong.length + score.extras.length}, missing ${score.missing.length}, known gaps ${score.gaps.length}`;
+  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}`;
 }

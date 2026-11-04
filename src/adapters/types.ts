@@ -22,6 +22,20 @@ export interface SearchBox {
   picked?: string;
 }
 
+/** A plain input that takes an answer only by picking from a list, shown afterwards as a pill. */
+export interface PromptBox {
+  input: string;
+  /** The box around the input and its pills. */
+  within: string;
+  /** The list while it is open, anywhere on the page. */
+  list: string;
+  option: string;
+  /** Inside an option: says it is an answer and not a folder of more options. */
+  leaf: string;
+  /** Inside `within`: the text of a choice already made. */
+  chosen: string;
+}
+
 export interface AtsAdapter {
   id: string;
   match: {
@@ -32,6 +46,9 @@ export interface AtsAdapter {
   };
   questions?: QuestionLabel[];
   searchBoxes?: SearchBox[];
+  prompts?: PromptBox[];
+  /** Controls to leave out altogether. */
+  skip?: string[];
   /** Showing while the page reads an upload. It may write over fields when it finishes. */
   uploadBusy?: string;
 }

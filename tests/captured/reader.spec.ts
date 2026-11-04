@@ -2,7 +2,8 @@
 // Uses no captured sample, so it also runs on a clean clone.
 import { expect, test, type Page } from '@playwright/test';
 import { changedControls } from '../shared/capturedExpectations';
-import { inspect } from './readState';
+import { injectHarness } from '../drivers/helpers';
+import { inspect, unjudgedControls } from './readState';
 
 const PAGE = `<!doctype html><body>
 <label for="t">Text</label><input id="t">
@@ -133,4 +134,23 @@ test('a removed control that held a value counts as a change', async ({ page }) 
   await page.evaluate(() => document.getElementById('t')!.remove());
   const after = await inspect(page, LOCATORS);
   expect(changedControls(before.snapshot, after.snapshot)).toEqual([{ key: 'text#t', before: 'typed', after: '' }]);
+});
+
+test('names every control on the page that has no verdict', async ({ page }) => {
+  await page.setContent(`<!doctype html><body>
+    <label for="a">Judged</label><input id="a">
+    <label for="b">Forgotten</label><input id="b">
+    <div role="radiogroup" aria-label="Group"><label><input type="radio" name="r" id="r1">Yes</label><label><input type="radio" name="r" id="r2">No</label></div>
+    </body>`);
+  await injectHarness(page);
+  const missing = await unjudgedControls(page, ['#a', '#r2']);
+  expect(missing.map((m) => m.label)).toEqual(['Forgotten']);
+  expect(await unjudgedControls(page, ['#a', '#b', '#r1'])).toEqual([]);
+});
+
+test('names a verdict whose selector finds nothing', async ({ page }) => {
+  await page.setContent('<!doctype html><body><label for="a">A</label><input id="a"></body>');
+  await injectHarness(page);
+  const missing = await unjudgedControls(page, ['#a', '#gone']);
+  expect(missing).toEqual([{ label: 'verdict finds nothing: #gone', kind: '-' }]);
 });

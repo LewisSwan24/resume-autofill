@@ -41,6 +41,13 @@ describe('a city picked from a list', () => {
   });
 });
 
+describe('a state picked from a list', () => {
+  it('goes with its country, which decides how a short form reads', () => {
+    const out = buildResumeSubset(en, needs({ fieldKeys: ['contact.addressProvince'] }));
+    expect(out.contact.address).toMatchObject({ province: en.contact.address.province, country: en.contact.address.country, city: '' });
+  });
+});
+
 describe('the choice of how to answer a gender question', () => {
   const chosen = { ...en, diversity: { ...en.diversity, genderAnswer: 'from_resume' as const } };
 

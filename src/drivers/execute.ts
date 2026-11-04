@@ -1,6 +1,7 @@
 // Execute one planned fill step: pick the driver, try (at most) twice, read back, build the report.
 import type { Control, FieldKey, FieldReport, SectionKey } from '../engine/types';
 import { closeDropdown } from './dropdown';
+import { valuesEquivalent } from './equivalence';
 import { getDriver } from './registry';
 import type { Driver, FillIntent, FillResult } from './types';
 
@@ -106,6 +107,17 @@ async function attempt(
   }
 }
 
+/**
+ * Some pages rebuild a field when it is left: a new element with the same id. Point the control at it.
+ * Whether it kept the value is for the caller to check. With no id, nothing shows which element took over.
+ */
+function followRebuilt(control: Control, doc: Document): void {
+  const old = control.el;
+  if (old.isConnected || !old.id) return;
+  const next = doc.getElementById(old.id);
+  if (next && next.tagName === old.tagName && next.getAttribute('type') === old.getAttribute('type')) control.el = next;
+}
+
 function safeRead(driver: Driver, control: Control): string | null {
   try {
     return driver.read(control);
@@ -143,16 +155,21 @@ export async function executeStep(
     const driver = (opts.resolveDriver ?? getDriver)(control);
     if (!driver) return report;
 
+    followRebuilt(control, doc);
     let result = await attempt(driver, control, step.intent, doc, 1, timeoutMs, graceMs);
     const terminal = result.outcome === 'no_option' || result.outcome === 'needs_review';
     if (!result.ok && !terminal) result = await attempt(driver, control, step.intent, doc, 2, timeoutMs, graceMs);
 
+    const before = control.el;
+    followRebuilt(control, doc);
     report.observed = safeRead(driver, control) ?? result.observed;
+    // What was written has to be what the new element came back with.
+    const rebuiltOther = before !== control.el && !valuesEquivalent(result.observed ?? '', report.observed);
     // A widget can accept a write and wipe it a moment later. Empty means unchecked for a checkbox, not a loss.
     const lostWrite = result.ok && step.intent.kind !== 'check' && !report.observed;
     // The page re-rendered and dropped the control. A file box may go on purpose once it has its file.
     const leftPage = result.ok && step.intent.kind !== 'file' && !control.el.isConnected;
-    if (lostWrite || leftPage) {
+    if (lostWrite || leftPage || (result.ok && rebuiltOther)) {
       report.outcome = 'action_failed';
     } else if (result.ok) {
       report.outcome = 'filled';

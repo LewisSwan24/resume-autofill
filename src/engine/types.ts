@@ -14,7 +14,7 @@ export type ControlKind =
   | 'richtext'
   | 'cascader';
 
-export type UiLib = 'native' | 'antd' | 'element' | 'aria' | 'search';
+export type UiLib = 'native' | 'antd' | 'element' | 'aria' | 'search' | 'workday';
 
 export interface OptionInfo {
   label: string;
@@ -39,6 +39,8 @@ export interface Control {
   questionText?: string;
   /** Parts of a search box, named by an adapter. */
   search?: { within: string; option: string; picked?: string };
+  /** Parts of a search-and-pick control, named by an adapter. */
+  prompt?: { within: string; list: string; option: string; leaf: string; chosen: string };
 }
 
 export type EvidenceSource =

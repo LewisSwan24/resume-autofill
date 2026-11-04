@@ -4,11 +4,12 @@ import { ariaAnswerButtonsDriver, ariaDriver } from './aria';
 import { elementDrivers } from './element';
 import { registerDriver } from './registry';
 import { searchBoxDriver } from './searchBox';
+import { workdayPromptDriver } from './workday/prompt';
 
 let registered = false;
 
 export function registerAllDrivers(): void {
   if (registered) return;
   registered = true;
-  for (const d of [...antdDrivers, ...elementDrivers, ariaDriver, ariaAnswerButtonsDriver, searchBoxDriver]) registerDriver(d);
+  for (const d of [...antdDrivers, ...elementDrivers, ariaDriver, ariaAnswerButtonsDriver, searchBoxDriver, workdayPromptDriver]) registerDriver(d);
 }

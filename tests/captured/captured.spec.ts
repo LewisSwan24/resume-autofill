@@ -16,9 +16,10 @@ import {
   scoreSample,
   type CapturedSample,
   type SampleScore,
+  verdictSelectors,
 } from '../shared/capturedExpectations';
 import { injectHarness } from '../drivers/helpers';
-import { inspect, locatorsOf } from './readState';
+import { inspect, locatorsOf, unjudgedControls } from './readState';
 
 const samples = listSamples();
 
@@ -26,6 +27,11 @@ test('there are captured samples to test', () => {
   if (process.env.RAF_ALLOW_NO_CAPTURES) return;
   expect(samples.length, 'no sample in fixtures/captured: capture one, or set RAF_ALLOW_NO_CAPTURES=1 on a clean clone').toBeGreaterThan(0);
 });
+
+// A step behind a login is read in place, with no recording to replay. It runs on its snapshot instead.
+async function openForFill(browser: Browser, sample: CapturedSample): Promise<Page> {
+  return sample.readInPlace ? openStatic(browser, sample) : openReplay(browser, sample);
+}
 
 async function openStatic(browser: Browser, sample: CapturedSample): Promise<Page> {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1280, height: 900 }, locale: 'en-AU' });
@@ -63,13 +69,13 @@ for (const sample of samples) {
       try {
         await injectHarness(page);
         const wanted = Object.entries(sample.expected.fields).flatMap(([label, f]) =>
-          f.fieldKey ? [{ label, selector: f.selector, fieldKey: f.fieldKey }] : [],
+          f.fieldKey ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
         );
         const rows = await page.evaluate((items) => {
           const { contexts, classifications } = window.__raf.scanDocument(document);
           return items.map((item) => {
             const el = document.querySelector(item.selector);
-            const i = contexts.findIndex((c) => c.control.el === el || (el && c.control.el.contains(el)));
+            const i = contexts.findIndex((c) => c.control.el === el || (el && (c.control.el.contains(el) || el.contains(c.control.el))));
             return { ...item, actual: i >= 0 ? (classifications[i]?.fieldKey ?? null) : 'not discovered' };
           });
         }, wanted);
@@ -80,9 +86,19 @@ for (const sample of samples) {
       }
     });
 
-    test('replay: filling gives exactly what expected.json says', async ({ browser }) => {
+    test('static snapshot: every control on the page has a verdict', async ({ browser }) => {
+      const page = await openStatic(browser, sample);
+      try {
+        await injectHarness(page);
+        expect(await unjudgedControls(page, verdictSelectors(sample.expected))).toEqual([]);
+      } finally {
+        await page.context().close();
+      }
+    });
+
+    test(`${sample.readInPlace ? 'snapshot' : 'replay'}: filling gives exactly what expected.json says`, async ({ browser }) => {
       test.setTimeout(180_000);
-      const page = await openReplay(browser, sample);
+      const page = await openForFill(browser, sample);
       let score: SampleScore;
       try {
         const locators = locatorsOf(sample.expected);

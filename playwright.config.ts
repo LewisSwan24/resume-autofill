@@ -23,5 +23,7 @@ export default defineConfig({
     { name: 'drivers', testDir: 'tests/drivers', use: { baseURL: FIXTURE_URL } },
     // Visual capture for design review (`pnpm visual`): writes PNGs to docs/reviews/ui-screenshots/. Not part of `pnpm e2e`.
     { name: 'visual', testDir: 'tests/visual', timeout: 120_000 },
+    // Real-page samples from fixtures/captured, offline (`pnpm test:captured`). Not committed, so kept apart.
+    { name: 'captured', testDir: 'tests/captured', timeout: 120_000 },
   ],
 });

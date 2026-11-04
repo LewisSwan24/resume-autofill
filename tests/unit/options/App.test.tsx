@@ -149,7 +149,7 @@ describe('Options page – editing and autosave', () => {
     cleanup();
     setLanguage('en');
     await renderApp(makeProfile('zh'));
-    const zhSelect = screen.getByLabelText('性别') as HTMLSelectElement;
+    const zhSelect = (await screen.findByLabelText('性别', {}, WAIT)) as HTMLSelectElement;
     expect([...zhSelect.options].map((o) => o.textContent)).toContain('男');
   });
 

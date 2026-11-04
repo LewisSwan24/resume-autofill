@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BrowserContext, Page, Worker } from '@playwright/test';
 import type { FieldReport, FillReport } from '../../src/engine/types';
+import type { Inspection } from '../shared/capturedExpectations';
 
 export const FIXTURE_ORIGIN = 'http://localhost:4173';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -117,6 +118,8 @@ export interface FillRun {
   detected: number;
   /** Count shown on the FAB before the click. */
   fabDetected: number;
+  /** What `beforeFill` returned. */
+  before?: Inspection;
 }
 
 /**
@@ -128,12 +131,18 @@ export async function fillFixture(
   worker: Worker,
   name: string,
   locale: string,
-  opts: { frame?: boolean } = {},
+  opts: {
+    frame?: boolean;
+    /** Open this address instead of a synthetic fixture (`name` is then ignored). */
+    url?: string;
+    /** Runs once the page is open, before the FAB is clicked. */
+    beforeFill?: (page: Page) => Promise<Inspection>;
+  } = {},
 ): Promise<FillRun> {
   await waitForSeed(worker);
   await setActiveResumeByLocale(worker, locale);
 
-  const url = fixtureUrl(name);
+  const url = opts.url ?? fixtureUrl(name);
   const page = await context.newPage();
   await page.goto(url);
   if (opts.frame) await page.frameLocator('iframe[title="Additional questions"]').getByLabel('Notice period').waitFor();
@@ -163,6 +172,8 @@ export async function fillFixture(
     else await page.waitForTimeout(150);
   }
 
+  const before = await opts.beforeFill?.(page);
+
   const box = await fabBox(page);
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 
@@ -172,7 +183,7 @@ export async function fillFixture(
     if (Date.now() > reportDeadline) throw new Error('no report stored after clicking the FAB');
     await page.waitForTimeout(200);
   }
-  return { page, tabId, report, detected, fabDetected };
+  return { page, tabId, report, detected, fabDetected, ...(before ? { before } : {}) };
 }
 
 function scanFrames(worker: Worker, tabId: number): Promise<Record<string, number>> {

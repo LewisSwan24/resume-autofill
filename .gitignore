@@ -5,8 +5,6 @@ test-results/
 playwright-report/
 *.log
 # Competitor extension code: local study only, never commit
-research/offerlink-raw/
-research/offerlink-pretty/
 research/tools/
 # Captured live pages may contain personal data
 fixtures/captured/**/private/

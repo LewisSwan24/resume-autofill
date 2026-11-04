@@ -44,6 +44,29 @@ const run = (d: Driver, s = step(), timeoutMs?: number, graceMs = 20) =>
   executeStep(s, control, document, { resolveDriver: () => d, graceMs, ...(timeoutMs ? { timeoutMs } : {}) });
 
 describe('executeStep', () => {
+  // Seen on a real page: text typed into a custom select is wiped by the widget a moment later.
+  it('does not report filled when the driver says ok but the page reads back empty', async () => {
+    const r = await run(scripted([{ ok: true, observed: 'x' }], ''));
+    expect(r.outcome).toBe('action_failed');
+    expect(r.observed).toBe('');
+  });
+
+  it('keeps filled when read() has no answer but the driver observed the value', async () => {
+    const r = await run(scripted([{ ok: true, observed: 'x' }], null));
+    expect(r.outcome).toBe('filled');
+    expect(r.observed).toBe('x');
+  });
+
+  it('does not report filled when nothing at all could be read back', async () => {
+    const r = await run(scripted([{ ok: true, observed: null }], null));
+    expect(r.outcome).toBe('action_failed');
+  });
+
+  it('accepts an empty read-back for a checkbox, where it means unchecked', async () => {
+    const r = await run(scripted([{ ok: true, observed: '' }], ''), step({ intent: { kind: 'check', checked: false } }));
+    expect(r.outcome).toBe('filled');
+  });
+
   it('maps ok → filled with value, observed (driver.read), source, section and confidence', async () => {
     const d = scripted([{ ok: true, observed: 'x' }]);
     const r = await run(d, step({ source: 'basics.email', section: 'basics' }));

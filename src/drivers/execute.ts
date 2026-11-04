@@ -148,7 +148,11 @@ export async function executeStep(
     if (!result.ok && !terminal) result = await attempt(driver, control, step.intent, doc, 2, timeoutMs, graceMs);
 
     report.observed = safeRead(driver, control) ?? result.observed;
-    if (result.ok) {
+    // A widget can accept a write and wipe it a moment later. Empty means unchecked for a checkbox, not a loss.
+    const lostWrite = result.ok && step.intent.kind !== 'check' && !report.observed;
+    if (lostWrite) {
+      report.outcome = 'action_failed';
+    } else if (result.ok) {
       report.outcome = 'filled';
     } else {
       report.outcome = result.outcome ?? 'action_failed';

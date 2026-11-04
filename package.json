@@ -19,7 +19,11 @@
     "fixtures:build": "vite build --config fixtures/synthetic/vite.config.ts",
     "harness:build": "vite build --config tests/drivers/harness/vite.config.ts",
     "test:drivers": "pnpm harness:build && playwright test --project=drivers",
-    "fixtures:preview": "vite preview --config fixtures/synthetic/vite.config.ts --port 4173 --strictPort"
+    "fixtures:preview": "vite preview --config fixtures/synthetic/vite.config.ts --port 4173 --strictPort",
+    "capture": "node scripts/capture-page.ts",
+    "test:captured": "pnpm harness:build && pnpm build && playwright test --project=captured",
+    "accuracy:table": "node scripts/accuracy-table.ts",
+    "live-check": "pnpm build && node scripts/live-check.ts"
   },
   "dependencies": {
     "@fontsource/manrope": "^5.3.0",
@@ -34,6 +38,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/chrome": "^0.3.7",
+    "@types/jsdom": "^30.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",

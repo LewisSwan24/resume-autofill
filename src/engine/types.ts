@@ -55,6 +55,7 @@ export type EvidenceSource =
   | 'legend'
   | 'table-header'
   | 'nearby-text'
+  | 'fine-print'
   | 'placeholder'
   | 'title-attr'
   | 'name-id';
@@ -67,6 +68,8 @@ export const EVIDENCE_WEIGHTS: Record<EvidenceSource, number> = {
   'table-header': 0.85,
   legend: 0.8,
   'nearby-text': 0.8,
+  // Never names a field. It only ever stops one being filled.
+  'fine-print': 0,
   placeholder: 0.7,
   'title-attr': 0.6,
   'name-id': 0.5,

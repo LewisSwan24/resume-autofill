@@ -374,3 +374,106 @@ body {
 .raf-dialog__field {
   margin-bottom: var(--raf-space-4);
 }
+
+/* ------------------------------------------------------------- resume import */
+
+.raf-upload-resume {
+  position: relative;
+  margin-top: var(--raf-space-2);
+  width: 100%;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.raf-upload-resume:focus-within {
+  outline: var(--raf-focus-ring-width) solid var(--raf-color-focus);
+  outline-offset: var(--raf-focus-ring-offset);
+}
+
+.raf-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.raf-review {
+  --raf-review-check: color-mix(in srgb, var(--raf-color-warning) 18%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-3);
+}
+
+.raf-review__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+}
+
+.raf-review__actions {
+  display: flex;
+  gap: var(--raf-space-2);
+}
+
+.raf-review__body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--raf-space-3);
+  align-items: start;
+}
+
+@media (max-width: 767px) {
+  .raf-review__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.raf-review__source {
+  position: sticky;
+  top: var(--raf-space-2);
+  max-height: 80vh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.raf-review__lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.raf-review__lines li {
+  padding: 2px var(--raf-space-1);
+  border-radius: 4px;
+}
+
+.raf-review__lines li.is-active {
+  background: var(--raf-review-check);
+}
+
+.raf-review__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  min-width: 0;
+}
+
+.raf-review__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  margin: 0;
+  padding: var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: 8px;
+}
+
+.raf-review__field.is-check {
+  padding: var(--raf-space-1);
+  border-radius: 6px;
+  background: var(--raf-review-check);
+}
+

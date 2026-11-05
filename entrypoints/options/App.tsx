@@ -1,5 +1,5 @@
 // Options page: resume library editor.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ARRAY_MODULES,
   MODULES,
@@ -7,6 +7,7 @@ import {
   createResume,
   duplicateResume,
   issuesForResume,
+  validateProfile,
   pruneMissingAttachments,
   referencedFileIds,
   removeResume,
@@ -18,12 +19,18 @@ import {
   type AttachmentSlot,
   type ModuleName,
 } from '../../src/editor';
-import { resolveLanguage, setLanguage, useT } from '../../src/i18n';
+import { resolveLanguage, setLanguage, useT, type MessageKey } from '../../src/i18n';
 import type { Locale, Profile, Resume } from '../../src/schema';
+import { draftToResume, refusedPaths } from '../../src/import/draft';
+import type { ExtractFailure, TextLine } from '../../src/import/extract/types';
+import { parseResume, type Draft } from '../../src/import/parse';
+import { cleanLines } from '../../src/import/parse/clean';
+import { readResumeFile } from '../../src/import/read';
 import { deleteFile, getFile, putFile } from '../../src/storage';
 import { Icon } from '../../src/ui/Icon';
 import { Attachments, MAX_ATTACHMENT_MB, acceptsFile, slotTypeKey } from './Attachments';
 import { ModuleForm } from './ModuleForm';
+import { ImportReview, type ReviewProblem } from './ImportReview';
 import { ResumeList } from './ResumeList';
 import { DataPanel, SettingsPanel } from './SidePanels';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
@@ -73,6 +80,19 @@ function SaveStatusLine({ status }: { status: SaveStatus }) {
   );
 }
 
+type ImportState =
+  | { state: 'reading'; file: File }
+  | { state: 'failed'; file: File; reason: ExtractFailure }
+  | { state: 'review'; turn: number; file: File; lines: TextLine[]; draft: Draft; title?: string; saving?: boolean; problem?: ReviewProblem | undefined };
+
+const IMPORT_FAILURES: Record<ExtractFailure, MessageKey> = {
+  encrypted: 'options.import.encrypted',
+  no_text: 'options.import.noText',
+  unsupported: 'options.import.unsupported',
+  too_large: 'options.import.tooLarge',
+  failed: 'options.import.failed',
+};
+
 function Options({ autosaveDelayMs }: AppProps) {
   const t = useT();
   const { profile, loadError, status, saveError, issues, commit } = useProfileEditor(autosaveDelayMs);
@@ -84,6 +104,8 @@ function Options({ autosaveDelayMs }: AppProps) {
   const [deleteTarget, setDeleteTarget] = useState<Resume | null>(null);
   const [linkTarget, setLinkTarget] = useState<Resume | null>(null);
   const [linkChoice, setLinkChoice] = useState('');
+  const [imported, setImported] = useState<ImportState | null>(null);
+  const importTurn = useRef(0);
 
   // Handlers run after awaits (and Undo runs seconds later); always read the newest profile through this ref.
   const latest = useRef<Profile | null>(profile);
@@ -129,6 +151,60 @@ function Options({ autosaveDelayMs }: AppProps) {
     void commit(addResume(profile, created, { activate: profile.resumes.length === 0 }), { immediate: true });
     setSelectedId(created.id);
     setTab('editor');
+  };
+
+  // A draft lives here and nowhere else until it is saved.
+  const startImport = async (file: File) => {
+    // The file chosen last is the one being checked, whichever finishes first.
+    const turn = ++importTurn.current;
+    setImported({ state: 'reading', file });
+    setTab('editor');
+    const result = await readResumeFile(file);
+    if (turn !== importTurn.current) return;
+    if (!result.ok) {
+      setImported({ state: 'failed', file, reason: result.reason });
+      return;
+    }
+    try {
+      setImported({ state: 'review', turn, file, lines: cleanLines(result.lines), draft: parseResume(result.lines) });
+    } catch {
+      setImported({ state: 'failed', file, reason: 'failed' });
+    }
+  };
+
+  const keepImportEdits = useCallback((draft: Draft, title: string) => {
+    setImported((prev) => (prev?.state === 'review' ? { ...prev, draft, title } : prev));
+  }, []);
+
+  const saveImport = async (turn: number, file: File, draft: Draft, title: string) => {
+    const stopped = (problem: ReviewProblem) =>
+      setImported((prev) => (prev?.state === 'review' && prev.turn === turn ? { ...prev, saving: false, problem } : prev));
+    const id = createResume({ title, locale: draft.locale }).id;
+    // A value the schema refuses would otherwise be left out without a word.
+    const refused = refusedPaths(draft, { id, title });
+    if (refused.length > 0) {
+      stopped({ kind: 'fields', paths: refused });
+      return;
+    }
+    setImported((prev) => (prev?.state === 'review' ? { ...prev, saving: true, problem: undefined } : prev));
+    let fileId: string;
+    try {
+      fileId = await putFile({ name: file.name, type: file.type || 'application/octet-stream', blob: file });
+    } catch {
+      stopped({ kind: 'store' });
+      return;
+    }
+    // Read only now: the profile may have changed while the file was being stored.
+    const current = latest.current;
+    const next = current && addResume(current, setAttachment(draftToResume(draft, { id, title }), 'resumeFileId', fileId), { activate: true });
+    if (!next || validateProfile(next).length > 0) {
+      await deleteFile(fileId).catch(() => undefined);
+      stopped({ kind: next ? 'other_resume' : 'store' });
+      return;
+    }
+    await commit(next, { immediate: true });
+    setSelectedId(id);
+    if (turn === importTurn.current) setImported(null);
   };
 
   const duplicate = (source: Resume) => {
@@ -322,6 +398,7 @@ function Options({ autosaveDelayMs }: AppProps) {
                 selectedId={resume?.id ?? null}
                 onSelect={setSelectedId}
                 onCreate={createNew}
+                onUpload={(file) => void startImport(file)}
                 onSetActive={(r) => void commit(setActive(profile, r.id), { immediate: true })}
                 onDuplicate={duplicate}
                 onLink={(r) => {
@@ -331,7 +408,35 @@ function Options({ autosaveDelayMs }: AppProps) {
                 onDelete={setDeleteTarget}
               />
             </aside>
-            <main className="raf-main">{editor}</main>
+            <main className="raf-main">
+              {imported?.state === 'review' ? (
+                <ImportReview
+                  key={imported.turn}
+                  fileName={imported.file.name}
+                  lines={imported.lines}
+                  draft={imported.draft}
+                  {...(imported.title === undefined ? {} : { title: imported.title })}
+                  busy={!!imported.saving}
+                  problem={imported.problem}
+                  onCancel={() => {
+                    importTurn.current++;
+                    setImported(null);
+                  }}
+                  onEdit={keepImportEdits}
+                  onSave={(draft, title) => void saveImport(imported.turn, imported.file, draft, title)}
+                />
+              ) : (
+                <>
+                  {imported?.state === 'reading' ? <Notice>{t('options.import.reading')}</Notice> : null}
+                  {imported?.state === 'failed' ? (
+                    <Notice tone="danger" action={<Button onClick={() => setImported(null)}>{t('common.close')}</Button>}>
+                      {t(IMPORT_FAILURES[imported.reason])}
+                    </Notice>
+                  ) : null}
+                  {editor}
+                </>
+              )}
+            </main>
           </>
         ) : tab === 'settings' ? (
           <section className="raf-card" aria-label={t('options.settings.title')}>

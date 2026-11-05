@@ -89,6 +89,18 @@ export function namesSpareAddressLine(name: string | null | undefined): boolean 
 }
 
 /** True when the label looks like a captcha / password / consent / declaration control. */
+const ASKS_FOR_CONSENT =
+  /\bconsent|\b(?:i|you|we)\s+(?:hereby\s+)?(?:agree|accept|declare|acknowledge|authori[sz]e|certify)\b|\bdo you (?:agree|accept)\b|\bagree (?:to|that|with)\b|\bterms (?:and|&) conditions\b|\bby (?:choosing|selecting|ticking|checking|submitting)\b|同意|授权|承诺|声明/i;
+
+/**
+ * Wording above a question that asks for consent, as a sentence and not just by naming a policy or an agreement.
+ * A short question about sponsorship or work rights is an ordinary field, but those words in a passage that also
+ * asks you to agree do not make its answers any less of a consent.
+ */
+export function asksForConsent(passage: string): boolean {
+  return ASKS_FOR_CONSENT.test(passage);
+}
+
 export function isNeverFill(label: string): boolean {
   const t = normalizeLabel(label);
   if (!t) return false;

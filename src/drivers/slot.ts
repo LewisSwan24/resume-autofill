@@ -10,8 +10,18 @@ const FORM_CONTROLS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 /** A page or a form can gain an unrelated field at any time: too wide to say anything about one box. */
 const TOO_WIDE = new Set(['BODY', 'HTML']);
 
-/** A generated name means nothing from one render to the next. A word does. */
-const isWordName = (name: string): boolean => /^[a-z]+(?:[_.\[\]-]+[a-z0-9]*)*$/.test(name);
+/** firstName, Email, EMAIL, address1, ctl00, txtEmail. Letters that only look like one, as in nTowvSy0v2, are not. */
+const WORD = /^(?:[a-z]{2,}|[A-Z]{2,}|[A-Z][a-z]+)(?:[A-Z][a-z]+)*\d{0,2}$/;
+/**
+ * The words of a name, which is all of it that lasts: a generated name means nothing from one render to the next,
+ * and the numbers in react-select-3-input or the id in cards[e78797e4][field0] are made up too.
+ */
+const nameWords = (name: string): string =>
+  name
+    .split(/[^A-Za-z0-9]+/)
+    .filter((part) => WORD.test(part))
+    .join(' ')
+    .toLowerCase();
 
 function labelTextOf(el: HTMLElement): string {
   const labels = (el as HTMLInputElement).labels;
@@ -19,13 +29,15 @@ function labelTextOf(el: HTMLElement): string {
 }
 
 /** What a box says about itself. Where both boxes say something, they have to say the same. */
-function sameField(a: HTMLElement, b: HTMLElement): boolean {
+function sameField(a: HTMLElement, b: HTMLElement, sameLabel: boolean): boolean {
   const agree = (x: string | null | undefined, y: string | null | undefined): boolean => !x || !y || x === y;
   for (const attr of ['aria-label', 'placeholder', 'autocomplete']) {
     if (!agree(a.getAttribute(attr), b.getAttribute(attr))) return false;
   }
-  const [na, nb] = [a.getAttribute('name'), b.getAttribute('name')];
-  return !(na && nb && isWordName(na) && isWordName(nb) && na !== nb);
+  // A label that stayed says more than a name, which some pages make up again on every render.
+  if (sameLabel) return true;
+  const [na, nb] = [nameWords(a.getAttribute('name') ?? ''), nameWords(b.getAttribute('name') ?? '')];
+  return agree(na, nb);
 }
 
 export function slotOf(el: HTMLElement): Slot {
@@ -60,7 +72,8 @@ export function slotOf(el: HTMLElement): Slot {
         if (part !== branch && branches.includes(part)) return null;
         if (!now.every((p, i) => i === place || p === before[i])) return null;
         const nextLabel = labelTextOf(next);
-        return sameField(self, next) && (!ownLabel || !nextLabel || ownLabel === nextLabel) ? next : null;
+        const sameLabel = !!ownLabel && ownLabel === nextLabel;
+        return sameField(self, next, sameLabel) && (!ownLabel || !nextLabel || sameLabel) ? next : null;
       }
       return null;
     },

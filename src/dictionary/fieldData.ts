@@ -154,6 +154,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'QQ|QQ号|QQ号码|QQ账号|QQ账号/号码',
     'QQ number|QQ ID|QQ account|Tencent QQ',
   ),
+  'contact.inNamedCountry': s('是否位于该国家|是否身在该国', 'Located in the named country|In the named country'),
   'contact.addressCountry': s(
     '国家|国家/地区|所在国家|居住国家|所在国家/地区|居住国家/地区',
     'Country|Country/Region|Country of residence|Residential country|Country or region|Country/territory',

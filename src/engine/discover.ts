@@ -17,7 +17,7 @@ import {
   type LibraryWidget,
 } from '../drivers/libraries';
 import type { Control, OptionInfo } from './types';
-import { isInputVisible, isVisible } from './visibility';
+import { isInputVisible, isOutOfSight, isVisible } from './visibility';
 
 export interface DiscoverOptions {
   /** Id allocator, so a caller can keep ids stable across rescans. Called in document order. */
@@ -150,6 +150,35 @@ function isHiddenFromReaders(el: Element): boolean {
   if (block.parentElement !== el.ownerDocument.body) return true;
   const dialog = el.ownerDocument.querySelector('[role=dialog], [role=alertdialog], [aria-modal="true"], dialog[open]');
   return !dialog || block.contains(dialog);
+}
+
+/** More boxes than this and it is no sign-up strip, whatever else it offers along the way. */
+const MAX_ASIDE_BOXES = 2;
+const ASIDE_WORDS = /newsletter|subscri|job alerts?|talent (?:community|network|pool)|stay in touch|mailing list|订阅|职位提醒|人才库/i;
+const TYPED_BOXES = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]):not([type=file]), textarea, select';
+
+/**
+ * A box in the page around the form, or in a little form of its own that signs people up for something.
+ * The applicant's details have no business there, even though nothing would be sent.
+ */
+function isBesideTheApplication(el: Element): boolean {
+  if (el.closest(PAGE_CHROME_SELECTOR)) return true;
+  const { body } = el.ownerDocument;
+  let box = el.closest('form') ?? el.parentElement;
+  // With no form to go by, the smallest block that has a button in it.
+  while (box && box !== body && !box.querySelector('button, input[type=submit]') && box.parentElement && box.parentElement !== body) box = box.parentElement;
+  for (let level = 0; box && level < 2 && box !== body; level++, box = box.parentElement) {
+    if (box.querySelectorAll(TYPED_BOXES).length > MAX_ASIDE_BOXES) return false;
+    if (ASIDE_WORDS.test(wordsIn(box))) return true;
+  }
+  return false;
+}
+
+/** What the box says to someone reading it. A script beside it can say anything. */
+function wordsIn(box: Element): string {
+  const copy = box.cloneNode(true) as Element;
+  for (const unread of Array.from(copy.querySelectorAll('script, style, noscript, template'))) unread.remove();
+  return copy.textContent ?? '';
 }
 
 /** Whether a radio button with no name answers the same question as those before it. */
@@ -328,7 +357,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
           inputType: type,
           dateGranularity: type === 'month' ? 'month' : 'day',
         });
-      } else if (!isHiddenFromReaders(el)) {
+      } else if (!isHiddenFromReaders(el) && !isOutOfSight(el) && !isBesideTheApplication(el)) {
         candidates.set(el, { el, kind: 'text', lib: 'native', inputType: type });
       }
     } else if (el instanceof HTMLSelectElement) {
@@ -341,7 +370,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
         options: selectOptions(el),
       });
     } else if (el instanceof HTMLTextAreaElement) {
-      if (isDisabledEl(el) || !isVisible(el) || isHiddenFromReaders(el)) continue;
+      if (isDisabledEl(el) || !isVisible(el) || isHiddenFromReaders(el) || isOutOfSight(el)) continue;
       candidates.set(el, { el, kind: 'textarea', lib: 'native' });
     } else if (isRichtextHost(el)) {
       if (isDisabledEl(el) || !isVisible(el)) continue;

@@ -1,7 +1,7 @@
 // Evidence: every piece of text that may tell us what a control is for (labels, aria, placeholders,
 // table headers, nearby text, name/id), plus the "required" flag. Pure DOM reads, no side effects.
 import { isVisible } from './visibility';
-import { isAddButtonText, isDeleteText, isNeverFill, normalizeLabel, resolveCode } from '../dictionary';
+import { asksForConsent, isAddButtonText, isDeleteText, isNeverFill, normalizeLabel, resolveCode } from '../dictionary';
 import {
   ANSWER_BUTTON_SELECTOR,
   ARIA_COMBOBOX_SELECTOR,
@@ -36,6 +36,7 @@ const TEXT_LIMITS: Partial<Record<EvidenceSource, number>> = {
   'label-wrap': MAX_LABEL_TEXT,
   'aria-labelledby': MAX_LABEL_TEXT,
   'nearby-text': MAX_NEARBY,
+  'fine-print': Infinity,
 };
 
 /** True for labels that read as an answer to a yes/no question rather than as the question. */
@@ -249,15 +250,53 @@ function leadingText(block: Element): string {
   return first && !isParagraph(first.textContent) ? (first.textContent ?? '') : '';
 }
 
+/**
+ * Where to start looking for a group's question. Its element holds every answer and may hold the question too,
+ * so the look starts just above the first answer, inside that element, and goes on up from there.
+ */
+function startOfLook(c: Ctx): Element {
+  const first = c.inputs[0];
+  if (c.control.lib !== 'native' || !c.optionGroup || !first || first === c.el || !c.el.contains(first)) return c.el;
+  let branch: Element = first;
+  while (branch.parentElement && branch.parentElement !== c.el) branch = branch.parentElement;
+  return branch;
+}
+
+/**
+ * Words anywhere above the answers, as far up as this question's own space goes, that ask for consent.
+ * Then the answers are that consent, whatever the nearest words or the title say.
+ */
+function consentAbove(c: Ctx): string | null {
+  if (!c.optionGroup && c.control.kind !== 'checkbox') return null;
+  let node: Element = startOfLook(c);
+  for (let level = 0; level <= MAX_NEARBY_LEVELS; level++) {
+    for (let s: Node | null = node.previousSibling; s; s = s.previousSibling) {
+      if (s.nodeType !== 1 && s.nodeType !== 3) continue;
+      if (s.nodeType === 1) {
+        const sib = s as Element;
+        if (SKIP_NEARBY_TAGS.has(sib.tagName.toUpperCase()) || !isVisible(sib)) continue;
+        if (containsField(sib)) return null;
+      }
+      const raw = s.nodeType === 3 ? (s.textContent ?? '') : textWithoutControls(s as Element);
+      if (asksForConsent(cleanEvidenceText(raw, Infinity))) return raw;
+    }
+    const parent = node.parentElement;
+    if (!parent || /^(BODY|HTML|FORM)$/.test(parent.tagName) || hasOtherFields(parent, c)) return null;
+    node = parent;
+  }
+  return null;
+}
+
 function nearbyText(c: Ctx): string | null {
-  let node: Element = c.el;
+  let node: Element = startOfLook(c);
   let skippedHelp = false;
+  const answers = new Set((c.control.options ?? []).map((o) => cleanEvidenceText(o.label, MAX_NEARBY)));
   for (let level = 0; level <= MAX_NEARBY_LEVELS; level++) {
     for (let s: Node | null = node.previousSibling; s; s = s.previousSibling) {
       if (s.nodeType === 3) {
         if (isParagraph(s.textContent)) return null;
         const t = acceptNearby(s.textContent ?? '');
-        if (t) return t;
+        if (t && !answers.has(t)) return t;
         continue;
       }
       if (s.nodeType !== 1) continue;
@@ -277,7 +316,8 @@ function nearbyText(c: Ctx): string | null {
         continue;
       }
       const t = acceptNearby(raw);
-      if (t) return t;
+      // An answer written before its button is no question.
+      if (t && !answers.has(t)) return t;
     }
     const parent = node.parentElement;
     if (!parent || /^(BODY|HTML|FORM)$/.test(parent.tagName) || hasOtherFields(parent, c)) return null;
@@ -442,7 +482,10 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
     labelClassRequired ||
     (labelOwned && c.el.closest('.is-required') !== null);
 
-  return { evidence: control.fixedLabel ? evidence.slice(0, 1) : evidence, required };
+  const kept = control.fixedLabel ? evidence.slice(0, 1) : evidence;
+  const consent = consentAbove(c);
+  if (consent) kept.push({ source: 'fine-print', text: cleanEvidenceText(consent, Infinity), weight: EVIDENCE_WEIGHTS['fine-print'] });
+  return { evidence: kept, required };
 }
 
 export function collectEvidence(control: Control): Evidence[] {

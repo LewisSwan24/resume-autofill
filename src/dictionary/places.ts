@@ -31,6 +31,21 @@ const groupOf = (groups: readonly (readonly string[])[], name: string): readonly
 /** The state table is Australian: WA in another country is something else. */
 const usesStateTable = (country: string): boolean => !country.trim() || groupOf(COUNTRIES, country)?.[0] === 'Australia';
 
+const ASKS_IN_COUNTRY = /(?:located|based|living|residing|reside|live)\s+in\s+(?:the\s+)?([\p{L} ]{2,40}?)\s*[?？]?\s*$/iu;
+const ASKS_IN_COUNTRY_ZH = /(?:是否|目前)(?:现在)?(?:在|位于|居住在|身在)([\p{Script=Han}]{2,8}?)(?:境内)?\s*[?？]?\s*$/u;
+
+/** The country a yes-or-no question asks about: "Are you located in Australia?". Only a country known by name. */
+export function countryAskedAbout(question: string): string | null {
+  const named = (ASKS_IN_COUNTRY.exec(question) ?? ASKS_IN_COUNTRY_ZH.exec(question))?.[1];
+  return named ? (groupOf(COUNTRIES, named)?.[0] ?? null) : null;
+}
+
+/** Whether an address in `home` answers that yes. Null when `home` is empty or not known by name either. */
+export function livesInCountry(home: string, asked: string): boolean | null {
+  const mine = groupOf(COUNTRIES, home);
+  return mine ? mine[0] === asked : null;
+}
+
 /** Every way of writing this country or state, the given one first. */
 export function placeSpellings(name: string, homeCountry = ''): string[] {
   const group = groupOf(COUNTRIES, name) ?? (usesStateTable(homeCountry) ? groupOf(STATES, name) : undefined) ?? [];
@@ -53,6 +68,11 @@ export function namesOtherState(text: string, home: string, homeCountry = ''): b
 /** True when a result ends in a country that is known not to be `home`. */
 export function isInOtherCountry(label: string, home: string): boolean {
   const mine = groupOf(COUNTRIES, home);
-  const theirs = groupOf(COUNTRIES, label.split(',').pop() ?? '');
-  return !!mine && !!theirs && mine !== theirs;
+  const parts = label.split(',');
+  const last = parts[parts.length - 1] ?? '';
+  const theirs = groupOf(COUNTRIES, last);
+  if (mine && theirs) return mine !== theirs;
+  // "Adelaide, SA, South Africa": three parts end in a country, known here or not. Only home or one of its states will do.
+  if (!mine || parts.length < 3) return false;
+  return !(mine[0] === 'Australia' && STATES.some((group) => group.some((state) => saysState(last, state))));
 }

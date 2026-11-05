@@ -93,6 +93,8 @@ export const FIELD_KEYS: FieldKeyDef[] = [
   }),
   def('contact.phoneFull', 'text', ['contact', 'basics', 'other'], { derived: true }),
   def('contact.addressFull', 'text', ['contact', 'basics', 'other'], { derived: true }),
+  // "Are you located in Australia?": yes or no, worked out from the country in the address.
+  def('contact.inNamedCountry', 'bool', ['contact', 'basics', 'other'], { derived: true, enumDomain: 'yesNo' }),
 
   ...module('workRights', ['workRights', 'basics', 'other'], {
     status: ['enum', 'workRightsStatus'], visaType: 'text', visaExpiry: 'date',

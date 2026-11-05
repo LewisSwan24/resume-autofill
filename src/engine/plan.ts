@@ -1,5 +1,6 @@
 // Plan: turn contexts + classifications + resume into fill steps, reports for everything that will not
 // be filled, and the number of cards each repeated section needs.
+import { countryAskedAbout, livesInCountry } from '../dictionary/places';
 import { FIELD_SYNONYMS } from '../dictionary';
 import type { FillStep } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
@@ -41,10 +42,15 @@ export function fieldKeyLabel(key: FieldKey, locale: Locale): string {
 
 const UNNAMED_REQUIRED = { 'zh-CN': '未命名的必填项', 'en-AU': 'Required field with no name' };
 
+const MAX_REPORT_LABEL = 80;
+/** A row is named by a label. All there may be to name it by is a passage, and a row does not show a passage. */
+const shortLabel = (text: string | undefined): string | undefined =>
+  text && text.length > MAX_REPORT_LABEL ? `${text.slice(0, MAX_REPORT_LABEL)}…` : text;
+
 function baseReport(ctx: FieldContext, cls: Classification, locale: Resume['locale']): FieldReport {
   return {
     fieldId: ctx.control.id,
-    label: ctx.evidence[0]?.text ?? UNNAMED_REQUIRED[locale],
+    label: shortLabel(ctx.evidence[0]?.text) ?? UNNAMED_REQUIRED[locale],
     fieldKey: cls.fieldKey,
     section: cls.section,
     outcome: 'unmatched',
@@ -90,10 +96,13 @@ export function planFill(
     }
 
     const entryIndex = ctx.group?.index ?? 0;
-    const resolved = resolveValue(cls.fieldKey, resume, entryIndex, cls.section, {
-      hasInternshipSection,
-      ...(opts.now ? { now: opts.now } : {}),
-    });
+    const resolved =
+      cls.fieldKey === 'contact.inNamedCountry'
+        ? inNamedCountry(ctx, resume)
+        : resolveValue(cls.fieldKey, resume, entryIndex, cls.section, {
+            hasInternshipSection,
+            ...(opts.now ? { now: opts.now } : {}),
+          });
     if (!resolved) {
       reports.push({ ...report, outcome: 'no_data' });
       return;
@@ -121,6 +130,13 @@ export function planFill(
   });
 
   return { steps, reports, cardDemand: cardDemand(contexts, classifications, resume, hasInternshipSection) };
+}
+
+/** The answer depends on the country in the question, so it is worked out here where the question is known. */
+function inNamedCountry(ctx: FieldContext, resume: Resume): { raw: boolean; source: string } | null {
+  const asked = ctx.evidence.map((e) => countryAskedAbout(e.text)).find(Boolean);
+  const raw = asked ? livesInCountry(resume.contact.address.country, asked) : null;
+  return raw === null ? null : { raw, source: 'contact.address.country' };
 }
 
 /** Per repeated section: cards on the page vs resume entries. Sections without controls are invisible here. */

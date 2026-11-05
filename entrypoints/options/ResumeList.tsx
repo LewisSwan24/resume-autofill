@@ -12,6 +12,8 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreate: (locale: Locale) => void;
+  /** A file to read into a draft. Nothing is stored by choosing it. */
+  onUpload: (file: File) => void;
   onSetActive: (resume: Resume) => void;
   onDuplicate: (resume: Resume) => void;
   onLink: (resume: Resume) => void;
@@ -34,7 +36,7 @@ function useNarrow(): boolean {
   return narrow;
 }
 
-export function ResumeList({ profile, selectedId, onSelect, onCreate, onSetActive, onDuplicate, onLink, onDelete }: Props) {
+export function ResumeList({ profile, selectedId, onSelect, onCreate, onUpload, onSetActive, onDuplicate, onLink, onDelete }: Props) {
   const t = useT();
   const language = useLanguage();
   const [locale, setLocale] = useState<Locale>('zh-CN');
@@ -102,6 +104,20 @@ export function ResumeList({ profile, selectedId, onSelect, onCreate, onSetActiv
             {t('options.new')}
           </Button>
         </div>
+        <label className="raf-btn raf-upload-resume">
+          <Icon name="upload" />
+          {t('options.import.upload')}
+          <input
+            type="file"
+            className="raf-visually-hidden"
+            accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) onUpload(file);
+            }}
+          />
+        </label>
       </div>
     </section>
   );

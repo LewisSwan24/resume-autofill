@@ -215,6 +215,141 @@ test('a value the widget takes back on leaving the field is not a fill', async (
   await expect(page.locator('#r')).toHaveValue('Sydney');
 });
 
+test('a menu of links is not a list of choices, and is never clicked', async () => {
+  await add('<label id="m-label">Office</label><button type="button" id="m" role="combobox" aria-labelledby="m-label">Select</button>');
+  await page.evaluate(() => {
+    const w = window as unknown as { linkClicks: number };
+    w.linkClicks = 0;
+    document.getElementById('m')!.addEventListener('click', () => {
+      const list = document.createElement('ul');
+      list.setAttribute('role', 'menu');
+      list.innerHTML = '<li role="none"><a role="menuitem" href="/somewhere">Sydney</a></li>';
+      list.addEventListener('click', (e) => {
+        e.preventDefault();
+        w.linkClicks++;
+      });
+      setTimeout(() => document.body.append(list), 30);
+    });
+  });
+  const r = await execIntent(page, 'Office', choice('Sydney'));
+  expect(r.outcome).not.toBe('filled');
+  expect(await page.evaluate(() => (window as unknown as { linkClicks: number }).linkClicks)).toBe(0);
+});
+
+for (const href of ['#/apply/step-2', "javascript:__doPostBack('next','')", 'javascript:document.forms[0].submit()', '/jobs/next']) {
+  test(`a row that goes somewhere is never clicked: ${href}`, async () => {
+    await add('<label id="k-label">Office</label><button type="button" id="k" role="combobox" aria-labelledby="k-label">Select</button>');
+    await page.evaluate((target) => {
+      const w = window as unknown as { rowClicks: number };
+      w.rowClicks = 0;
+      document.getElementById('k')!.addEventListener('click', () => {
+        const list = document.createElement('ul');
+        list.setAttribute('role', 'listbox');
+        const row = document.createElement('a');
+        row.setAttribute('role', 'option');
+        row.setAttribute('href', target);
+        row.textContent = 'Sydney';
+        list.append(row);
+        list.addEventListener('click', (e) => {
+          e.preventDefault();
+          w.rowClicks++;
+        });
+        setTimeout(() => document.body.append(list), 30);
+      });
+    }, href);
+    const r = await execIntent(page, 'Office', choice('Sydney'));
+    expect(r.outcome).not.toBe('filled');
+    expect(await page.evaluate(() => (window as unknown as { rowClicks: number }).rowClicks)).toBe(0);
+  });
+}
+
+test('a row that goes nowhere is still a choice', async () => {
+  await add('<label id="v-label">Office</label><button type="button" id="v" role="combobox" aria-labelledby="v-label">Select</button>');
+  await page.evaluate(() => {
+    document.getElementById('v')!.addEventListener('click', () => {
+      const list = document.createElement('ul');
+      list.setAttribute('role', 'listbox');
+      for (const [name, href] of [['Sydney', '#'], ['Perth', 'javascript:void(0)']] as const) {
+        const row = document.createElement('a');
+        row.setAttribute('role', 'option');
+        row.setAttribute('href', href);
+        row.textContent = name;
+        row.addEventListener('click', (e) => {
+          e.preventDefault();
+          document.getElementById('v')!.textContent = name;
+          list.remove();
+        });
+        list.append(row);
+      }
+      setTimeout(() => document.body.append(list), 30);
+    });
+  });
+  const r = await execIntent(page, 'Office', choice('Sydney'));
+  expect(r.outcome).toBe('filled');
+});
+
+test('closing an unasked dialog leaves the dialog the form is in', async () => {
+  await page.evaluate(() => {
+    const outer = document.createElement('div');
+    outer.id = 'outer';
+    outer.setAttribute('role', 'dialog');
+    outer.innerHTML = '<form><label id="x-label">Office</label><button type="button" id="x" role="combobox" aria-labelledby="x-label">Select</button></form>';
+    outer.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') outer.remove();
+    });
+    document.body.append(outer);
+    outer.querySelector('#x')!.addEventListener('click', () => {
+      const dialog = document.createElement('div');
+      dialog.id = 'unasked';
+      dialog.setAttribute('role', 'dialog');
+      dialog.textContent = 'Something else altogether';
+      dialog.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') dialog.remove();
+      });
+      document.body.append(dialog);
+    });
+  });
+  const r = await execIntent(page, 'Office', choice('Sydney'));
+  expect(r.outcome).not.toBe('filled');
+  expect(await page.locator('#outer').count()).toBe(1);
+  expect(await page.locator('#unasked').count()).toBe(0);
+});
+
+test('a list that turns up in the page navigation belongs to the page', async () => {
+  await add('<label id="n-label">Office</label><button type="button" id="n" role="combobox" aria-labelledby="n-label">Select</button>');
+  await page.evaluate(() => {
+    const w = window as unknown as { navClicks: number };
+    w.navClicks = 0;
+    document.getElementById('n')!.addEventListener('click', () => {
+      const nav = document.createElement('nav');
+      nav.innerHTML = '<ul role="listbox"><li role="option">Sydney</li></ul>';
+      nav.addEventListener('click', () => w.navClicks++);
+      setTimeout(() => document.body.append(nav), 30);
+    });
+  });
+  const r = await execIntent(page, 'Office', choice('Sydney'));
+  expect(r.outcome).not.toBe('filled');
+  expect(await page.evaluate(() => (window as unknown as { navClicks: number }).navClicks)).toBe(0);
+});
+
+test('a dialog the button brings up instead of a list is closed again', async () => {
+  await add('<label id="d-label">Office</label><button type="button" id="d" role="combobox" aria-labelledby="d-label">Select</button>');
+  await page.evaluate(() => {
+    document.getElementById('d')!.addEventListener('click', () => {
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.textContent = 'Something else altogether';
+      document.body.append(dialog);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') dialog.remove();
+      });
+    });
+  });
+  const r = await execIntent(page, 'Office', choice('Sydney'));
+  expect(r.outcome).not.toBe('filled');
+  expect(await page.locator('[role=dialog]').count()).toBe(0);
+});
+
 test('a list that belongs to another control is left alone', async () => {
   await add(`<label id="o-label">Office</label><button type="button" id="o" role="combobox" aria-labelledby="o-label" aria-controls="o-gone">Select</button>`);
   await page.evaluate(() => {

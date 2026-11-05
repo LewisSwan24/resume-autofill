@@ -149,12 +149,34 @@ export const LIBRARY_ROOT_SELECTOR = [
 ].join(', ');
 
 /** Comboboxes outside the libraries above. A native select says role=combobox too, but is handled as a select. */
-/** A plain button that says nothing but "pick one" opens a list, and is the only sign of one. */
+/** What a button says or shows when "pick one" really means a list opens. */
 const PICK_ONE = /^(?:please\s+)?(?:select|choose|pick)(?:\s+(?:one|an?\s+option|option))?\s*(?:\.{3}|…)?$|^请选择$/i;
 
+/** A picture after the words: how a dropdown looks. Before them it is how an action looks. */
+function hasArrowAfterWords(el: Element): boolean {
+  const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let words: Node | null = walker.nextNode();
+  while (words && !words.textContent?.trim()) words = walker.nextNode();
+  if (!words) return false;
+  if (el.querySelector('img')) return false;
+  const pictures = Array.from(el.querySelectorAll('svg'));
+  if (pictures.length !== 1 || !(words.compareDocumentPosition(pictures[0]!) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
+  // One that says it points onward moves things on.
+  for (let n: Element | null = pictures[0]!; n && n !== el; n = n.parentElement) {
+    if (/right|next|forward|continue/i.test(n.getAttribute('class') ?? '')) return false;
+  }
+  return true;
+}
+
+/**
+ * Clicking is all there is to find out what a button does, and "Select" can open a dialog or move the form on.
+ * So the words are not enough: the button also has to say or show that it has a list behind it.
+ */
 export function isPromptButton(el: Element): boolean {
   if (el.tagName !== 'BUTTON' || (el.getAttribute('type') ?? 'submit').toLowerCase() !== 'button') return false;
-  return PICK_ONE.test((el.textContent ?? '').replace(/\s+/g, ' ').trim());
+  if (!PICK_ONE.test((el.textContent ?? '').replace(/\s+/g, ' ').trim())) return false;
+  const popup = el.getAttribute('aria-haspopup');
+  return (!!popup && popup !== 'false' && popup !== 'dialog') || el.hasAttribute('aria-expanded') || hasArrowAfterWords(el);
 }
 
 export const ARIA_COMBOBOX_SELECTOR =

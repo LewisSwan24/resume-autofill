@@ -3,6 +3,7 @@ import {
   FIELD_SYNONYMS,
   isExactOnlySynonym,
   isExcluded,
+  countryAskedAbout,
   isNeverFill,
   namesSpareAddressLine,
   isOtherPersonHeading,
@@ -162,6 +163,9 @@ export interface FieldScores {
   candidates: ScoredCandidate[];
 }
 
+/** A question that names its country and only that: clear enough to fill, on a list with the answers on it. */
+const ASKED_COUNTRY_CONFIDENCE = 0.85;
+
 function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null): number {
   if (!section) return raw;
   if (def.sections.includes(section)) {
@@ -174,10 +178,14 @@ function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null
 
 /** Candidates for one control within `section` (null = unknown section: no bonus / penalty). */
 export function scoreField(ctx: FieldContext, section: SectionKey | null): FieldScores {
-  if (ctx.evidence.some((e) => isNeverFill(e.text))) return { neverFill: true, candidates: [] };
+  if (ctx.evidence.some((e) => e.source === 'fine-print' || isNeverFill(e.text))) return { neverFill: true, candidates: [] };
   const el = ctx.control.el;
   if (namesSpareAddressLine(el.getAttribute('name')) || namesSpareAddressLine(el.id)) return { neverFill: true, candidates: [] };
   if (ctx.control.kind === 'file' && ctx.evidence.some((e) => isResumeParser(e.text))) return { neverFill: true, candidates: [] };
+  // Worded differently every time, and the name of the country is the point. The plan works out the answer.
+  if (ctx.control.kind !== 'text' && ctx.control.kind !== 'textarea' && ctx.evidence.some((e) => countryAskedAbout(e.text))) {
+    return { neverFill: false, candidates: [{ fieldKey: 'contact.inNamedCountry', confidence: ASKED_COUNTRY_CONFIDENCE, weight: 1, score: ASKED_COUNTRY_CONFIDENCE }] };
+  }
 
   // A legend / nearby heading that merely repeats the section title says nothing about the field itself
   // (unless it is all we have).

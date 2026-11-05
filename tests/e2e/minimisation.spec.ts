@@ -80,7 +80,9 @@ test('frames receive only the resume data they need (third-party iframe gets not
   }
   const sent = await serviceWorker.evaluate(() => (globalThis as unknown as { __sent: Sent[] }).__sent);
 
-  const to = (frameId: number) => sent.filter((s) => s.frameId === frameId && !s.msg.type.startsWith('report:'));
+  // The count on the button can go out at any moment, as a late frame reports in. It may carry nothing but the count.
+  for (const s of sent.filter((x) => x.msg.type === 'scan:total')) expect(Object.keys(s.msg).sort()).toEqual(['total', 'type']);
+  const to = (frameId: number) => sent.filter((s) => s.frameId === frameId && !s.msg.type.startsWith('report:') && s.msg.type !== 'scan:total');
   const fillTo = (frameId: number) => to(frameId).find((s) => s.msg.type === 'frame:fill');
 
   // every frame was asked first, with a payload-free message

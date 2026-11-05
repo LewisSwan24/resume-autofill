@@ -279,7 +279,7 @@ test('follows a search box that the page replaces under a new id when a row is t
 async function mountPromptButton(listRole: string | null = 'menu'): Promise<void> {
   await page.evaluate((role) => {
     const form = document.createElement('form');
-    form.innerHTML = '<div id="gender-row"><div>Gender</div><button type="button" id="pick"><div>Please select</div></button></div>';
+    form.innerHTML = '<div id="gender-row"><div>Gender</div><button type="button" id="pick"><div>Please select<i><svg viewBox="0 0 24 24"><path d="M1 1"></path></svg></i></div></button></div>';
     document.body.append(form);
     const button = form.querySelector<HTMLButtonElement>('#pick')!;
     button.addEventListener('click', () => {

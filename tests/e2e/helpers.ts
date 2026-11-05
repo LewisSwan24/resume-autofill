@@ -137,10 +137,12 @@ export async function fillFixture(
     url?: string;
     /** Runs once the page is open, before the FAB is clicked. */
     beforeFill?: (page: Page) => Promise<Inspection>;
+    /** Fill with whichever resume is active now (`locale` is then ignored). */
+    keepActive?: boolean;
   } = {},
 ): Promise<FillRun> {
   await waitForSeed(worker);
-  await setActiveResumeByLocale(worker, locale);
+  if (!opts.keepActive) await setActiveResumeByLocale(worker, locale);
 
   const url = opts.url ?? fixtureUrl(name);
   const page = await context.newPage();

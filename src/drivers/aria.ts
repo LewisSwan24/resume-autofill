@@ -61,9 +61,25 @@ export function clickWithoutSubmit(el: Element): void {
   }
 }
 
+const PAGE_CHROME = 'nav, header, footer, [role=navigation], [role=banner], [role=contentinfo]';
+const DIALOG = '[role=dialog], [role=alertdialog], dialog[open]';
+
 function listsOnScreen(el: Element): HTMLElement[] {
-  return searchRoots(el).flatMap((r) => Array.from(r.querySelectorAll<HTMLElement>(LISTBOX)).filter(isOnScreen));
+  // The page's own menus turn up whenever they like, and a click in one goes somewhere.
+  const ownChrome = el.closest(PAGE_CHROME);
+  return searchRoots(el).flatMap((r) =>
+    Array.from(r.querySelectorAll<HTMLElement>(LISTBOX)).filter((l) => isOnScreen(l) && (!l.closest(PAGE_CHROME) || l.closest(PAGE_CHROME) === ownChrome)),
+  );
 }
+
+/** A row that is a link leaves the page when clicked. Only a link to nowhere can be a choice. */
+function isLink(option: Element): boolean {
+  const a = option.closest('a[href]') ?? option.querySelector('a[href]');
+  return !!a && !/^(?:#|javascript:\s*(?:void\s*\(\s*0\s*\)|void 0)?\s*;?)$/i.test((a.getAttribute('href') ?? '').trim());
+}
+
+const dialogsOnScreen = (el: Element): HTMLElement[] =>
+  searchRoots(el).flatMap((r) => Array.from(r.querySelectorAll<HTMLElement>(DIALOG)).filter(isOnScreen));
 
 const declaredListIds = (el: Element): string[] =>
   ['aria-controls', 'aria-owns'].flatMap((a) => (el.getAttribute(a) ?? '').split(/\s+/).filter(Boolean));
@@ -136,6 +152,7 @@ class Session {
   private followed = false;
   /** Lists already on screen before we touched anything belong to something else. */
   private readonly before: Set<HTMLElement>;
+  private readonly dialogsBefore: Set<HTMLElement>;
   private readonly initialText: string;
   /** What the control showed before we touched it. */
   readonly shownBefore: string[];
@@ -151,6 +168,7 @@ class Session {
     this.initialText = this.input?.value ?? '';
     this.shownBefore = readItems(el);
     this.before = new Set(listsOnScreen(el).filter((l) => l !== referencedList(el)));
+    this.dialogsBefore = new Set(dialogsOnScreen(el));
   }
 
   /** Taking a row may swap the box for a new element, and the new one is what shows the choice. */
@@ -171,7 +189,7 @@ class Session {
 
   options(): DropdownOption[] {
     const list = this.list();
-    return list ? visibleOptions(list, OPTION) : [];
+    return list ? visibleOptions(list, OPTION).filter((o) => !isLink(o.el)) : [];
   }
 
   wait<T>(check: () => T | null, timeout: number): Promise<T | null> {
@@ -211,6 +229,13 @@ class Session {
   /** Close without clicking on the page. Escape only while a list is open: it may also close a dialog. */
   async close(): Promise<void> {
     const target = this.input ?? this.el;
+    // The click brought up something other than a list. It was not asked for, so it goes away again.
+    const unasked = dialogsOnScreen(this.el).find((d) => !this.dialogsBefore.has(d) && !d.contains(this.el));
+    if (unasked) {
+      // Pressed on that dialog: on this control it could close the one the form is in.
+      pressKey(unasked, 'Escape');
+      await this.wait(() => (unasked.isConnected && isOnScreen(unasked) ? null : true), OPEN_MS);
+    }
     if (this.list()) {
       pressKey(target, 'Escape');
       const closed = await this.wait(() => (this.list() ? null : true), OPEN_MS);

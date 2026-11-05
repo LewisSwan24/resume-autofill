@@ -353,3 +353,35 @@ describe('matchOption: rows a search box offers that are not answers', () => {
     expect(matchOption(null, 'Master', labels('Master, Coursework only'))).toEqual({ status: 'none' });
   });
 });
+
+describe('matchOption: a school and a part of it are two schools', () => {
+  const pick = (value: string, ...labels: string[]) => matchOption(null, value, labels.map((label) => ({ label })));
+
+  it.each([
+    ['浙江大学', '浙江大学城市学院'],
+    ['北京大学', '北京大学医学部'],
+    ['北京电影学院', '北京电影学院附属中学'],
+    ['University of Sydney', 'University of Sydney Business School'],
+    ['浙江大学城市学院', '浙江大学'],
+    ['四川大学锦城学院', '四川大学'],
+    ['北京大学医学部', '北京大学'],
+  ])('%s is not %s', (value, label) => {
+    expect(pick(value, label).status).toBe('none');
+  });
+
+  it.each([
+    ['昆士兰大学', '昆士兰大学（UQ）'],
+    ['University of Queensland', 'The University of Queensland'],
+    ['昆士兰', '昆士兰大学'],
+  ])('%s is %s', (value, label) => {
+    expect(pick(value, label).status).toBe('matched');
+  });
+
+  it('one part is not picked just because the other was ruled out', () => {
+    expect(pick('浙江大学', '浙江大学医学院', '浙江大学附中').status).toBe('none');
+  });
+
+  it('the school itself is still found beside a part of it', () => {
+    expect(pick('浙江大学', '浙江大学城市学院', '浙江大学')).toMatchObject({ status: 'matched', index: 1 });
+  });
+});

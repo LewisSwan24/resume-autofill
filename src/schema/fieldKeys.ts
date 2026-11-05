@@ -132,6 +132,8 @@ export const FIELD_KEYS: FieldKeyDef[] = [
 
   // A span of dates in one field, worked out from the two ends.
   def('education.period', 'period', ['education'], { derived: true }),
+  // 届别: the year of graduating.
+  def('education.classYear', 'text', ['education', 'basics', 'other'], { derived: true }),
   def('work.period', 'period', ['work', 'internship'], { derived: true }),
   def('projects.period', 'period', ['projects'], { derived: true }),
   def('campus.period', 'period', ['campus'], { derived: true }),

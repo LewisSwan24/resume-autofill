@@ -1,7 +1,24 @@
 // Pure summary formatter for the FAB card. Deliberately drops every resume value: the card only
 // ever sees field labels and outcomes.
 import type { FillReport, Outcome } from '../../src/engine/types';
+import { isVisible } from '../../src/engine/visibility';
 import { groupOf } from '../../src/ui/status';
+
+const BOXES = 'input:not([type=hidden], [type=checkbox], [type=radio], [type=file], [type=submit], [type=button], [type=reset], [type=image]), select, textarea';
+/** Fewer boxes than this and a low count means little: a search bar and a sign-up strip. */
+const MIN_BOXES_TO_JUDGE = 6;
+
+/** What the page has for typing into or picking from. */
+export function countBoxes(doc: Document): number {
+  return Array.from(doc.querySelectorAll<HTMLInputElement>(BOXES)).filter((el) => !el.disabled && isVisible(el)).length;
+}
+
+/**
+ * Nearly all of the page went unread: a form this tool does not know yet, which a bare count would hide. A known
+ * form can show a third of its boxes here (7 of 22 on one) and still fill them all: this count is taken before
+ * a site's own rules apply, and leaves out questions nothing on a resume answers.
+ */
+export const looksUnderRead = (read: number, boxes: number): boolean => boxes >= MIN_BOXES_TO_JUDGE && read * 4 < boxes;
 
 /** Outcomes the card lists as rows. `filled` and `no_data` are counted only (no_data has no action: one sentence), `no_control` is ignored. */
 export type SummaryOutcome = Exclude<Outcome, 'filled' | 'no_data' | 'no_control'>;

@@ -12,6 +12,7 @@ import {
   LIBRARY_ROOT_SELECTOR,
   detectDateGranularity,
   isDateRangeRoot,
+  isMokaDialCode,
   isAriaMultiple,
   isUnsupportedLibraryRoot,
   matchLibraryWidget,
@@ -261,6 +262,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
     if (isUnsupportedLibraryRoot(el)) continue;
     const widget = matchLibraryWidget(el);
     if (!widget || widgetDisabled(el, widget) || !isVisible(el)) continue;
+    if (widget.lib === 'moka' && isMokaDialCode(el)) continue;
     candidates.set(el, buildWidgetDraft(el, widget));
   }
 

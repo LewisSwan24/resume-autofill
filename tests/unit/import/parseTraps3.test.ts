@@ -46,6 +46,17 @@ const NUMBERS: [string, string][] = [
   ['TFN 123—456—782', '123456782'],
   ['PAN: ABCDE1234F', 'ABCDE1234F'],
   ['E12345678 (passport)', 'E12345678'],
+  // A word and something said about it before the colon, then a code that is only letters and digits to begin with.
+  ['护照（中国）：E12345678', 'E12345678'],
+  ['Passport (Australia): PA1234567', 'PA1234567'],
+  ['Passport of China: E12345678', 'E12345678'],
+  ['Passport: X-1234567', 'X1234567'],
+  ['ID: A-123456', 'A123456'],
+  ['护照号：ABCDEF1234', 'ABCDEF1234'],
+  ['护照编号：E12345678', 'E12345678'],
+  ['Passport Nr. E12345678', 'E12345678'],
+  ['Passport No ABCDEF1234', 'ABCDEF1234'],
+  ['护照 G12345678 家庭地址：上海', 'G12345678'],
   // A year inside a code is no date.
   ['Passport: E2012', 'E2012'],
   ['Driver licence: S1990', 'S1990'],
@@ -57,6 +68,20 @@ const NUMBERS: [string, string][] = [
   ['110105-1949-1231-002X', '110105194912310002X'.slice(0, 18)],
   ['110101900307123', '110101900307123'],
 ];
+
+describe('a label with its code in the next cell or on the next line', () => {
+  it.each([
+    ['护照号码', 'X-1234567'],
+    ['Passport No.', 'ABCDEF1234'],
+  ])('%s %s', (label, code) => {
+    expect(compact(read([row(label, code)]))).not.toContain(compact(code));
+    expect(compact(read([line(label), line(code)]))).not.toContain(compact(code));
+  });
+
+  it('a skill on the next line is no code', () => {
+    expect(read([line('Passport No.'), line('Redis 7 and Kafka')])).toContain('Redis 7 and Kafka');
+  });
+});
 
 describe('a number with the word for a document beside it', () => {
   it.each(NUMBERS)('comes out: %s', (text, number) => {
@@ -90,6 +115,26 @@ describe('a number with nothing to say what it is', () => {
 });
 
 describe('ordinary things with numbers in them', () => {
+  it.each([
+    '杭州市人力资源和社会保障局 实习生 2021年9月-2022年6月',
+    '办理 300 名员工社会保险',
+    'Implemented OAuth 2.0 with Passport.js',
+    'Express, Passport, Redis 7',
+    'Processed 1200 passport applications for clients',
+    'ISO27001 social security audit lead',
+    '负责社保 2.0 系统开发',
+    'Upgraded Passport 0.6 to 0.7 across services',
+    'Upgraded Passport v2.1 for the login service',
+    '负责社保 300 人的缴纳工作',
+    'Passport.js: v0.6 upgrade',
+    'Passport.js: OAuth2 login',
+    '身份证识别准确率:99%',
+    '社保专员:2年',
+    'Passport, Python3, Redis',
+  ])('a word beside numbers that are not its number stays whole: %s', (text) => {
+    expect(read([line(text)])).toBe(text);
+  });
+
   it.each(['Medicare 2019 - 2021', 'Passport renewed 2019-03'])('keep a real date beside the word: %s', (text) => {
     expect(read([line(text)])).toBe(text);
   });

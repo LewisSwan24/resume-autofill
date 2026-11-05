@@ -53,7 +53,27 @@ const EMAIL_OR_LINK = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}|(?:https?:\/\
 const DATES = /(?<![A-Za-z0-9])(?:19|20)\d{2}(?:[./-](?:0?[1-9]|1[0-2])(?:[./-](?:0?[1-9]|[12]\d|3[01]))?)?(?![A-Za-z0-9])/g;
 
 /** Digits, leaving out the things with digits in them that are no document's number. */
-const holdsDigits = (text: string): boolean => /\d/.test(text.replace(EMAIL_OR_LINK, ' ').replace(DATES, ' '));
+const DATES_ZH = /(?:19|20)\d{2}\s*年(?:\s*\d{1,2}\s*月)?(?:\s*\d{1,2}\s*日)?/g;
+const withoutThose = (text: string): string => text.replace(EMAIL_OR_LINK, ' ').replace(DATES_ZH, ' ').replace(DATES, ' ');
+const holdsDigits = (text: string): boolean => /\d/.test(withoutThose(text));
+
+/** A number and not a word: a few letters at most before the digits. "E12345678", "12 345", not "Redis 7". */
+const NUMBER_FIRST = /^(?:[A-Za-z]{0,3}\s?\d|[A-Za-z]{4,5}\d)/;
+/** A version or a count: "2.0", "v0.6", "300 人". */
+const NOT_A_NUMBER = /^[A-Za-z]{0,3}\s?(?:\d{1,2}\.\d{1,2}(?![\d.])|\d{1,4}\s*[人名个万元次家项年月日天%])/;
+const startsWithNumber = (text: string): boolean => NUMBER_FIRST.test(text) && !NOT_A_NUMBER.test(text);
+/** One unbroken run of letters and digits, for what stands right after a label. "ABCDEF1234", "X-1234567". */
+const A_CODE = /^(?=(?:[A-Za-z-]*\d){3})[A-Za-z0-9-]{5,}(?![A-Za-z0-9.])/;
+/** Something said about the word, up to its colon: "（中国）：", " of China: ". */
+const SAID_ABOUT_IT = /^\s*(?:[（(][^)）]{1,12}[)）]|of\s+[A-Za-z ]{1,16})\s*[:：]\s*/i;
+const LABEL_TAIL = /^[\s:：#.()（）-]*(?:number|num\b|no\b|nr\b|is\b|号码|字号|证号|编号|号|码|番号|번호|为|是)?[\s:：#.()（）-]*(?:为|是|is\b)?[\s:：#.()（）-]*/i;
+const NUMBER_LAST = /[A-Za-z]{0,3}\d(?:[A-Za-z0-9-]{5,}|[\d -]{5,})$/;
+
+function wordLengthAt(text: string, at: number): number {
+  const rest = text.slice(at);
+  const found = toSimplified(rest).match(ID_WORD_ANY_CASE) ?? rest.match(ID_WORD_CAPITALS);
+  return found ? found[0].length : 0;
+}
 
 /** Runs of blank space hold nothing, and every pattern that looks past them pays for each one. */
 const tidy = (text: string): string => plain(text.slice(0, MAX_LINE)).replace(/[ \t]{3,}/g, '  ');
@@ -81,13 +101,24 @@ function scrubPart(part: string): { text: string; labelOnly: boolean } {
   if (!holdsDigits(part)) return { text: part, labelOnly: false };
   // The number can come first: "E12345678 (passport)".
   const before = part.slice(0, at).replace(/[\s:：,，;；|｜(（-]+$/, '');
+  if (NUMBER_LAST.test(withoutThose(before).trimEnd())) return { text: '', labelOnly: false };
+  // A digit somewhere else on the line is someone else's: "办理 300 名员工社会保险", "OAuth 2.0 with Passport.js".
+  const wordEnd = at + wordLengthAt(part, at);
+  const rest = withoutThose(toSimplified(part.slice(wordEnd)));
+  const after = rest.replace(LABEL_TAIL, '');
+  // "ID:" brings its colon with it.
+  const labelled = /[:#]$/.test(part.slice(at, wordEnd)) || /\S/.test(rest.slice(0, rest.length - after.length));
+  const colon = SAID_ABOUT_IT.exec(rest);
+  const answer = colon ? rest.slice(colon[0].length) : '';
+  const isNumber = startsWithNumber(after) || (labelled && A_CODE.test(after)) || (colon !== null && (startsWithNumber(answer) || A_CODE.test(answer)));
+  if (!isNumber) return { text: part, labelOnly: false };
   return { text: holdsDigits(before) ? '' : before, labelOnly: false };
 }
 
 /** What can stand after a label and be its number, unless it is plainly a phone or a date. */
 function isNumberAfterLabel(text: string): boolean {
   const t = text.trim();
-  return t.length > 0 && t.length <= MAX_LABEL && !/[:：]/.test(t) && holdsDigits(t) && !findPhone(t);
+  return t.length > 0 && t.length <= MAX_LABEL && !/[:：]/.test(t) && holdsDigits(t) && (startsWithNumber(t) || (A_CODE.test(t) && !/\s/.test(t))) && !findPhone(t);
 }
 
 /** A Chinese ID number with no word beside it: 18 or 15 digits with a date of birth inside. Nothing else looks like one. */

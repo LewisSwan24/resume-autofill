@@ -22,6 +22,8 @@ export interface CaptureOptions {
   force?: boolean | undefined;
   /** Runs after the first load and before recording starts. */
   beforeRecord?: ((page: Page) => Promise<void>) | undefined;
+  /** Runs once recording, for walking to a page that takes clicks to reach. The sample is of wherever that ends up. */
+  beforeSnapshot?: ((page: Page) => Promise<void>) | undefined;
   settleMs?: number | undefined;
 }
 
@@ -125,7 +127,7 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
   mkdirSync(dir, { recursive: true });
   const harPath = path.join(dir, 'page.har');
 
-  const page = await context.newPage();
+  let page = await context.newPage();
   if (opts.beforeRecord) {
     await page.goto(opts.url, { waitUntil: 'load', timeout: 60_000 });
     await opts.beforeRecord(page);
@@ -134,13 +136,23 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
   await context.routeFromHAR(harPath, { update: true, updateContent: 'attach', updateMode: 'full' });
 
   const sheets = new Map<string, Promise<string>>();
-  page.on('response', (r) => {
+  context.on('response', (r) => {
     if (r.request().resourceType() === 'stylesheet') sheets.set(r.url(), r.text().catch(() => ''));
   });
 
   await page.goto(opts.url, { waitUntil: 'load', timeout: 60_000 });
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(opts.settleMs ?? 1500);
+
+  let sampleUrl = opts.url;
+  if (opts.beforeSnapshot) {
+    await opts.beforeSnapshot(page);
+    // A link may have opened a tab of its own.
+    page = context.pages().at(-1) ?? page;
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    await page.waitForTimeout(opts.settleMs ?? 1500);
+    sampleUrl = page.url();
+  }
 
   const screenshots = opts.screenshots === false ? [] : await takeScreenshots(page, dir);
 
@@ -182,7 +194,7 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
       {
         ats: opts.ats,
         name: opts.name,
-        url: scrub.text(opts.url),
+        url: scrub.text(sampleUrl),
         capturedAt: new Date().toISOString(),
         frames,
         screenshots,

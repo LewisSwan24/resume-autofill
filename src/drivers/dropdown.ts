@@ -1,7 +1,7 @@
 // Helpers for library dropdowns that teleport their panel to <body> (antd, Element Plus).
 import { isVisible } from '../engine/visibility';
 import type { OptionInfo } from '../engine/types';
-import { fireBlur, pressKey } from './events';
+import { fireBlur, pressKey, simulateClick } from './events';
 
 export interface FindDropdownOptions {
   /** Document to search; defaults to the trigger's own document. */
@@ -85,4 +85,10 @@ export function closeDropdown(doc: Document): void {
   const active = (doc.activeElement as HTMLElement | null) ?? doc.body;
   pressKey(active, 'Escape');
   if (active !== doc.body) fireBlur(active);
+}
+
+/** For a list known to be open and not meant to stay: some only shut on a press outside them. */
+export function shutDropdown(doc: Document, stillOpen: () => boolean): void {
+  closeDropdown(doc);
+  if (stillOpen()) simulateClick(doc.body);
 }

@@ -85,6 +85,8 @@ export interface EntryRef<T> {
  * Resume entries that feed a page section (plan 0.7): internship section → work entries of kind
  * 'internship'; work section → the others (all of them when the page has no internship section).
  */
+const MOTHER_TONGUE = /^(?:中文|汉语|漢語|普通话|普通話|国语|國語|中文普通话|中文\s*[(（]普通话[)）]|Chinese|Mandarin|Mandarin Chinese|Chinese\s*\(Mandarin\))$/i;
+
 export function sectionEntries(
   resume: Resume,
   module: ArrayModule,
@@ -92,6 +94,8 @@ export function sectionEntries(
   hasInternshipSection = false,
 ): EntryRef<unknown>[] {
   const all = (resume[module] as unknown[]).map((entry, index) => ({ entry, index }));
+  // No Chinese form asks about Chinese on its list of languages, and a card opened for it would stay empty.
+  if (module === 'languages' && resume.locale === 'zh-CN') return all.filter((r) => !MOTHER_TONGUE.test((r.entry as { language?: string }).language?.trim() ?? ''));
   if (module !== 'work') return all;
   const kindOf = (e: unknown) => (e as Resume['work'][number]).kind;
   if (section === 'internship') return all.filter((r) => kindOf(r.entry) === 'internship');
@@ -113,6 +117,27 @@ export function entryFieldText(module: string, field: string, entry: unknown, lo
   const def = getFieldKeyDef(`${module}.${field}` as FieldKey);
   return def?.type === 'enum' ? optionLabel(domainFor(def), raw, locale) : raw;
 }
+
+const SCHOOLING_RANK: Record<string, number> = { high_school: 1, associate: 2, bachelor: 3, master: 4, phd: 5 };
+
+const STILL_RUNNING = '9999';
+const endOfSchooling = (r: { entry: unknown }): string => {
+  const e = r.entry as { endDate?: string | null; current?: boolean };
+  return e.endDate || (e.current ? STILL_RUNNING : '');
+};
+
+function highestSchooling<T extends { entry: unknown }>(rows: T[]): T | undefined {
+  const rank = (r: T) => SCHOOLING_RANK[(r.entry as { degree?: string }).degree ?? ''] ?? 0;
+  const best = rows.reduce<T | undefined>(
+    (top, r) => (!top || rank(r) > rank(top) || (rank(r) === rank(top) && endOfSchooling(r) > endOfSchooling(top)) ? r : top),
+    undefined,
+  );
+  // A later row with no level written down may be the higher one, and nothing here can say.
+  return best && rows.some((r) => rank(r) === 0 && endOfSchooling(r) > endOfSchooling(best)) ? undefined : best;
+}
+
+const lastSchooling = <T extends { entry: unknown }>(rows: T[]): T | undefined =>
+  rows.reduce<T | undefined>((last, r) => (!last || endOfSchooling(r) > endOfSchooling(last) ? r : last), undefined);
 
 function ageOf(birthDate: string, now: Date): number | null {
   const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(birthDate);
@@ -216,10 +241,17 @@ export function resolveValue(
   }
   if (ARRAY_MODULES.has(module)) {
     const rows = sectionEntries(resume, module as ArrayModule, section, opts.hasInternshipSection);
-    const row = rows[entryIndex];
+    // Away from the cards, as on 最高学历 next to the name, a question about schooling means the highest.
+    const row = module === 'education' && section && section !== 'education' && entryIndex === 0 ? highestSchooling(rows) : rows[entryIndex];
     if (!row) return null;
     const entry = row.entry as Record<string, unknown>;
     const source = `${module}[${row.index}].${field}`;
+    if (field === 'classYear') {
+      // Which class someone belongs to, wherever it is asked: the schooling they are finishing, not this card's.
+      const latest = lastSchooling(rows) ?? row;
+      const year = /^(\d{4})/.exec(String((latest.entry as { endDate?: string | null }).endDate ?? ''))?.[1];
+      return year ? { raw: year, source: `${module}[${latest.index}].endDate` } : null;
+    }
     if (field === 'endDate' && entry.current === true && !entry.endDate) return null;
     if (field === 'period') return periodOf(entry, source);
     return wrap(entry[field], source);
@@ -263,6 +295,8 @@ function dialCodeShown(el: Element): string | null {
 }
 
 export interface IntentOptions {
+  /** The words on the field, where the same fact has two names. */
+  askedAs?: string;
   /** The applicant's own dial code, for a phone widget that has picked another country. */
   dialCode?: string;
   /** Attachment files by id (the run payload's `files`). */
@@ -366,6 +400,8 @@ function regionText(region: Region, locale: Locale): string {
  * Translate a resolved value into what a driver should do with `control`; null when the control cannot
  * take this kind of value (e.g. a file for a text box).
  */
+const DEGREE_AWARD_ZH: Record<string, string> = { bachelor: '学士', master: '硕士', phd: '博士' };
+
 export function toIntent(
   def: FieldKeyDef,
   raw: RawValue,
@@ -391,6 +427,9 @@ export function toIntent(
     const [start = '', end = ''] = raw.split('/');
     if (kind === 'date') {
       const [from, to] = control.dateRange ? [dateIntent(start, control), dateIntent(end, control)] : [null, null];
+      if (from?.kind === 'date' && end === STILL_GOING && control.lib === 'feishu') {
+        return { kind: 'dateFrom', display: `${from.display} ~ ${locale === 'zh-CN' ? '至今' : 'Present'}`, start: from };
+      }
       if (from?.kind !== 'date' || to?.kind !== 'date') return null;
       return { kind: 'dateRange', display: `${from.display} ~ ${to.display}`, start: from, end: to };
     }
@@ -430,6 +469,11 @@ export function toIntent(
           ? { kind: 'multi', display: label, items: [{ query: label, match: (o) => matchOption(domain, raw, o) }] }
           : { kind: 'choice', display: label, query: label, match: (o) => matchOption(domain, raw, o) };
       }
+      if (def.key === 'education.degree' && isTextLike(control) && locale === 'zh-CN' && /学位/.test(opts.askedAs ?? '') && !/学历/.test(opts.askedAs ?? '')) {
+        // 学位 typed out is 学士, not 本科. Below that there is none to name, and none is made up.
+        const award = DEGREE_AWARD_ZH[raw];
+        return award ? { kind: 'text', text: award } : null;
+      }
       return isTextLike(control) ? { kind: 'text', text: label } : null;
     }
     case 'list': {
@@ -461,6 +505,16 @@ export function toIntent(
       // text, longtext, number
       if (typeof raw === 'object') return null;
       const text = String(raw);
+      if (def.key === 'education.classYear') {
+        const year = new RegExp(`(?<!\\d)${text}(?!\\d)`);
+        if (!hasPickList(control)) return isTextLike(control) ? { kind: 'text', text: locale === 'zh-CN' ? `${text}届` : text } : null;
+        const match: OptionMatcher = (options) => {
+          const hits = options.flatMap((o, index) => (year.test(o.label) ? [index] : []));
+          if (hits.length === 1) return { status: 'matched', index: hits[0]!, confidence: 1 };
+          return hits.length > 1 ? { status: 'ambiguous', candidates: hits } : { status: 'none' };
+        };
+        return { kind: 'choice', display: `${text}届`, query: text, match };
+      }
       if (def.key === 'contact.phone' && opts.dialCode && isTextLike(control)) {
         const shown = dialCodeShown(control.el);
         // A bare number would be read as a number of the country the widget shows.

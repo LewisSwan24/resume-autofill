@@ -39,6 +39,17 @@ export const GRANULARITY_ATTR = 'data-granularity';
 
 // NOTE: antd v5 Cascader root is `.ant-select.ant-cascader`, so cascader must precede select.
 export const LIBRARY_WIDGETS: LibraryWidget[] = [
+  // ---- Moka. Build hashes end every class, so these go by what comes before ----
+  { lib: 'moka', kind: 'date', root: '.month-range-select' },
+  { lib: 'moka', kind: 'date', root: 'label[class*="sd-Input-container"].day_info' },
+  { lib: 'moka', kind: 'cascader', root: '[class*="sd-Input-tag-container"]' },
+  { lib: 'moka', kind: 'select', root: 'label[class*="sd-Select-container"]' },
+
+  // ---- Feishu recruiting ----
+  { lib: 'feishu', kind: 'date', root: '.throne-biz-date-range-picker-wrapper' },
+  { lib: 'feishu', kind: 'date', root: '.ud__picker' },
+  { lib: 'feishu', kind: 'select', root: '.ud__select' },
+
   // ---- antd v5 ----
   {
     lib: 'antd',
@@ -139,6 +150,8 @@ export const LIBRARY_OVERLAY_SELECTOR = [
   '.el-picker__popper',
   '.el-picker-panel',
   '.el-cascader__dropdown',
+  '[class*="sd-Dropdown-dropdown"]',
+  '.ud__select__dropdown',
 ].join(', ');
 
 /** Selector matching every library root (widgets + unsupported), for one querySelectorAll. */
@@ -200,7 +213,9 @@ export function isAriaMultiple(el: HTMLElement): boolean {
 }
 
 /** A picker that holds a start and an end in one field. */
-export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor');
+export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor') ||
+  (el.matches('.month-range-select') && el.querySelectorAll('input').length === 4) ||
+  el.matches('.throne-biz-date-range-picker-wrapper');
 
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {
   return LIBRARY_UNSUPPORTED.find((u) => el.matches(u.root));
@@ -236,6 +251,9 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
     const forced = root.getAttribute(widget.granularityAttr) ?? input?.getAttribute(widget.granularityAttr);
     if (isGranularity(forced)) return forced;
   }
+  // Year and month is all either of Moka's date widgets asks.
+  if (widget.lib === 'moka') return 'month';
+  if (root.matches('.throne-biz-date-range-picker-wrapper')) return 'month';
   if (widget.lib === 'element') {
     if (root.classList.contains('el-date-editor--month') || root.classList.contains('el-date-editor--monthrange')) return 'month';
     if (root.classList.contains('el-date-editor--year') || root.classList.contains('el-date-editor--yearrange')) return 'year';
@@ -250,3 +268,6 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
   if (size === 7) return 'month';
   return 'day';
 }
+
+/** Moka's country code beside a phone number. It says +86 until changed, and nothing on the resume needs that. */
+export const isMokaDialCode = (el: Element): boolean => el.closest('[class^="code-"]') !== null;

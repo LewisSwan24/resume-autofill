@@ -30,6 +30,8 @@ export type FillIntent =
   | ({ kind: 'date' } & DatePart)
   /** Both ends of a span in one field. */
   | { kind: 'dateRange'; display: string; start: DatePart; end: DatePart }
+  /** A span with no end yet, on a form with no word for that: the start goes in, and any old end comes out. */
+  | { kind: 'dateFrom'; display: string; start: DatePart }
   /** e.g. ['浙江省', '杭州市', '西湖区'] */
   | { kind: 'cascade'; display: string; path: string[] }
   | { kind: 'check'; checked: boolean }

@@ -164,6 +164,14 @@ const DIAL_CODE = /^\+?(\d{1,4})$/;
  * - Several equally good options yield `ambiguous`; the first option is never used as a fallback.
  * - Placeholders (`请选择`, `Select…`, empty value) and disabled options are never chosen.
  */
+const NAMES_A_SCHOOL = /大学|学院|university|college/;
+const ENDS_AS_A_SCHOOL = /(?:大学|学院|university|college)$/;
+const A_PART_OF_ONE = /学院|分校|校区|医学部|附|college|campus|school|institute/;
+/** 浙江大学 and 浙江大学城市学院 are two schools, however much of the name they share. */
+function isAPartOf(option: string, school: string): boolean {
+  return NAMES_A_SCHOOL.test(school) && option.length > school.length && option.includes(school) && A_PART_OF_ONE.test(option.replace(school, ''));
+}
+
 export function matchOption(
   domain: string | null,
   value: string | string[] | boolean,
@@ -211,6 +219,7 @@ export function matchOption(
   // (c) unique containment, length ratio ≥ 0.5
   const norm = normalizeLabel(text);
   const contained = cands
+    .filter((c) => !isAPartOf(c.norm, norm) && !(ENDS_AS_A_SCHOOL.test(c.norm) && isAPartOf(norm, c.norm)))
     .map((c) => ({ c, ratio: containmentRatio(c.norm, norm) }))
     .filter((x) => x.ratio > 0);
   if (contained.length > 0) {

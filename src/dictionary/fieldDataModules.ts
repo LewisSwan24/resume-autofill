@@ -29,13 +29,17 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '学校所在城市|学校所在地|院校所在地|院校所在城市|学校地点|就读城市|城市',
     'School city|Institution city|Institution location|School location|University location|City of institution|City of study|City|Location',
   ),
+  'education.classYear': s(
+    '届别|毕业届别|所属届别|毕业届|届次|应届届别',
+    'Class of|Graduating class|Graduation class|Graduating year group',
+  ),
   'education.degree': s(
     '学历|学位|学历/学位|最高学历|最高学位|学历层次|学历学位|学历水平|受教育程度|教育程度|文化程度|毕业学历',
     'Degree|Degree level|Degree type|Qualification|Qualification level|Level of education|Education level|Highest level of education|Highest level of tertiary education|Highest qualification|Level of study|Type of degree|Degree/qualification',
-    '编号|证书|number|certificate|专业|major|name of degree',
+    '编号|证书|证号|授予|论文|number|certificate|专业|major|name of degree',
   ),
   'education.educationType': s(
-    '学习形式|学习方式|教育形式|学制类型|培养方式|就读方式|教育类型|全日制/非全日制|是否全日制|学习类型',
+    '学历类型|学历性质|学习形式|学习方式|教育形式|学制类型|培养方式|就读方式|教育类型|全日制/非全日制|是否全日制|学习类型',
     'Study mode|Mode of study|Study type|Study load|Education type|Attendance|Attendance mode|Enrolment type|Full-time/part-time study',
   ),
   'education.major': s(
@@ -235,7 +239,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '等级|水平|证书|成绩|level|proficiency|certificate|score|test',
   ),
   'languages.proficiency': s(
-    '熟练程度|掌握程度|语言水平|语言能力|外语水平|掌握情况|听说能力|读写能力|水平|熟练度|语言熟练度|外语能力',
+    '精通程度|熟练程度|掌握程度|语言水平|语言能力|外语水平|掌握情况|听说能力|读写能力|水平|熟练度|语言熟练度|外语能力',
     'Proficiency|Language proficiency|Proficiency level|Fluency|Level|Language level|Speaking level|Skill level',
     '证书|考试|成绩|certificate|test|exam|score',
   ),

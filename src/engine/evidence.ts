@@ -6,8 +6,7 @@ import {
   ANSWER_BUTTON_SELECTOR,
   ARIA_COMBOBOX_SELECTOR,
   LIBRARY_OVERLAY_SELECTOR,
-  LIBRARY_ROOT_SELECTOR,
-} from '../drivers/libraries';
+  LIBRARY_ROOT_SELECTOR, isMokaDialCode } from '../drivers/libraries';
 import { groupInputs } from './discover';
 import { EVIDENCE_WEIGHTS, type Control, type Evidence, type EvidenceSource } from './types';
 
@@ -18,14 +17,18 @@ export const FIELD_SELECTOR =
 
 /** Elements that are headings for sure (as opposed to class-name guesses). */
 export const STRICT_HEADING_SELECTOR =
-  'h1, h2, h3, h4, h5, h6, legend, [role=heading], .ant-card-head-title, .el-card__header, .ant-divider-inner-text';
+  'caption, h1, h2, h3, h4, h5, h6, legend, [role=heading], .ant-card-head-title, .el-card__header, .ant-divider-inner-text, [class^="blockTitle-"], .applyFormModuleWrapper-text';
 
-const FORM_ITEM_SELECTOR = '.ant-form-item, .el-form-item';
+export const FORM_ITEM_SELECTOR = '.ant-form-item, .el-form-item, [class^="apply-field-"], .ud-formily-item';
 const MAX_TEXT = 80;
 /** Forms ask whole questions, and a label or the line above a control is meant to be read as one. */
 const MAX_LABEL_TEXT = 200;
 const MAX_NEARBY = 120;
-const MAX_NEARBY_LEVELS = 4;
+/** Only there for a page gone wrong. The look ends where the box's own block ends, however many wrappers that takes. */
+const MAX_NEARBY_LEVELS = 16;
+/** A layout's wrappers rarely go past this. Further up, a heading or a page part means the block has ended. */
+const USUAL_NEARBY_LEVELS = 4;
+const PAGE_PART_TAGS = /^(?:BODY|HTML|FORM|SECTION|ARTICLE|MAIN|ASIDE|NAV|HEADER|FOOTER|DIALOG|FIELDSET)$/;
 /** Weight of a form-item label shared by several controls (e.g. phone country code + number). */
 const SHARED_LABEL_WEIGHT = 0.6;
 /** Weight of a wrapping label that merely names an answer (是 / 否 / Yes / No): the field's own label wins. */
@@ -162,7 +165,7 @@ function makeCtx(control: Control): Ctx {
 function hasOtherFields(scope: Element, c: Ctx): boolean {
   for (const f of Array.from(scope.querySelectorAll(FIELD_SELECTOR))) {
     if (f === c.el || c.el.contains(f) || c.inputs.includes(f)) continue;
-    if (f.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
+    if (f.closest(LIBRARY_OVERLAY_SELECTOR) || isMokaDialCode(f)) continue;
     return true;
   }
   return false;
@@ -221,7 +224,9 @@ function formItemLabel(item: Element): Element | null {
   return (
     own(item.querySelector('.ant-form-item-label label')) ??
     own(item.querySelector('.el-form-item__label')) ??
-    own(item.querySelector('.ant-form-item-label'))
+    own(item.querySelector('.ant-form-item-label')) ??
+    own(item.querySelector('[class^="title-"]')) ??
+    own(item.querySelector(':scope > .ud-formily-item-label label'))
   );
 }
 
@@ -287,11 +292,11 @@ function consentAbove(c: Ctx): string | null {
   return null;
 }
 
-function nearbyText(c: Ctx): string | null {
+function nearbyText(c: Ctx, reach = MAX_NEARBY_LEVELS): string | null {
   let node: Element = startOfLook(c);
   let skippedHelp = false;
   const answers = new Set((c.control.options ?? []).map((o) => cleanEvidenceText(o.label, MAX_NEARBY)));
-  for (let level = 0; level <= MAX_NEARBY_LEVELS; level++) {
+  for (let level = 0; level <= reach; level++) {
     for (let s: Node | null = node.previousSibling; s; s = s.previousSibling) {
       if (s.nodeType === 3) {
         if (isParagraph(s.textContent)) return null;
@@ -305,7 +310,10 @@ function nearbyText(c: Ctx): string | null {
       // The message of the field before, shown or waiting to be.
       if (sib.matches('[role=alert]') || !isVisible(sib)) continue;
       if (containsField(sib)) return null;
-      if (isHeadingLike(sib)) continue;
+      if (isHeadingLike(sib)) {
+        if (level >= USUAL_NEARBY_LEVELS) return null;
+        continue;
+      }
       const raw = textWithoutControls(sib);
       if (isParagraph(raw)) {
         // Help under a question and above its answers. A box of its own has no such room for a question.
@@ -321,6 +329,7 @@ function nearbyText(c: Ctx): string | null {
     }
     const parent = node.parentElement;
     if (!parent || /^(BODY|HTML|FORM)$/.test(parent.tagName) || hasOtherFields(parent, c)) return null;
+    if (level >= USUAL_NEARBY_LEVELS && PAGE_PART_TAGS.test(parent.tagName)) return null;
     node = parent;
   }
   return null;
@@ -452,7 +461,9 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
 
   // nearby text. Answer buttons often sit right beside their question, inside the same element.
   const beside = c.control.lib === 'aria' && c.optionGroup ? textWithoutControls(c.el) : '';
-  push('nearby-text', beside.trim() ? beside : nearbyText(c));
+  // A box that says what it is has no need of a word from far above it.
+  const named = out.some((e) => e.source === 'aria-label' || e.source === 'aria-labelledby');
+  push('nearby-text', beside.trim() ? beside : nearbyText(c, named ? USUAL_NEARBY_LEVELS : MAX_NEARBY_LEVELS));
 
   // name / id
   const first = c.inputs[0] as HTMLInputElement | undefined;

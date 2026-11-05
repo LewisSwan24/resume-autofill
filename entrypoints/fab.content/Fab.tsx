@@ -15,7 +15,7 @@ import { useT } from '../../src/i18n';
 import { isFromExtension, isValidMessage, sendToBackground, type Sender } from '../../src/messaging';
 import { Icon } from '../../src/ui/Icon';
 import { SummaryCard } from './SummaryCard';
-import { summarize, type FillSummary } from './summarize';
+import { countBoxes, looksUnderRead, summarize, type FillSummary } from './summarize';
 
 /** How long we wait for `report:updated` after the background acknowledged `fill:request`. */
 export const DEFAULT_REPORT_TIMEOUT_MS = 60_000;
@@ -67,6 +67,7 @@ type CardView = Extract<View, { kind: 'done' | 'error' }>;
 export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const t = useT();
   const [total, setTotal] = useState(0);
+  const [boxes, setBoxes] = useState(0);
   /** Result of the last fill on this page: the FAB caption shows it instead of the detected count until the next fill starts. */
   const [result, setResult] = useState<FillSummary | null>(null);
   const [view, setViewState] = useState<View>({ kind: 'idle' });
@@ -95,6 +96,7 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
       if (message.type === 'scan:total') {
         if (typeof message.total === 'number' && Number.isFinite(message.total)) {
           setTotal(Math.max(0, Math.floor(message.total)));
+          setBoxes(countBoxes(document));
         }
       } else if (message.type === 'report:updated') {
         if (!Array.isArray(message.report?.fields)) return;
@@ -152,8 +154,9 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const filling = view.kind === 'filling';
   const cardView: CardView | null = view.kind === 'done' || view.kind === 'error' ? view : null;
   const shown = cardView ?? leaving;
-  const detected =
-    total === 0 ? t('fab.detected.none') : t(total === 1 ? 'fab.detected.one' : 'fab.detected.other', { n: total });
+  const detected = looksUnderRead(total, boxes)
+    ? t('fab.detected.few', { n: total, boxes })
+    : total === 0 ? t('fab.detected.none') : t(total === 1 ? 'fab.detected.one' : 'fab.detected.other', { n: total });
   // After a fill the caption states the result (same numbers as the card: to check = needs review + not filled).
   const caption = result ? resultCaption(result, t) : detected;
   const noFields = total === 0 && !filling && !result;

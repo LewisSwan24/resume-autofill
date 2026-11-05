@@ -12,6 +12,7 @@ import {
   normalizeLabel,
   normalizedSimilarity,
 } from '../dictionary';
+import { ABOUT_SOMEONE_ELSE } from '../dictionary/sections';
 import { FIELD_KEYS, getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
 import { assign } from './assign';
 import type { Classification, Control, FieldContext, FieldKey, SectionKey } from './types';
@@ -167,9 +168,12 @@ export interface FieldScores {
 
 /** A question that names its country and only that: clear enough to fill, on a list with the answers on it. */
 const ASKED_COUNTRY_CONFIDENCE = 0.85;
-const ABOUT_SOMEONE_ELSE = new Set<SectionKey>(['referees', 'family', 'emergencyContact']);
 /** Where a question about a place is about where the applicant is, not a job, a school or a project. */
 const ABOUT_THE_APPLICANT = new Set<SectionKey>(['basics', 'contact', 'jobIntention', 'workRights', 'diversity', 'selfIntro', 'other']);
+
+const ASKED_WITH_THE_NAME = new Set<FieldKey>(['education.degree', 'education.endDate', 'education.school', 'education.major']);
+
+const WHOSE_IS_UNSAID = /^联系人(?:信息)?$/;
 
 function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null): number {
   if (!section) return raw;
@@ -179,7 +183,10 @@ function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null
   }
   const module = def.key.split('.')[0];
   // "联系方式" under a referee is how to reach the referee, whatever else it could mean.
-  if (ABOUT_SOMEONE_ELSE.has(section)) return raw * OUT_OF_SECTION_FACTOR;
+  // No word in the label can make it about the applicant there: at most, the applicant gets to look at it.
+  if (ABOUT_SOMEONE_ELSE.has(section)) return Math.min(raw * OUT_OF_SECTION_FACTOR, AMBIGUOUS_CAP);
+  // 最高学历 and 毕业院校 sit with the name on many Chinese forms, about the latest schooling.
+  if (section === 'basics' && ASKED_WITH_THE_NAME.has(def.key)) return raw;
   return raw * (module === 'basics' || module === 'contact' ? GLOBAL_MODULE_FACTOR : OUT_OF_SECTION_FACTOR);
 }
 
@@ -242,6 +249,10 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
   }
   candidates.sort((a, b) => b.score - a.score || b.weight - a.weight);
   if (ctx.control.dateRange) return { neverFill: false, candidates: rangeCandidates(candidates, section) };
+  // 联系人 could be the applicant being reached or someone else to reach. Whoever is looking can tell; the page does not say.
+  if (title && WHOSE_IS_UNSAID.test(title)) {
+    for (const c of candidates) c.confidence = Math.min(c.confidence, AMBIGUOUS_CAP);
+  }
   // A span with no part of the file around it does not say whose.
   if (!section) {
     for (const c of candidates) if (getFieldKeyDef(c.fieldKey)?.type === 'period') c.confidence = Math.min(c.confidence, AMBIGUOUS_CAP);

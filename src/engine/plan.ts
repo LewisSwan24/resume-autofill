@@ -112,6 +112,7 @@ export function planFill(
       home: resume.contact.address,
       dialCode: resume.contact.phoneCountryCode.trim(),
       genderAnswer: resume.diversity.genderAnswer,
+      askedAs: report.label,
     });
     if (!intent && def.type === 'period' && ctx.control.kind === 'date') {
       // A job still going, or a picker that holds one date: what to put is for the applicant to say.

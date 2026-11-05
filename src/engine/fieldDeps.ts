@@ -119,6 +119,7 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'contact.addressFull': ADDRESS_KEYS,
   'contact.inNamedCountry': ['contact.addressCountry'],
   'education.period': ['education.startDate', 'education.endDate', 'education.current'],
+  'education.classYear': ['education.endDate', 'education.degree'],
   'work.period': ['work.startDate', 'work.endDate', 'work.current'],
   'projects.period': ['projects.startDate', 'projects.endDate', 'projects.current'],
   'campus.period': ['campus.startDate', 'campus.endDate', 'campus.current'],

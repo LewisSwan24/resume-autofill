@@ -28,6 +28,9 @@ const { values: args } = parseArgs({
     login: { type: 'boolean', default: false },
     profile: { type: 'boolean', default: false },
     force: { type: 'boolean', default: false },
+    locale: { type: 'string', default: 'en-AU' },
+    /** Wait for this file to appear instead of Enter, for a run with no terminal of its own. */
+    'ready-file': { type: 'string' },
   },
 });
 
@@ -50,7 +53,17 @@ if (existsSync(TERMS_FILE)) {
 if (authenticated && terms.length === 0) die(`logged-in capture needs terms in ${TERMS_FILE}`);
 
 /** The window stays with the user until they say the page is ready. */
+const waitForFile = async (file: string): Promise<void> => {
+  while (!existsSync(file)) await new Promise((resolve) => setTimeout(resolve, 1000));
+};
+
 async function waitForUser(): Promise<void> {
+  const readyFile = args['ready-file'];
+  if (readyFile) {
+    console.log('Log in in the browser window.');
+    await waitForFile(readyFile);
+    return;
+  }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   await rl.question('Log in in the browser window and open the application page, then press Enter here. ');
   rl.close();
@@ -63,7 +76,7 @@ if (authenticated) mkdirSync(profileDir, { recursive: true });
 const contextOptions = {
   serviceWorkers: 'block' as const,
   viewport: { width: 1280, height: 900 },
-  locale: 'en-AU',
+  locale: args.locale,
 };
 const browser = authenticated ? null : await chromium.launch();
 const context = authenticated
@@ -79,6 +92,8 @@ const result = await capturePage(context, {
   force: args.force,
   screenshots: !authenticated,
   beforeRecord: args.login ? waitForUser : undefined,
+  // Recording by now, and past the login: the walk to the form is part of what a replay needs.
+  beforeSnapshot: args.login && args['ready-file'] ? () => waitForFile(`${args['ready-file']}.form`) : undefined,
 });
 await browser?.close();
 

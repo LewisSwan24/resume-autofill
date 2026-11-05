@@ -22,7 +22,9 @@ export const s = (zh: string, en: string, exclude = ''): FieldSynonym => {
 };
 
 /** Labels that belong to an organisation/other entity rather than a person's own name. */
-const NOT_PERSON = '公司|单位|学校|院校|项目|奖|证书|组织|社团|推荐人|证明人|紧急|联系人|家庭|家属|亲属|company|employer|school|university|institution|project|award|certificate|organi|referee|emergency|contact|family member|file name|user name|username';
+/** Words that make a name, phone or email someone else's, among the applicant's own questions. */
+const OTHER_PEOPLE = '父亲|母亲|配偶|导师|领导|上级|家长|监护人|亲属|家属|联系人|hr姓名|hr电话|hr手机|hr邮箱|father|mother|spouse|guardian|parent|supervisor';
+const NOT_PERSON = `${OTHER_PEOPLE}|` + '公司|单位|学校|院校|项目|奖|证书|组织|社团|推荐人|证明人|紧急|联系人|家庭|家属|亲属|company|employer|school|university|institution|project|award|certificate|organi|referee|emergency|contact|family member|file name|user name|username';
 /** Region-ish qualifiers that make a plain "city / province / country" label something else. */
 const OTHER_PLACE = '籍贯|户口|户籍|生源|出生|学校|院校|公司|单位|期望|意向|工作|birth|school|university|company|employer|work|preferred|desired|expected';
 
@@ -63,7 +65,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '认同|identity|identify|orientation|pronoun',
   ),
   'basics.birthDate': s(
-    '出生日期|出生年月|出生年月日|生日|出生时间|出生日|出生年份',
+    '出生日期|出生日期(年龄)|出生年月|出生年月日|生日|出生时间|出生日|出生年份',
     'Date of birth|DOB|Birth date|Birthdate|Birthday|D.O.B|Date of birth (dd/mm/yyyy)',
   ),
   'basics.nationality': s(
@@ -131,7 +133,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'contact.email': s(
     '邮箱|电子邮箱|电子邮件|邮件|常用邮箱|个人邮箱|确认邮箱|再次输入邮箱|邮箱确认|邮箱地址|电子邮件地址',
     'Email|E-mail|Email address|Confirm email|Confirm email address|Re-enter email|Retype email|Personal email|Email (confirm)',
-    '推荐人|证明人|验证|紧急|referee|reference|verif|emergency|code',
+    `推荐人|证明人|验证|紧急|referee|reference|verif|emergency|code|${OTHER_PEOPLE}`,
   ),
   'contact.phoneCountryCode': s(
     '国家区号|区号|国家代码|手机区号|国际区号|国家/地区代码|电话区号|国家码',
@@ -141,7 +143,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'contact.phone': s(
     '联系方式|手机|手机号|手机号码|联系电话|电话|联系手机|移动电话|电话号码|常用电话|联系电话(手机)|本人手机',
     'Phone|Phone number|Mobile|Mobile number|Mobile phone|Contact number|Telephone|Cell phone|Contact phone|Mobile/phone',
-    '备用|紧急|应急|家庭|推荐人|证明人|区号|验证|emergency|referee|reference|country code|verif|code|family|next of kin',
+    `备用|紧急|应急|家庭|推荐人|证明人|区号|验证|emergency|referee|reference|country code|verif|code|family|next of kin|${OTHER_PEOPLE}`,
   ),
   'contact.phoneFull': s(
     '手机号(含区号)|手机号含区号|国际电话|电话(含国家代码)|电话含国家代码|含区号手机号|带区号手机号',

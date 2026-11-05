@@ -267,6 +267,7 @@ export const en: Record<MessageKey, string> = {
   'fab.detected.none': 'No form fields detected',
   'fab.detected.one': '{n} field detected',
   'fab.detected.other': '{n} fields detected',
+  'fab.detected.few': 'Only {n} of {boxes} boxes read: this form may not be supported yet',
   'fab.error.title': "Couldn't autofill",
   'fab.error.generic': 'The extension did not respond. Reload the page and try again.',
   'fab.error.noReport': 'Autofill started, but no result came back. Give it another try.',

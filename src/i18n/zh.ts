@@ -265,6 +265,7 @@ export const zh = {
   'fab.detected.none': '未检测到表单字段',
   'fab.detected.one': '识别到 {n} 个字段',
   'fab.detected.other': '识别到 {n} 个字段',
+  'fab.detected.few': '{boxes} 个输入框只认出 {n} 个，可能未适配',
   'fab.error.title': '没能完成填写',
   'fab.error.generic': '后台没有响应。刷新页面，再试一次。',
   'fab.error.noReport': '填写已经开始，但没收到结果。再试一次吧。',

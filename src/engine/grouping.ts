@@ -1,5 +1,5 @@
 // Section titles and repeated-card grouping ("教育经历 1 / 2 ...") for a discovered control.
-import { isAddButtonText, normalizeLabel } from '../dictionary';
+import { ABOUT_SOMEONE_ELSE, isAddButtonText, matchSection, normalizeLabel } from '../dictionary';
 import { LIBRARY_OVERLAY_SELECTOR, LIBRARY_ROOT_SELECTOR } from '../drivers/libraries';
 import {
   FIELD_SELECTOR,
@@ -7,8 +7,7 @@ import {
   analyzeControl,
   cleanEvidenceText,
   containsField,
-  textWithoutControls,
-} from './evidence';
+  textWithoutControls, FORM_ITEM_SELECTOR } from './evidence';
 import type { Control, FieldContext, FieldGroup } from './types';
 
 export interface SectionInfo {
@@ -89,6 +88,8 @@ function headingOf(s: Element, parent: Element): { title: string; heading: Eleme
     return title ? { title, heading: strict } : null;
   }
   const cls = s.getAttribute('class') ?? '';
+  // The caption of one question, even when its answer takes several boxes: 就读时间 over year, month, year, month.
+  if (parent.matches(FORM_ITEM_SELECTOR) && !parent.querySelector(FORM_ITEM_SELECTOR)) return null;
   if (CLASS_HEADING.test(cls) && !CLASS_NOT_HEADING.test(cls) && !s.querySelector('table, th')) {
     // A bare "title" span next to one field is a field caption, not a section: require a group of fields.
     if (fieldCount(parent) < 2) return null;
@@ -123,6 +124,8 @@ export function findSection(el: Element): SectionInfo | null {
 function resolveSection(el: Element): { title: string; root: Element } | null {
   const near = findSection(el);
   if (!near) return null;
+  const own = matchSection(near.title)?.section;
+  if (own && ABOUT_SOMEONE_ELSE.has(own)) return { title: stripNumbering(near.title), root: near.root };
   if (PAGE_ROOT.test(near.root.tagName) || !(isNumbered(near.title) || cardMembers(near.root))) return near;
   const outer = findSection(near.root);
   if (outer && !PAGE_ROOT.test(outer.root.tagName) && !/^H1$/i.test(outer.heading.tagName)) return outer;

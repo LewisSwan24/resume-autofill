@@ -10,7 +10,7 @@ export const SECTION_SYNONYMS: Record<SectionKey, string[]> = {
     'Applicant details',
   ],
   contact: [
-    '联系方式', '联系信息', '通讯信息', '联系地址', '通讯方式', '联系人信息',
+    '联系方式', '联系信息', '通讯信息', '联系地址', '通讯方式',
     'Contact details', 'Contact information', 'Contact info', 'Address details', 'Contact',
   ],
   jobIntention: [
@@ -61,10 +61,12 @@ export const SECTION_SYNONYMS: Record<SectionKey, string[]> = {
   ],
   family: [
     '家庭成员', '家庭情况', '家庭信息', '家庭主要成员', '家庭关系', '主要社会关系', '亲属信息',
+    '家属', '家属信息', '直系亲属', '家庭及社会关系', '家庭成员及社会关系', '父母信息',
     'Family members', 'Family details', 'Family information', 'Family background', 'Family',
+    'Parent', 'Parents', 'Guardian', 'Guardians', 'Parent details', 'Guardian details',
   ],
   emergencyContact: [
-    '紧急联系人', '紧急联络人', '应急联系人', '紧急联系人信息', '紧急联系方式',
+    '紧急联系人', '紧急联络人', '应急联系人', '紧急联系人信息', '紧急联系方式', '联系人信息', '联系人',
     'Emergency contact', 'Emergency contacts', 'Emergency contact details', 'Emergency contact information',
     'Next of kin',
   ],
@@ -114,9 +116,15 @@ function stripNumbering(title: string): string {
 }
 
 /** Best-matching section for a heading text, or null when nothing reaches confidence 0.8. */
+/** Sections whose name, phone and address are another person's. */
+export const ABOUT_SOMEONE_ELSE: ReadonlySet<SectionKey> = new Set<SectionKey>(['referees', 'family', 'emergencyContact']);
+
+/** A question that reads like a section's name. */
+const NOT_A_SECTION = /^(?:family name|家庭住址|家庭地址)$/;
+
 export function matchSection(title: string): SectionMatch | null {
   const t = normalizeLabel(stripNumbering(title));
-  if (!t) return null;
+  if (!t || NOT_A_SECTION.test(t)) return null;
   let best: SectionMatch | null = null;
   for (const [section, synonyms] of Object.entries(SECTION_SYNONYMS) as [SectionKey, string[]][]) {
     for (const syn of synonyms) {

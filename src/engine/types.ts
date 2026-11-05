@@ -14,7 +14,7 @@ export type ControlKind =
   | 'richtext'
   | 'cascader';
 
-export type UiLib = 'native' | 'antd' | 'element' | 'aria' | 'search' | 'workday';
+export type UiLib = 'native' | 'antd' | 'element' | 'aria' | 'search' | 'workday' | 'moka' | 'feishu';
 
 export interface OptionInfo {
   label: string;

@@ -90,7 +90,7 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
 
   proficiency: g({
     native: '母语|母语水平|母语者|Native|Native speaker|Native or bilingual|Native/bilingual|Mother tongue|Bilingual',
-    fluent: '流利|非常流利|精通|非常熟练|优秀|Fluent|Fluency|Excellent|Very good',
+    fluent: '流利|非常流利|无障碍沟通|精通|非常熟练|优秀|Fluent|Fluency|Excellent|Very good',
     proficient: '熟练|熟练掌握|熟悉|较好|高级|Proficient|Professional working proficiency|Professional proficiency|Full professional proficiency|Advanced|Competent|Upper intermediate',
     intermediate: '中级|中等|良好|日常交流|日常会话|Intermediate|Conversational|Working proficiency|Limited working proficiency|Good|Moderate',
     basic: '初级|入门|基础|一般|较差|略懂|了解|Basic|Beginner|Elementary|Limited|Novice|Basic proficiency|Fair|A little',

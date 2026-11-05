@@ -22,6 +22,7 @@ export type IntentJson =
   | { kind: 'choice'; display: string; query: string; options?: OptionSpec }
   | { kind: 'multi'; display: string; items: { query: string; options?: OptionSpec }[] }
   | { kind: 'date'; display: string; year: number; month: number; day?: number }
+  | { kind: 'dateFrom'; display: string; start: DateJson }
   | { kind: 'dateRange'; display: string; start: DateJson; end: DateJson }
   | { kind: 'cascade'; display: string; path: string[] }
   | { kind: 'check'; checked: boolean }

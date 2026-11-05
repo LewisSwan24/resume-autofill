@@ -22,7 +22,8 @@
   display: block !important;
   position: fixed !important;
   right: var(--raf-size-fab-offset-x) !important;
-  bottom: var(--raf-size-fab-offset-y) !important;
+  /* Set on the host by keepClear.ts when a page button is in the way. Not a theme token: it changes at run time. */
+  bottom: var(--resume-autofill-fab-bottom, var(--raf-size-fab-offset-y)) !important;
   z-index: var(--raf-z-index) !important;
   width: max-content !important;
   height: auto !important;

@@ -179,8 +179,12 @@ const placeName = (raw: string): string =>
 function regionTag(panel: Element, name: string): Element | null {
   const want = placeName(name);
   // The cities everyone picks are listed first, above the province they sit in: the list proper comes last.
-  const hits = Array.from(panel.querySelectorAll(REGION_TAG)).filter((t) => placeName(t.textContent ?? '') === want);
-  return hits[hits.length - 1] ?? null;
+  const tags = Array.from(panel.querySelectorAll(REGION_TAG));
+  const hits = tags.filter((t) => placeName(t.textContent ?? '') === want);
+  if (hits.length > 0) return hits[hits.length - 1]!;
+  // 船营 on the resume is 船营区 on the panel, as long as only one place on it reads that way.
+  const short = tags.filter((t) => placeName(t.textContent ?? '').replace(/[区县]$/, '') === want);
+  return short.length === 1 ? short[0]! : null;
 }
 
 const readPlace = (control: Control): string | null => clean(control.el.textContent) || clean(inputOf(control.el)?.value) || null;
@@ -200,7 +204,8 @@ async function fillPlace(control: Control, intent: FillIntent, ctx: DriverContex
         },
         { timeout: 1500, signal: ctx.signal, root: ctx.doc },
       );
-      if (!tag) return failed(`no ${name} on the panel`, readPlace(control), 'no_option');
+      // The levels above it are already in the box, so what is there is true but short of the answer.
+      if (!tag) return failed(`no ${name} on the panel`, readPlace(control), previous ? 'needs_review' : 'no_option');
       simulateClick(tag);
       previous = tag;
     }

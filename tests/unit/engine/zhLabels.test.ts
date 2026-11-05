@@ -56,6 +56,9 @@ describe('labels that mean the field they name', () => {
     ['校内职务', 'campus.role'],
     ['自我评价', 'misc.selfIntroduction'],
     ['招聘信息来源', 'jobIntention.howDidYouHear'],
+    ['所在地点', 'basics.currentLocation'],
+    ['当前所在地点', 'basics.currentLocation'],
+    ['家乡', 'basics.nativePlace'],
     ['成绩单', 'attachments.transcript'],
   ])('%s is %s', (label, key) => {
     expect(read(label).key).toBe(key);
@@ -76,6 +79,11 @@ describe('labels about something else that merely start with a field’s name', 
     ['职位类别', 'position'],
     ['学校类型', 'school'],
     ['学校所在地', 'school'],
+    ['学校所在地点', 'currentLocation'],
+    ['公司所在地点', 'currentLocation'],
+    ['工作所在地点', 'currentLocation'],
+    ['期望所在地点', 'currentLocation'],
+    ['家乡特产', 'nativePlace'],
     ['证件照', 'idNumber'],
     ['证件有效期', 'idNumber'],
     ['成绩单', 'gpa'],
@@ -149,5 +157,71 @@ describe('traditional characters', () => {
 
   it('changes no characters outside Chinese', () => {
     expect(normalizeLabel('Résumé 2026 スキル')).toBe('resume 2026 スキル');
+  });
+});
+
+describe('words that only sound like the bare place word', () => {
+  function fills(heading: string | null, label: string): string | null {
+    document.body.innerHTML = `<form><section>${heading ? `<h2>${heading}</h2>` : ''}
+      <div><label for="n">占位其他</label><input id="n"></div>
+      <div><label for="x">${label}</label><input id="x"></div></section></form>`;
+    const { contexts, classifications } = scanDocument(document);
+    const c = classifications[contexts.findIndex((x) => (x.control.el as HTMLElement).id === 'x')];
+    return c && c.confidence >= FILL_THRESHOLD ? (c.fieldKey ?? null) : null;
+  }
+
+  it.each([
+    ['基本信息', '户口所在地点', 'basics.currentLocation'],
+    ['基本信息', '籍贯所在地点', 'basics.currentLocation'],
+    ['基本信息', '面试所在地点', 'basics.currentLocation'],
+    [null, '期望工作所在地点', 'work.city'],
+    ['求职意向', '工作所在地', 'work.city'],
+    ['工作经历', '家庭所在地', 'work.city'],
+    ['工作经历', '学校所在地', 'work.city'],
+    ['求职意向', '期望所在地点', 'education.city'],
+    ['项目经历', '所在地点', 'basics.currentLocation'],
+    ['项目经历', '所在地', 'basics.currentLocation'],
+    ['获奖情况', '所在地点', 'basics.currentLocation'],
+    ['校园经历', '所在地点', 'basics.currentLocation'],
+  ])('%s / %s does not fill %s', (heading, label, wrong) => {
+    expect(fills(heading, label)).not.toBe(wrong);
+  });
+
+  it.each([
+    ['工作经历', '户口所在地'],
+    ['教育经历', '户口所在地'],
+  ])('%s / %s is still the household register', (heading, label) => {
+    expect(fills(heading, label)).toBe('basics.household');
+  });
+
+  it.each([
+    ['基本信息', '所在地点'],
+    ['基本信息', '所在地'],
+  ])('%s / %s is still where the applicant lives', (heading, label) => {
+    expect(fills(heading, label)).toBe('basics.currentLocation');
+  });
+
+  it.each(['所在地点', '所在地'])('%s with no heading could be any place, so it is only offered for checking', (label) => {
+    expect(fills(null, label)).toBeNull();
+    expect(read(label)).toMatchObject({ key: 'basics.currentLocation' });
+    expect(read(label).confidence).toBeGreaterThanOrEqual(REVIEW_THRESHOLD);
+  });
+});
+
+describe('the place words inside a row about something else', () => {
+  function inSection(heading: string, label: string): string | null {
+    document.body.innerHTML = `<form><section><h2>${heading}</h2>
+      <div><label for="n">${heading.startsWith('工作') ? '公司名称' : '学校名称'}</label><input id="n"></div>
+      <div><label for="x">${label}</label><input id="x"></div></section></form>`;
+    const { contexts, classifications } = scanDocument(document);
+    return classifications[contexts.findIndex((c) => (c.control.el as HTMLElement).id === 'x')]?.fieldKey ?? null;
+  }
+
+  it.each(['所在地', '所在地点'])('%s under a job is not where the applicant lives', (label) => {
+    expect(inSection('工作经历', label)).toBe('work.city');
+  });
+
+  it.each(['所在地', '所在地点'])('%s under a school is not where the applicant lives', (label) => {
+    expect(inSection('教育经历', label)).toBe('education.city');
   });
 });

@@ -25,7 +25,14 @@ export interface DatePart {
 
 export type FillIntent =
   | { kind: 'text'; text: string }
-  | { kind: 'choice'; display: string; query: string; match: OptionMatcher }
+  | {
+      kind: 'choice';
+      display: string;
+      query: string;
+      match: OptionMatcher;
+      /** Wider ways to say the same answer, narrowest first: the city and province of a district. */
+      wider?: { query: string; match: OptionMatcher }[];
+    }
   | { kind: 'multi'; display: string; items: { query: string; match: OptionMatcher }[] }
   | ({ kind: 'date' } & DatePart)
   /** Both ends of a span in one field. */

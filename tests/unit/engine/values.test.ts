@@ -368,6 +368,77 @@ describe('toIntent', () => {
     expect(intent('basics.household', { country: 'Australia' }, control('cascader'))).toMatchObject({ path: ['Australia'] });
   });
 
+  it('region on a list: the wider levels of the address go with it, narrowest first', () => {
+    const region = { province: '吉林省', city: '吉林市', district: '船营区' };
+    const asked = intent('basics.nativePlace', region, control('select'));
+    if (asked?.kind !== 'choice') throw new Error('expected a choice');
+    expect(asked.query).toBe('船营区');
+    expect(asked.wider?.map((w) => w.query)).toEqual(['吉林市', '吉林省']);
+    expect(intent('basics.nativePlace', { city: '吉林市' }, control('select'))).not.toHaveProperty('wider');
+  });
+
+  it('region on a list: what the page already shows counts when it is one of the levels and nothing else', () => {
+    const region = { province: '吉林省', city: '吉林市', district: '船营区' };
+    const asked = intent('basics.nativePlace', region, control('select'));
+    if (asked?.kind !== 'choice') throw new Error('expected a choice');
+    const holds = (label: string) =>
+      [asked, ...(asked.wider ?? [])].some((level) => {
+        const m = level.match([{ label }]);
+        return m.status === 'matched' && m.confidence >= 0.9;
+      });
+    for (const same of ['吉林', '吉林省', '吉林市', '船营区']) expect(holds(same), same).toBe(true);
+    for (const other of ['长春市', '辽宁', '布里斯班', '吉林大学', '吉林市第一中学', '船营']) expect(holds(other), other).toBe(false);
+  });
+
+  describe('region on a list: a place is not another place of the same first words', () => {
+    const levelsPick = (region: Record<string, string>, ...labels: string[]) => {
+      const asked = intent('basics.nativePlace', region, control('select'));
+      if (asked?.kind !== 'choice') throw new Error('expected a choice');
+      const options = labels.map((label) => ({ label }));
+      for (const level of [asked, ...(asked.wider ?? [])]) {
+        const m = level.match(options);
+        if (m.status === 'matched') return options[m.index]!.label;
+        if (m.status === 'ambiguous') return 'ambiguous';
+      }
+      return 'none';
+    };
+
+    it.each([
+      // A province is not the city that shares its name, nor a district the city or province that shares its.
+      [{ province: '吉林省', city: '通化市' }, ['长春市', '吉林市'], 'none'],
+      [{ province: '吉林省', city: '通化市' }, ['吉林市'], 'none'],
+      [{ province: '北京市', district: '朝阳区' }, ['朝阳市', '沈阳市'], 'none'],
+      [{ province: '吉林省', city: '辽源市', district: '西安区' }, ['西安市', '沈阳市'], 'none'],
+      [{ province: '天津市', city: '天津市', district: '河北区' }, ['河北', '山东'], 'none'],
+      [{ province: '天津市', city: '天津市', district: '河北区' }, ['河北', '天津', '北京'], '天津'],
+      [{ province: '吉林', city: '通化' }, ['吉林市'], 'none'],
+      [{ province: '吉林省', city: '吉林市' }, ['吉林市第一中学'], 'none'],
+    ])('%j on %j is %s', (region, labels, want) => {
+      expect(levelsPick(region, ...labels)).toBe(want);
+    });
+
+    it.each([
+      [{ province: '吉林省', city: '通化市' }, ['吉林', '辽宁'], '吉林'],
+      [{ province: '吉林省', city: '通化市' }, ['吉林省', '辽宁省'], '吉林省'],
+      [{ province: '吉林', city: '吉林' }, ['吉林省', '吉林市'], '吉林市'],
+      [{ province: '吉林省', city: '吉林市', district: '船营' }, ['昌邑区', '船营区'], '船营区'],
+      [{ province: '北京', city: '北京' }, ['北京市', '上海市'], '北京市'],
+      [{ province: '广西壮族自治区', city: '南宁市' }, ['广西', '广东'], '广西'],
+      [{ province: '吉林省', city: '长春市' }, ['吉林省长春市'], '吉林省长春市'],
+      [{ province: '吉林省', city: '长春市' }, ['吉林/长春'], '吉林/长春'],
+    ])('%j on %j is %s', (region, labels, want) => {
+      expect(levelsPick(region, ...labels)).toBe(want);
+    });
+
+    it('never takes a disabled option or a placeholder', () => {
+      const asked = intent('basics.nativePlace', { province: '吉林省', city: '吉林市' }, control('select'));
+      if (asked?.kind !== 'choice') throw new Error('expected a choice');
+      const wider = asked.wider![0]!;
+      expect(wider.match([{ label: '吉林', disabled: true }, { label: '辽宁' }]).status).toBe('none');
+      expect(asked.match([{ label: '吉林市', disabled: true }, { label: '辽宁' }]).status).toBe('none');
+    });
+  });
+
   it('list: multi for a multiple select, first item otherwise', () => {
     const multi = intent('jobIntention.cities', ['深圳', '杭州'], control('select', { multiple: true }));
     expect(multi).toMatchObject({ kind: 'multi', display: '深圳、杭州' });

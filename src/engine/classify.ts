@@ -174,6 +174,7 @@ const ABOUT_THE_APPLICANT = new Set<SectionKey>(['basics', 'contact', 'jobIntent
 const ASKED_WITH_THE_NAME = new Set<FieldKey>(['education.degree', 'education.endDate', 'education.school', 'education.major']);
 
 const WHOSE_IS_UNSAID = /^联系人(?:信息)?$/;
+const BARE_PLACE = /^所在地点?$/;
 
 function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null): number {
   if (!section) return raw;
@@ -244,6 +245,8 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
   const candidates: ScoredCandidate[] = [];
   for (const [fieldKey, { miss, weight }] of parts) {
     const def = getFieldKeyDef(fieldKey)!;
+    // Under a project or an award the bare word is where that was, and the resume has no such place.
+    if (fieldKey === 'basics.currentLocation' && section && !def.sections.includes(section) && evidence.some((e) => BARE_PLACE.test(normalizeLabel(e.text)))) continue;
     const score = round3(sectionAdjust(def, Math.min(1, 1 - miss), section));
     if (score >= MIN_CANDIDATE) candidates.push({ fieldKey, confidence: Math.min(1, score), weight, score });
   }

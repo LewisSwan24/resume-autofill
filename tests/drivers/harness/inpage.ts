@@ -19,7 +19,7 @@ interface DateJson {
 
 export type IntentJson =
   | { kind: 'text'; text: string }
-  | { kind: 'choice'; display: string; query: string; options?: OptionSpec }
+  | { kind: 'choice'; display: string; query: string; options?: OptionSpec; wider?: string[] }
   | { kind: 'multi'; display: string; items: { query: string; options?: OptionSpec }[] }
   | { kind: 'date'; display: string; year: number; month: number; day?: number }
   | { kind: 'dateFrom'; display: string; start: DateJson }
@@ -86,6 +86,7 @@ export function buildIntent(json: IntentJson): FillIntent {
         display: json.display,
         query: json.query,
         match: exactLabelMatcher(json.options?.matchLabel ?? json.query),
+        ...(json.wider ? { wider: json.wider.map((q) => ({ query: q, match: exactLabelMatcher(q) })) } : {}),
       };
     case 'multi':
       return {

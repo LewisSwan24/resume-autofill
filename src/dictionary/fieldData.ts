@@ -108,7 +108,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Weight|Weight (kg)|Your weight|Body weight',
   ),
   'basics.nativePlace': s(
-    '籍贯|祖籍|原籍|出生地|籍贯所在地|出生地点|出生地(省市)',
+    '籍贯|祖籍|原籍|出生地|籍贯所在地|出生地点|出生地(省市)|家乡|老家',
     'Native place|Hometown|Place of birth|Birthplace|Country of birth|Place of origin|Town of birth',
   ),
   'basics.studentOrigin': s(
@@ -120,9 +120,9 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Household registration|Hukou|Hukou location|Registered residence|Household registration location|Hukou registration place',
   ),
   'basics.currentLocation': s(
-    '现居住地|现居地|居住地|当前所在地|目前所在地|现所在地|所在地|居住城市|现居城市|现居住城市',
+    '现居住地|现居地|居住地|当前所在地|目前所在地|现所在地|所在地|居住城市|现居城市|现居住城市|所在地点|当前所在地点|目前所在地点|现所在地点',
     'Location|Your location|Current location|Current city|Location (City)|Location City|Where are you based|Where are you located|Where are you currently located|Where are you currently based|Current residence|City of residence|Place of residence',
-    '期望|意向|工作地|学校|院校|公司|单位|preferred|desired|expected|school|company|employer|work',
+    '期望|意向|工作|学校|院校|公司|单位|preferred|desired|expected|school|company|employer|work',
   ),
   'basics.age': s(
     '年龄|岁数|周岁|实际年龄|您的年龄',

@@ -7,6 +7,7 @@ import ReactDOM from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
 import { Fab } from './Fab';
 import { keepAttached } from './keepAttached';
+import { keepClear } from './keepClear';
 import { syncUiLanguage } from './language';
 
 export default defineContentScript({
@@ -46,5 +47,6 @@ export default defineContentScript({
     });
     ui.mount();
     ctx.onInvalidated(keepAttached(ui.shadowHost, document));
+    ctx.onInvalidated(keepClear(ui.shadowHost));
   },
 });

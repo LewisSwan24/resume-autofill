@@ -218,6 +218,78 @@ test.describe('Feishu', () => {
     expect(await page.evaluate(() => (window as unknown as { opened?: number }).opened ?? 0)).toBe(0);
   });
 
+  const place = (query: string, ...wider: string[]) => ({ kind: 'choice', display: query, query, wider }) as const;
+  const degreeShown = () => feishuItem('degree').locator('.ud__select__selector__selectItem');
+  const opened = () => page.evaluate(() => (window as unknown as { opened?: number }).opened ?? 0);
+  const alreadyThere = (text: string) =>
+    feishuItem('degree').locator('.ud__select__selector__content').evaluate((content, t) => {
+      const chosen = document.createElement('div');
+      chosen.className = 'ud__select__selector__selectItem';
+      chosen.textContent = t;
+      content.prepend(chosen);
+    }, text);
+
+  test('a place already there at a wider level of the resume is left alone, with no list opened', async () => {
+    await mountFeishu(['吉林', '辽宁']);
+    await alreadyThere('吉林');
+    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    expect(r.outcome).toBe('filled');
+    await expect(degreeShown()).toHaveText('吉林');
+    expect(await opened()).toBe(0);
+  });
+
+  test('an empty box takes the narrowest level on the list', async () => {
+    await mountFeishu(['长春市', '吉林市', '吉林', '辽宁']);
+    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    expect(r.outcome).toBe('filled');
+    await expect(degreeShown()).toHaveText('吉林市');
+    await expect(page.locator('.ud__select__dropdown')).toHaveCount(0);
+  });
+
+  test('an empty search box walks up within the time a step has, and no words stay behind', async () => {
+    await mountFeishu(['吉林', '辽宁']);
+    // A real search list: nothing until something is typed, and only what fits, a moment later.
+    await feishuItem('degree').locator('input').evaluate((input: HTMLInputElement) => {
+      input.removeAttribute('readonly');
+      const typed: string[] = [];
+      (window as unknown as { typed: string[] }).typed = typed;
+      const sync = () => {
+        for (const row of document.querySelectorAll<HTMLElement>('.ud__select__dropdown .ud__select__list__item')) {
+          row.hidden = !input.value || !row.textContent!.includes(input.value);
+        }
+      };
+      new MutationObserver(sync).observe(document.body, { childList: true });
+      input.addEventListener('input', () => {
+        typed.push(input.value);
+        setTimeout(sync, 100);
+      });
+    });
+    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    expect(r.outcome).toBe('filled');
+    await expect(degreeShown()).toHaveText('吉林');
+    // Each level that found nothing took its words back out before the next one was typed.
+    const typed = await page.evaluate(() => (window as unknown as { typed: string[] }).typed);
+    // Typing arrives a letter at a time: keep where each word ended.
+    const words = typed.filter((v, i) => v === '' || !typed[i + 1]?.startsWith(v));
+    expect(words).toEqual(['船营区', '', '吉林市', '', '吉林']);
+  });
+
+  test('an empty box with no level on the list stays empty', async () => {
+    await mountFeishu(['辽宁']);
+    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    expect(r.outcome).toBe('no_option');
+    await expect(degreeShown()).toHaveCount(0);
+  });
+
+  test('another answer already there is kept and left to check, not swapped for a wider level', async () => {
+    await mountFeishu(['吉林', '辽宁']);
+    await alreadyThere('布里斯班');
+    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    expect(r.outcome).toBe('needs_review');
+    await expect(degreeShown()).toHaveText('布里斯班');
+    await expect(page.locator('.ud__select__dropdown')).toHaveCount(0);
+  });
+
   test('a span takes both ends, and they stay after leaving the box', async () => {
     await mountFeishu([]);
     const r = await execIntent(page, '起止时间', { kind: 'dateRange', display: '', start: month(2025, 2), end: month(2026, 12) }, { nth: 0 });
@@ -234,5 +306,95 @@ test.describe('Feishu', () => {
     expect(r.outcome).toBe('needs_review');
     await expect(spanBoxes().first()).toHaveValue('2026-07');
     await expect(spanBoxes().nth(1)).toHaveValue('');
+  });
+});
+
+// Moka's place panel as read off a live form: tabs for 省份, 城市 and 县区, a word for each place, and every click
+// written straight into the box. 确认 only closes it.
+const JILIN = {
+  北京市: { 北京市: ['东城区'] },
+  吉林: {
+    长春市: ['南关区'],
+    吉林市: ['昌邑区', '龙潭区', '船营区', '丰满区', '永吉县', '吉林高新技术产业开发区', '蛟河市'],
+    延边朝鲜族自治州: ['延吉市'],
+  },
+};
+
+async function mountPlace(): Promise<void> {
+  await mountMoka({});
+  await page.evaluate((tree) => {
+    const field = Array.from(document.querySelectorAll('[class^="apply-field-"]')).find((f) => f.textContent!.includes('籍贯'))!;
+    const owner = field.querySelector('[class*="sd-Dropdown-container"]')!;
+    const input = field.querySelector('input')!;
+    const close = () => owner.querySelector('[class*="sd-Dropdown-dropdown"]')?.remove();
+    document.addEventListener('mousedown', (e) => {
+      if (!owner.contains(e.target as Node)) close();
+    });
+    const tags = (names: string[]) => names.map((n) => `<span class="sd-Tag-container"><span class="sd-Tag-text-2nFJX">${n}</span></span>`).join('');
+    owner.querySelector('label')!.addEventListener('click', () => {
+      if (owner.querySelector('[class*="sd-Dropdown-dropdown"]')) return;
+      const panel = document.createElement('div');
+      panel.className = 'sd-Dropdown-dropdown-x';
+      const province = Object.keys(tree);
+      panel.innerHTML = `<div class="menu-wrapper-z"><div class="levels">${tags(['北京市'])}${tags(province)}</div><div class="confirm-q"><button type="button">确认</button></div></div>`;
+      const levels = panel.querySelector<HTMLElement>('.levels')!;
+      const picked: string[] = [];
+      panel.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if ((e.target as Element).closest('button')) return close();
+        const tag = (e.target as Element).closest('[class*="sd-Tag-text"]');
+        if (!tag) return;
+        const name = tag.textContent!;
+        picked.push(name);
+        input.value = picked.join(' ');
+        if (picked.length === 1) levels.innerHTML = tags(Object.keys((tree as Record<string, Record<string, string[]>>)[name]!));
+        else if (picked.length === 2) levels.innerHTML = tags((tree as Record<string, Record<string, string[]>>)[picked[0]!]![name]!);
+        else close();
+      });
+      owner.append(panel);
+    });
+  }, JILIN);
+}
+
+const cascade = (...path: string[]) => ({ kind: 'cascade', display: path.join(' '), path }) as const;
+const placeBox = () => mokaField('籍贯').locator('input');
+
+test.describe('Moka places', () => {
+  test('down to the city, with 省 and 市 written or not', async () => {
+    await mountPlace();
+    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市'));
+    expect(r.outcome).toBe('filled');
+    await expect(placeBox()).toHaveValue('吉林 吉林市');
+    await expect(page.locator('[class*="sd-Dropdown-dropdown"]')).toHaveCount(0);
+  });
+
+  test('down to a district on the list', async () => {
+    await mountPlace();
+    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市', '船营区'));
+    expect(r.outcome).toBe('filled');
+    await expect(placeBox()).toHaveValue('吉林 吉林市 船营区');
+  });
+
+  test('a district written without its 区 or 县 is still that district', async () => {
+    await mountPlace();
+    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市', '船营'));
+    expect(r.outcome).toBe('filled');
+    await expect(placeBox()).toHaveValue('吉林 吉林市 船营区');
+  });
+
+  test('a district that is not on the list stops at the city and leaves that to check', async () => {
+    await mountPlace();
+    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市', '高新区'));
+    expect(r.outcome).toBe('needs_review');
+    await expect(placeBox()).toHaveValue('吉林 吉林市');
+    await expect(page.locator('[class*="sd-Dropdown-dropdown"]')).toHaveCount(0);
+  });
+
+  test('a province that is not there picks nothing', async () => {
+    await mountPlace();
+    const r = await execIntent(page, '籍贯', cascade('昆士兰州', '布里斯班'));
+    expect(r.outcome).toBe('no_option');
+    await expect(placeBox()).toHaveValue('');
+    await expect(page.locator('[class*="sd-Dropdown-dropdown"]')).toHaveCount(0);
   });
 });

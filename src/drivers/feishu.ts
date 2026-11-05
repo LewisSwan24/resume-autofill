@@ -12,6 +12,8 @@ const OPTION = '.ud__select__list__item';
 const CHOSEN = '.ud__select__selector__selectItem';
 const OPENS_BY_ITSELF_MS = 500;
 const SEARCH_MS = 3000;
+const MIN_SEARCH_MS = 300;
+const TIDY_MS = 300;
 /** Above anything mere containment can reach. */
 const THE_VERY_THING = 0.9;
 
@@ -25,14 +27,32 @@ function readList(control: Control): string | null {
   return clean(inputOf(control.el)?.value) || null;
 }
 
+type Level = Pick<Extract<FillIntent, { kind: 'choice' }>, 'query' | 'match'>;
+
 async function fillList(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
   if (intent.kind !== 'choice') return failed(`a ${intent.kind} answer on a single list`, readList(control));
   const current = readList(control);
-  if (current) {
-    const same = intent.match([{ label: current }]);
-    // Only the thing itself: 浙江大学城市学院 merely contains 浙江大学.
-    if (same.status === 'matched' && same.confidence >= THE_VERY_THING) return { ok: true, observed: current };
+  const levels: Level[] = [intent, ...(intent.wider ?? [])];
+  // Only the thing itself: 浙江大学城市学院 merely contains 浙江大学.
+  const holds = (level: Level) => {
+    const same = level.match([{ label: current! }]);
+    return same.status === 'matched' && same.confidence >= THE_VERY_THING;
+  };
+  if (current && levels.some(holds)) return { ok: true, observed: current };
+  // Something else is there: only the answer itself may replace it, since a wider one would say less.
+  const tried = current ? [intent] : levels;
+  // The step's time has to reach the last level, and leave a moment to tidy up.
+  const searchMs = Math.min(SEARCH_MS, Math.max(MIN_SEARCH_MS, (ctx.timeoutMs - TIDY_MS) / tried.length - OPENS_BY_ITSELF_MS));
+  for (const level of tried) {
+    const result = await pickLevel(control, level, current, searchMs, ctx);
+    if (result.outcome !== 'no_option') return result;
   }
+  return current
+    ? failed('kept what the page already shows', current, 'needs_review')
+    : failed(`nothing on the list for ${intent.query}`, null, 'no_option');
+}
+
+async function pickLevel(control: Control, intent: Level, current: string | null, searchMs: number, ctx: DriverContext): Promise<FillResult> {
   const input = inputOf(control.el);
   const wasInBox = input?.value ?? '';
   const searches = !!input && !input.readOnly;
@@ -48,7 +68,7 @@ async function fillList(control: Control, intent: FillIntent, ctx: DriverContext
         const open = near();
         return open && visibleOptions(open, OPTION).some((o) => intent.match([o.info]).status === 'matched') ? open : null;
       },
-      { timeout: SEARCH_MS, signal: ctx.signal, root: ctx.doc },
+      { timeout: searchMs, signal: ctx.signal, root: ctx.doc },
     );
   }
   const restore = () => {

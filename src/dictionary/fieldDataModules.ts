@@ -26,7 +26,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Country of study|School country|Institution country|Country of institution|University country|Country where you studied|Country of education',
   ),
   'education.city': s(
-    '学校所在城市|学校所在地|院校所在地|院校所在城市|学校地点|就读城市|城市',
+    '学校所在城市|学校所在地|院校所在地|院校所在城市|学校地点|就读城市|城市|所在地|所在地点|学校所在地点|院校所在地点',
     'School city|Institution city|Institution location|School location|University location|City of institution|City of study|City|Location',
   ),
   'education.classYear': s(
@@ -113,7 +113,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Department|Team|Division|Business unit|Department/team|Function',
   ),
   'work.city': s(
-    '工作城市|工作地点|工作地|就职城市|公司所在地|公司所在城市|公司地点|实习城市|实习地点|城市',
+    '工作城市|工作地点|工作地|就职城市|公司所在地|公司所在城市|公司地点|实习城市|实习地点|城市|所在地|所在地点|公司所在地点',
     'Work location|Job location|Company location|Employer location|Location|Work city|Place of work|City',
   ),
   'work.period': s(

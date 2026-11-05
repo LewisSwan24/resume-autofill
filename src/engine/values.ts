@@ -1,6 +1,6 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
 import { formatByPattern, isDatePattern } from './dateFormat';
-import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, matchOption, namesOtherState, placeOptions, placeSpellings } from '../dictionary';
+import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOption, namesOtherState, placeOptions, placeSpellings } from '../dictionary';
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
 import type { GenderAnswer, Locale, Region, Resume } from '../schema';
 import { getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
@@ -356,6 +356,46 @@ function regionPath(region: Region): string[] {
   return parts;
 }
 
+type PlaceLevel = 'province' | 'city' | 'district';
+
+const PLACE_WORD = /(?:壮族|回族|维吾尔)?自治区$|特别行政区$|[省市区县]$/;
+/** What a place of each level may be called when the resume leaves the word off. */
+const WORD_OF_LEVEL: Record<PlaceLevel, RegExp> = {
+  province: /(?:自治区|特别行政区|省)$|^(?:北京|上海|天津|重庆)市$/,
+  city: /市$/,
+  district: /[区县市]$/,
+};
+
+/**
+ * 吉林省 and 吉林市 on a resume can both be written 吉林, and 船营 can be 船营区. But 吉林省 is not 吉林市, 朝阳区 is not
+ * 朝阳市, and a bare 河北 on a list is the province, not 天津's 河北区.
+ */
+function isSamePlace(name: string, label: string, level: PlaceLevel): boolean {
+  const n = name.trim().replace(/^中国/, '');
+  const l = label.trim().replace(/^中国/, '');
+  if (n === l) return n !== '';
+  const bare = n.replace(PLACE_WORD, '');
+  if (!bare || bare !== l.replace(PLACE_WORD, '')) return false;
+  if (l === bare) return level !== 'district';
+  return n === bare && WORD_OF_LEVEL[level].test(l);
+}
+
+/** On a list, the place itself comes first. A longer label has to end in it: 吉林市第一中学 is a school. */
+function matchPlaceName(name: string, level: PlaceLevel, region: Region, options: OptionInfo[]): OptionMatch {
+  const usable = options.flatMap((o, i) => (o.disabled || isPlaceholderOption(o) ? [] : [i]));
+  const only = (hits: number[], confidence: number): OptionMatch | null =>
+    hits.length === 1 ? { status: 'matched', index: hits[0]!, confidence } : null;
+  const lastPart = (label: string) => label.trim().split(/[/,，\s·-]+/).pop() ?? '';
+  const found =
+    only(usable.filter((i) => options[i]!.label.trim() === name.trim()), 0.95) ??
+    only(usable.filter((i) => isSamePlace(name, options[i]!.label, level)), 0.92) ??
+    (hasCjk(name) ? only(usable.filter((i) => isSamePlace(name, lastPart(options[i]!.label), level)), 0.85) : null);
+  if (found) return found;
+  const m = matchPlace(name, region, options);
+  if (m.status !== 'matched' || !hasCjk(name)) return m;
+  return options[m.index]!.label.trim().endsWith(name.trim()) ? m : { status: 'none' };
+}
+
 /**
  * A place from a search box. It must be named by the rest of the address: a search that finds only
  * "Brisbane CA, USA" has not found this Brisbane. Several left: narrow by country, then by state.
@@ -490,8 +530,18 @@ export function toIntent(
       if (path.length === 0) return null;
       if (kind === 'cascader') return { kind: 'cascade', display: regionText(region, locale), path };
       if (hasPickList(control)) {
-        const name = path[path.length - 1]!;
-        return { kind: 'choice', display: name, query: name, match: (options) => matchPlace(name, region, options) };
+        const named: [string | undefined, PlaceLevel][] = [
+          [region.district, 'district'],
+          [region.city, 'city'],
+          [region.province, 'province'],
+        ];
+        const levels = named.flatMap(([name, level]) => (name?.trim() ? [{ query: name.trim(), level }] : []));
+        const [first, ...up] = levels.length > 0 ? levels : [{ query: path[0]!, level: 'province' as const }];
+        const asked = ({ query, level }: { query: string; level: PlaceLevel }) => ({
+          query,
+          match: (options: OptionInfo[]) => matchPlaceName(query, level, region, options),
+        });
+        return { kind: 'choice', display: first!.query, ...asked(first!), ...(up.length > 0 ? { wider: up.map(asked) } : {}) };
       }
       return { kind: 'text', text: regionText(region, locale) };
     }

@@ -32,7 +32,7 @@ export function isExcluded(key: FieldKey, label: string): boolean {
 }
 
 /** A word that names the field only when it stands alone: "Office location" is another question. */
-const TOO_GENERAL_TO_CONTAIN = new Set(['location', 'your location']);
+const TOO_GENERAL_TO_CONTAIN = new Set(['location', 'your location', '所在地', '所在地点']);
 
 /** Synonyms this short are only trustworthy as exact (normalized) matches. */
 export function isExactOnlySynonym(syn: string): boolean {

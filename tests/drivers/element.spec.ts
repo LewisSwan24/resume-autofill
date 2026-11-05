@@ -241,6 +241,29 @@ test.describe('Element Plus drivers on the Element fixture', () => {
     });
   });
 
+  test.describe('date range', () => {
+    const span: IntentJson = {
+      kind: 'dateRange',
+      display: '2022-03 ~ 2022-06',
+      start: { display: '2022-03', year: 2022, month: 3 },
+      end: { display: '2022-06', year: 2022, month: 6 },
+    };
+
+    test('types both ends, and reads both back', async () => {
+      const report = await execIntent(page, '起止时间', span);
+      expect(report.outcome, JSON.stringify(report)).toBe('filled');
+      expect(report.observed).toBe('2022-03 ~ 2022-06');
+      expect((await fixtureState(page))['project[0].period']).toBe('2022-03 ~ 2022-06');
+      await expect(page.locator('.el-picker__popper:visible')).toHaveCount(0);
+    });
+
+    test('reports a span it will not take, and leaves nothing open', async () => {
+      const report = await execIntent(page, '起止时间', { ...span, start: { display: 'x', year: 2022, month: 13 } });
+      expect(report.outcome).not.toBe('filled');
+      await expect(page.locator('.el-picker__popper:visible')).toHaveCount(0);
+    });
+  });
+
   test.describe('el-radio-group / el-checkbox (native driver)', () => {
     test('性别 radio', async () => {
       const report = await execIntent(page, '性别', choice('女'));

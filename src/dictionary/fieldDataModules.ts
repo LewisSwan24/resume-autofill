@@ -3,6 +3,8 @@
 // ("姓名", "Name", "开始时间") may appear under several modules; the section context chooses between them.
 import { s, type FieldSynonym } from './fieldData';
 
+const SPAN_ZH = '起止时间|起止日期|起止年月|时间段';
+const NOT_A_SPAN = '参加|首次|开始|结束|截止|要求|到岗|入职|离职|毕业|入学';
 const START_ZH = '开始时间|开始日期|起始时间|起始日期|开始年月';
 const START_EN = 'Start date|Start|From|From date|Date started|Start month and year';
 const END_ZH = '结束时间|结束日期|终止时间|截止时间|截止日期|结束年月';
@@ -79,7 +81,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Relevant coursework|Relevant courses|Coursework|Courses|Key subjects|Major courses|Core courses|Subjects studied|Main subjects',
   ),
   'education.thesis': s(
-    '毕业论文|论文题目|毕业设计|论文|毕业论文题目|论文名称|研究课题|研究方向',
+    '毕业论文|论文题目|毕业设计|论文|毕业论文题目|论文名称|研究课题',
     'Thesis|Thesis title|Dissertation|Dissertation title|Research topic|Research title|Capstone|Final year project|Honours thesis|Research area',
   ),
   'education.honors': s(
@@ -95,7 +97,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'work.company': s(
     '公司|公司名称|单位|单位名称|工作单位|就职单位|任职公司|所在公司|实习单位|实习公司|雇主|用人单位|企业名称|公司全称|机构|机构名称',
     'Company|Company name|Current company|Employer|Employer name|Organisation|Organization|Organisation name|Name of organisation|Business name|Workplace|Previous employer|Current employer|Most recent employer',
-    '地址|电话|邮箱|行业|规模|城市|网站|性质|address|phone|email|industry|size|city|website|location|type',
+    '成员|家属|亲属|配偶|地址|电话|邮箱|行业|规模|城市|网站|性质|address|phone|email|industry|size|city|website|location|type',
   ),
   'work.position': s(
     '职位|职位名称|岗位|岗位名称|职务|担任职务|任职岗位|工作职位|工作岗位|实习岗位|实习职位',
@@ -109,6 +111,26 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'work.city': s(
     '工作城市|工作地点|工作地|就职城市|公司所在地|公司所在城市|公司地点|实习城市|实习地点|城市',
     'Work location|Job location|Company location|Employer location|Location|Work city|Place of work|City',
+  ),
+  'work.period': s(
+    `${SPAN_ZH}|在职时间|工作时间|工作起止时间|任职时间|任职起止时间|实习时间|实习起止时间`,
+    'Dates of employment|Employment dates|Employment period|Period of employment|Dates employed',
+    NOT_A_SPAN,
+  ),
+  'education.period': s(
+    `${SPAN_ZH}|在校时间|就读时间|在读时间|学习时间|学习起止时间|教育时间`,
+    'Dates of attendance|Dates attended|Study period|Period of study',
+    NOT_A_SPAN,
+  ),
+  'projects.period': s(
+    `${SPAN_ZH}|项目时间|项目周期|项目起止时间`,
+    'Project dates|Project period',
+    NOT_A_SPAN,
+  ),
+  'campus.period': s(
+    `${SPAN_ZH}|任职时间|担任时间|在任时间|活动时间`,
+    'Dates of involvement|Period of involvement',
+    NOT_A_SPAN,
   ),
   'work.startDate': s(
     `${START_ZH}|入职时间|入职日期|开始工作时间|工作开始时间|实习开始时间`,
@@ -163,7 +185,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Organisation|Organization|Club|Society|Club/society|Student organisation|Student club|Activity|Activity name|Extracurricular activity|Name of organisation',
   ),
   'campus.role': s(
-    '担任职务|担任角色|职务|职位|角色|社团职务|学生干部职务|活动角色',
+    '校内职务|学生职务|担任职务|担任角色|职务|职位|角色|社团职务|学生干部职务|活动角色',
     'Role|Position|Position held|Title|Role in organisation|Role in activity',
   ),
   'campus.startDate': s(
@@ -191,6 +213,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'awards.date': s(
     '获奖时间|获奖日期|获奖年月|颁发时间|颁奖时间|授予时间|时间',
     'Award date|Date awarded|Date received|Date of award|Year awarded|Year received|Date',
+    '起止|在职|在校|在读|入职|离职',
   ),
   'awards.level': s(
     '奖项级别|获奖级别|奖励级别|奖项等级|荣誉级别|级别|获奖等级|奖励等级|荣誉等级',
@@ -265,7 +288,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '状态|status|politic',
   ),
   'family.employer': s(
-    '工作单位|单位|所在单位|单位名称|工作单位名称|就职单位',
+    '成员工作单位|工作单位|单位|所在单位|单位名称|工作单位名称|就职单位',
     'Employer|Workplace|Company|Organisation|Employer name|Place of work',
   ),
   'family.position': s(

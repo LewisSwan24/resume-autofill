@@ -10,18 +10,24 @@ const FORM_CONTROLS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 /** A page or a form can gain an unrelated field at any time: too wide to say anything about one box. */
 const TOO_WIDE = new Set(['BODY', 'HTML']);
 
-/** firstName, Email, EMAIL, address1, ctl00, txtEmail. Letters that only look like one, as in nTowvSy0v2, are not. */
-const WORD = /^(?:[a-z]{2,}|[A-Z]{2,}|[A-Z][a-z]+)(?:[A-Z][a-z]+)*\d{0,2}$/;
+/** firstName, fName, Email, EMAIL, address1, ctl00, userID, q1. Letters that only look like one, as in nTowvSy0v2, are not. */
+const WORD = /^(?:[a-z]+|[A-Z]+|[A-Z][a-z]+)(?:[A-Z][a-z]+)*(?:URL|URI|ID|PIN|DOB)?\d{0,3}$/;
+/** The place of a field among others: address_1, education[0][school]. A longer number is somebody's id. */
+const PLACE = /^\d{1,3}$/;
+/** Names a library numbers as it goes: they say nothing, and the number changes from one render to the next. */
+const GENERATED = /^(?::[a-z0-9]+:|react-select-\d+-.*|rc[-_]select[-_]\d+|el-id-\d+-\d+|(?:field|input)[-_]?\d+)$/i;
 /**
- * The words of a name, which is all of it that lasts: a generated name means nothing from one render to the next,
- * and the numbers in react-select-3-input or the id in cards[e78797e4][field0] are made up too.
+ * The words of a name and the places in it, which are all of it that lasts: a generated name means nothing from one
+ * render to the next, and the id in cards[e78797e4][field0] is made up too.
  */
 const nameWords = (name: string): string =>
-  name
-    .split(/[^A-Za-z0-9]+/)
-    .filter((part) => WORD.test(part))
-    .join(' ')
-    .toLowerCase();
+  GENERATED.test(name)
+    ? ''
+    : name
+        .split(/[^A-Za-z0-9]+/)
+        .filter((part) => WORD.test(part) || PLACE.test(part))
+        .join(' ')
+        .toLowerCase();
 
 function labelTextOf(el: HTMLElement): string {
   const labels = (el as HTMLInputElement).labels;

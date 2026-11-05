@@ -31,7 +31,7 @@ function put(root: Bag, path: string, value: string): void {
 function acceptable(fields: DraftField[], base: Bag): DraftField[] {
   return fields.filter((f) => {
     const bag: Bag = structuredClone(base);
-    put(bag, f.path, f.value);
+    put(bag, f.path, f.value.trim());
     const dense = withoutHoles(bag);
     return ResumeSchema.safeParse(dense).success;
   });

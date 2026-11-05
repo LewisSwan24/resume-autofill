@@ -131,7 +131,7 @@ export function typeFactor(def: FieldKeyDef, control: Control): number {
   if (kind === 'file') return t === 'file' ? 1 : TYPE_MISMATCH_FACTOR;
   if (t === 'file') return TYPE_MISMATCH_FACTOR;
   if (isSingleCheckbox(control)) return t === 'bool' ? 1 : TYPE_MISMATCH_FACTOR;
-  if (kind === 'date') return t === 'date' ? 1 : TYPE_MISMATCH_FACTOR;
+  if (kind === 'date') return t === 'date' || t === 'period' ? 1 : TYPE_MISMATCH_FACTOR;
   const text = kind === 'text' || kind === 'textarea' || kind === 'richtext';
   switch (t) {
     case 'bool':
@@ -140,6 +140,8 @@ export function typeFactor(def: FieldKeyDef, control: Control): number {
       return kind === 'textarea' || kind === 'richtext' || kind === 'text' ? 1 : TYPE_MISMATCH_FACTOR;
     case 'date':
       return kind === 'text' ? 1 : TYPE_MISMATCH_FACTOR;
+    case 'period':
+      return text ? 1 : TYPE_MISMATCH_FACTOR;
     default:
       return 1;
   }
@@ -165,6 +167,9 @@ export interface FieldScores {
 
 /** A question that names its country and only that: clear enough to fill, on a list with the answers on it. */
 const ASKED_COUNTRY_CONFIDENCE = 0.85;
+const ABOUT_SOMEONE_ELSE = new Set<SectionKey>(['referees', 'family', 'emergencyContact']);
+/** Where a question about a place is about where the applicant is, not a job, a school or a project. */
+const ABOUT_THE_APPLICANT = new Set<SectionKey>(['basics', 'contact', 'jobIntention', 'workRights', 'diversity', 'selfIntro', 'other']);
 
 function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null): number {
   if (!section) return raw;
@@ -173,17 +178,37 @@ function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null
     return raw + IN_SECTION_BONUS + (def.sections[0] === section ? PRIMARY_SECTION_BONUS : 0);
   }
   const module = def.key.split('.')[0];
+  // "联系方式" under a referee is how to reach the referee, whatever else it could mean.
+  if (ABOUT_SOMEONE_ELSE.has(section)) return raw * OUT_OF_SECTION_FACTOR;
   return raw * (module === 'basics' || module === 'contact' ? GLOBAL_MODULE_FACTOR : OUT_OF_SECTION_FACTOR);
 }
 
 /** Candidates for one control within `section` (null = unknown section: no bonus / penalty). */
+const RANGE_CONFIDENCE = 0.9;
+
+/**
+ * A range picker holds a span and nothing else, so its part of the file says which one, whatever its label calls it.
+ * With no part of the file to go by, only a label about a span or one of its ends can say.
+ */
+function rangeCandidates(candidates: ScoredCandidate[], section: SectionKey | null): ScoredCandidate[] {
+  const own = section ? FIELD_KEYS.find((d) => d.type === 'period' && d.sections.includes(section)) : undefined;
+  if (own) return [{ fieldKey: own.key, confidence: RANGE_CONFIDENCE, weight: 1, score: RANGE_CONFIDENCE }];
+  if (section) return [];
+  const spans = new Map<FieldKey, ScoredCandidate>();
+  for (const c of candidates) {
+    const key = c.fieldKey.replace(/\.(?:startDate|endDate)$/, '.period');
+    if (getFieldKeyDef(key)?.type === 'period' && !spans.has(key)) spans.set(key, { ...c, fieldKey: key, confidence: Math.min(c.confidence, AMBIGUOUS_CAP) });
+  }
+  return [...spans.values()];
+}
+
 export function scoreField(ctx: FieldContext, section: SectionKey | null): FieldScores {
   if (ctx.evidence.some((e) => e.source === 'fine-print' || isNeverFill(e.text))) return { neverFill: true, candidates: [] };
   const el = ctx.control.el;
   if (namesSpareAddressLine(el.getAttribute('name')) || namesSpareAddressLine(el.id)) return { neverFill: true, candidates: [] };
   if (ctx.control.kind === 'file' && ctx.evidence.some((e) => isResumeParser(e.text))) return { neverFill: true, candidates: [] };
   // Worded differently every time, and the name of the country is the point. The plan works out the answer.
-  if (ctx.control.kind !== 'text' && ctx.control.kind !== 'textarea' && ctx.evidence.some((e) => countryAskedAbout(e.text))) {
+  if ((ctx.control.kind === 'select' || ctx.control.kind === 'radio') && (!section || ABOUT_THE_APPLICANT.has(section)) && countryAskedAbout(ctx.evidence[0]?.text ?? '')) {
     return { neverFill: false, candidates: [{ fieldKey: 'contact.inNamedCountry', confidence: ASKED_COUNTRY_CONFIDENCE, weight: 1, score: ASKED_COUNTRY_CONFIDENCE }] };
   }
 
@@ -216,6 +241,11 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
     if (score >= MIN_CANDIDATE) candidates.push({ fieldKey, confidence: Math.min(1, score), weight, score });
   }
   candidates.sort((a, b) => b.score - a.score || b.weight - a.weight);
+  if (ctx.control.dateRange) return { neverFill: false, candidates: rangeCandidates(candidates, section) };
+  // A span with no part of the file around it does not say whose.
+  if (!section) {
+    for (const c of candidates) if (getFieldKeyDef(c.fieldKey)?.type === 'period') c.confidence = Math.min(c.confidence, AMBIGUOUS_CAP);
+  }
 
   // Several keys tie for the top: the label does not say which one it is.
   const top = candidates[0];

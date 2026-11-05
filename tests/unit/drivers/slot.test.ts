@@ -25,6 +25,13 @@ describe('a box that took over', () => {
     ['FIRST_NAME', 'LAST_NAME'],
     ['URL', 'DOB'],
     ['ctl00$txtEmail', 'ctl00$txtPhone'],
+    ['fName', 'lName'],
+    ['f_name', 'l_name'],
+    ['linkedinURL', 'portfolioURL'],
+    ['userID', 'userPIN'],
+    ['address_1', 'address_2'],
+    ['education[0][school]', 'education[1][school]'],
+    ['q1', 'q2'],
   ])('is another field when %s became %s', (a, b) => {
     expect(swap(`<input name="${a}">`, `<input name="${b}">`)).toBeNull();
   });
@@ -38,6 +45,10 @@ describe('a box that took over', () => {
     ['rnAbnpJH60', '6VXqEaLxIB'],
     ['cards[e78797e4][field0]', 'cards[0e361e70][field0]'],
     ['firstName', 'firstName'],
+    [':ra:', ':rb:'],
+    ['rc_select_3', 'rc_select_12'],
+    ['el-id-1024-23', 'el-id-1024-31'],
+    ['input_7', 'input_8'],
   ])('is the same field when %s became %s', (a, b) => {
     expect(swap(`<input name="${a}">`, `<input name="${b}">`)?.getAttribute('name')).toBe(b);
   });

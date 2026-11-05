@@ -8,7 +8,7 @@
 import type { Control } from '../../engine/types';
 import type { Driver } from '../types';
 import { fillCascader, readCascader } from './cascader';
-import { fillDate } from './date';
+import { fillDate, readRange } from './date';
 import { fillSelect, readSelect } from './select';
 import { failed, squash } from './shared';
 import { fillUpload, readUpload } from './upload';
@@ -38,6 +38,7 @@ function make(
 }
 
 const readDate = (root: Element): string | null =>
+  root.classList.contains('el-range-editor') ? readRange(root as HTMLElement) :
   squash(root.querySelector<HTMLInputElement>('input')?.value) || null;
 
 export const elementDrivers: Driver[] = [

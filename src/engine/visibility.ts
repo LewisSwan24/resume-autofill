@@ -42,10 +42,12 @@ export function isVisible(el: Element): boolean {
 
 const FAR_AWAY_PX = -500;
 
+const isMovedOff = (style: CSSStyleDeclaration): boolean =>
+  (style.position === 'absolute' || style.position === 'fixed') && (Number.parseFloat(style.left) <= FAR_AWAY_PX || Number.parseFloat(style.top) <= FAR_AWAY_PX);
+
 function isPutAway(style: CSSStyleDeclaration): boolean {
-  if (style.opacity !== '' && Number(style.opacity) === 0) return true;
+  if (isMovedOff(style)) return true;
   if (style.position === 'absolute' || style.position === 'fixed') {
-    if (Number.parseFloat(style.left) <= FAR_AWAY_PX || Number.parseFloat(style.top) <= FAR_AWAY_PX) return true;
     if (/^rect\(0(?:px)?,? 0(?:px)?,? 0(?:px)?,? 0(?:px)?\)$/.test(style.clip)) return true;
   }
   if (/^inset\((?:50|100)%\)$/.test(style.clipPath)) return true;
@@ -53,6 +55,27 @@ function isPutAway(style: CSSStyleDeclaration): boolean {
     if (Number.parseFloat(style.height) === 0 || Number.parseFloat(style.width) === 0) return true;
   }
   return false;
+}
+
+/** Moved off the page, by this element or one around it. Anything can be behind a widget, but not this far away. */
+export function isFarAway(el: Element): boolean {
+  const view = el.ownerDocument.defaultView;
+  if (!view) return false;
+  for (let node: Element | null = el; node; node = parentOf(node)) {
+    if (isMovedOff(view.getComputedStyle(node))) return true;
+  }
+  return false;
+}
+
+/** See-through is a trap, unless it is on its way to showing a whole form: a real fade, around more than a box or two. */
+const MAX_BOXES_IN_A_TRAP = 2;
+const FILLABLE_BOXES = 'input:not([type=hidden], [type=submit], [type=reset], [type=button], [type=image]), textarea, select';
+const isFading = (style: CSSStyleDeclaration): boolean =>
+  Number.parseFloat(style.transitionDuration) > 0 || (!!style.animationName && style.animationName !== 'none');
+function isSeeThroughTrap(node: Element, style: CSSStyleDeclaration): boolean {
+  if (style.opacity === '' || Number(style.opacity) !== 0) return false;
+  if (!isFading(style)) return true;
+  return node.querySelectorAll(FILLABLE_BOXES).length + (node.matches(FILLABLE_BOXES) ? 1 : 0) <= MAX_BOXES_IN_A_TRAP;
 }
 
 /**
@@ -66,7 +89,8 @@ export function isOutOfSight(el: Element): boolean {
   const own = view.getComputedStyle(el);
   if (Number.parseFloat(own.height) === 0 || Number.parseFloat(own.width) === 0) return true;
   for (let node: Element | null = el; node; node = parentOf(node)) {
-    if (isPutAway(view.getComputedStyle(node))) return true;
+    const style = view.getComputedStyle(node);
+    if (isPutAway(style) || isSeeThroughTrap(node, style)) return true;
   }
   if (!hasLayout(el)) return false;
   const box = el.getBoundingClientRect();

@@ -29,7 +29,7 @@ const OTHER_PLACE = '籍贯|户口|户籍|生源|出生|学校|院校|公司|单
 export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   // ------------------------------------------------------------ basics
   'basics.fullName': s(
-    '姓名|全名|真实姓名|中文姓名|姓名全称|您的姓名|申请人姓名|应聘者姓名|求职者姓名|本人姓名',
+    '姓名|全名|真实姓名|中文姓名|姓名中文|姓名全称|您的姓名|申请人姓名|应聘者姓名|求职者姓名|本人姓名',
     'Full name|Name|Your name|Your full name|Legal name|Full legal name|Applicant name|Candidate name|Name as per ID',
     `姓氏|英文|昵称|名字拼音|课程|first|last|middle|given|family|surname|preferred|nick|english|${NOT_PERSON}`,
   ),
@@ -46,6 +46,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'basics.preferredName': s(
     '常用名|昵称|称呼|希望的称呼|惯用名',
     'Preferred name|Preferred first name|Nickname|Known as|What should we call you|Preferred name (if different)',
+    '曾用',
   ),
   'basics.englishName': s(
     '英文名|英文姓名|英文名字|拼音姓名|姓名拼音|拼音',
@@ -135,12 +136,12 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'contact.phoneCountryCode': s(
     '国家区号|区号|国家代码|手机区号|国际区号|国家/地区代码|电话区号|国家码',
     'Country code|Phone country code|Territory phone code|Dialing code|Dialling code|Calling code|Country calling code|Mobile country code|International dialing code',
-    '邮编|邮政|post|zip',
+    '邮编|邮政|邮递|post|zip',
   ),
   'contact.phone': s(
-    '手机|手机号|手机号码|联系电话|电话|联系手机|移动电话|电话号码|常用电话|联系电话(手机)|本人手机',
+    '联系方式|手机|手机号|手机号码|联系电话|电话|联系手机|移动电话|电话号码|常用电话|联系电话(手机)|本人手机',
     'Phone|Phone number|Mobile|Mobile number|Mobile phone|Contact number|Telephone|Cell phone|Contact phone|Mobile/phone',
-    '紧急|应急|家庭|推荐人|证明人|区号|验证|emergency|referee|reference|country code|verif|code|family|next of kin',
+    '备用|紧急|应急|家庭|推荐人|证明人|区号|验证|emergency|referee|reference|country code|verif|code|family|next of kin',
   ),
   'contact.phoneFull': s(
     '手机号(含区号)|手机号含区号|国际电话|电话(含国家代码)|电话含国家代码|含区号手机号|带区号手机号',
@@ -181,7 +182,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'email|邮箱|邮件|company|公司|单位|work',
   ),
   'contact.postcode': s(
-    '邮编|邮政编码|邮政编号|邮码',
+    '邮编|邮政编码|邮政编号|邮码|邮递区号',
     'Postcode|Post code|Postal code|ZIP|ZIP code|Zip/Postal code|ZIP/Postcode',
   ),
   'contact.addressFull': s(
@@ -267,9 +268,9 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Salary period|Pay period|Salary frequency|Pay frequency|Salary basis|Salary type|Rate type',
   ),
   'jobIntention.availableFrom': s(
-    '到岗时间|最快到岗时间|可到岗时间|期望到岗时间|可入职时间|预计入职时间|最早入职时间|期望入职时间|最早到岗日期',
+    '可实习时间|到岗时间|最快到岗时间|可到岗时间|期望到岗时间|可入职时间|预计入职时间|最早入职时间|期望入职时间|最早到岗日期',
     'Earliest start date|Available from|Availability date|Available start date|Date available|When can you start|Available to start|Earliest availability|Commencement date|Preferred start date|Availability',
-    '毕业|学校|graduat|school|education',
+    '毕业|学校|每周|每月|每天|天数|时长|多久|graduat|school|education|per week|hours',
   ),
   'jobIntention.noticePeriod': s(
     '通知期|离职通知期|离职交接期|到岗通知期|需提前通知时间|提前通知期|离职通知时间',

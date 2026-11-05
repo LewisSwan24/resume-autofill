@@ -1,7 +1,7 @@
 // Field-label dictionary: synonyms per FieldKey, exclusion words, and the never-auto-fill list.
 import { MODULE_FIELD_SYNONYMS } from './fieldDataModules';
 import { PERSONAL_FIELD_SYNONYMS, type FieldSynonym } from './fieldData';
-import { containsPhrase, hasCjk, normalizeLabel } from './normalize';
+import { containsPhrase, hasCjk, normalizeLabel, toSimplified } from './normalize';
 import type { FieldKey } from '../schema/fieldKeys';
 
 export type { FieldSynonym };
@@ -43,9 +43,9 @@ export function isExactOnlySynonym(syn: string): boolean {
 
 /** Labels of fields that must never be auto-filled. */
 export const NEVER_FILL: { zh: string[]; en: string[] } = {
-  zh: ['验证码', '短信验证码', '图形验证码', '密码', '登录密码', '确认密码', '同意', '声明', '承诺书', '我已阅读', '隐私政策', '隐私声明', '用户协议'],
+  zh: ['请勿填写', '不要填写', '请留空', '验证码', '短信验证码', '图形验证码', '密码', '登录密码', '确认密码', '同意', '声明', '承诺书', '我已阅读', '隐私政策', '隐私声明', '用户协议'],
   en: [
-    'captcha', 'verification code', 'security code', 'sms code', 'one-time code', 'otp',
+    'leave this blank', 'leave blank', 'leave this empty', 'leave this field blank', 'leave this field empty', 'if you are human', 'if you are a human', 'captcha', 'verification code', 'security code', 'sms code', 'one-time code', 'otp',
     'password', 'consent', 'agree', 'i agree', 'privacy policy', 'terms and conditions', 'terms of use',
     'terms & conditions', 'i accept', 'i declare', 'declaration', 'address line 2', 'address line two', 'address line 3', 'address line three', 'second address line', 'address 2', 'address 3',
   ],
@@ -90,7 +90,7 @@ export function namesSpareAddressLine(name: string | null | undefined): boolean 
 
 /** True when the label looks like a captcha / password / consent / declaration control. */
 const ASKS_FOR_CONSENT =
-  /\bconsent|\b(?:i|you|we)\s+(?:hereby\s+)?(?:agree|accept|declare|acknowledge|authori[sz]e|certify)\b|\bdo you (?:agree|accept)\b|\bagree (?:to|that|with)\b|\bterms (?:and|&) conditions\b|\bby (?:choosing|selecting|ticking|checking|submitting)\b|同意|授权|承诺|声明/i;
+  /\bconsent|\bhereby\b|\b(?:i|you|we)\s+(?:have\s+)?(?:agree|accept|declare|acknowledge|authori[sz]e|certify|confirm|attest|understand|warrant|read|give|grant|allow|permit)\b|\bdo you (?:agree|accept)\b|\bagree (?:to|that|with)\b|\bterms (?:and|&) conditions\b|\bby (?:choosing|selecting|ticking|checking|submitting|applying|continuing|proceeding|clicking|signing)\b|同意|授权|承诺|声明|(?:本人|我)确认|本人保证|已阅读|知悉/i;
 
 /**
  * Wording above a question that asks for consent, as a sentence and not just by naming a policy or an agreement.
@@ -98,7 +98,7 @@ const ASKS_FOR_CONSENT =
  * asks you to agree do not make its answers any less of a consent.
  */
 export function asksForConsent(passage: string): boolean {
-  return ASKS_FOR_CONSENT.test(passage);
+  return ASKS_FOR_CONSENT.test(toSimplified(passage));
 }
 
 export function isNeverFill(label: string): boolean {

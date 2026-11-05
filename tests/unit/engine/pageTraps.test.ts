@@ -624,3 +624,45 @@ describe('words nobody can read do not make a box a newsletter sign-up', () => {
     expect(found('<form><p>Subscribe to our newsletter</p><label for="a">Email</label><input id="a"><button>Go</button></form>')).not.toContain('a');
   });
 });
+
+describe('every way of declaring something stops the answer below it', () => {
+  const answers = '<div><input id="y" type="radio"><label for="y"><div>Yes</div></label></div><div><input id="n" type="radio"><label for="n"><div>No</div></label></div>';
+  const steps = (passage: string): unknown[] => {
+    document.body.innerHTML = `<form><div>${passage}</div><div>Do you need visa sponsorship?</div><div>${answers}</div></form>`;
+    const { contexts, classifications } = scanDocument(document);
+    const resume = createSampleProfile().resumes.find((x) => x.id === 'sample-en')!;
+    const plan = planFill(contexts, classifications, resume, {});
+    return [...plan.steps, ...plan.reports.filter((x) => x.outcome === 'needs_review')];
+  };
+
+  it.each([
+    'I confirm that the information given is true.',
+    'I attest that the above is correct.',
+    'I understand that false answers end my application.',
+    'I declare that the above is correct.',
+    'I certify that the above is correct.',
+    'I acknowledge the checks described here.',
+    'I have read the notice about checks.',
+    'The applicant hereby states that the above is correct.',
+    'By applying you allow these checks.',
+    'By continuing you allow these checks.',
+    '本人确认以上信息真实有效。',
+    '本人保证以上内容属实。',
+    '本人確認以上資料屬實。',
+    '本人保證以上內容屬實。',
+    '我已阅读并知悉以下内容。',
+    '我已閱讀以下內容。',
+    '声明：以上内容属实。',
+    '聲明：以上內容屬實。',
+    '承诺以上内容属实。',
+    '承諾以上內容屬實。',
+    '同意公司进行背景调查。',
+    '授權公司進行背景調查。',
+  ])('%s', (passage) => {
+    expect(steps(passage)).toEqual([]);
+  });
+
+  it('answers the question when the words above it declare nothing', () => {
+    expect(steps('Please tell us about your work rights.').length).toBeGreaterThan(0);
+  });
+});

@@ -13,7 +13,7 @@ export type SectionKey =
   | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills' | 'family'
   | 'emergencyContact' | 'referees' | 'workRights' | 'diversity' | 'selfIntro'
   | 'attachments' | 'other';
-export type ValueType = 'text' | 'longtext' | 'date' | 'enum' | 'bool' | 'region' | 'file' | 'number' | 'list';
+export type ValueType = 'text' | 'longtext' | 'date' | 'enum' | 'bool' | 'region' | 'file' | 'number' | 'list' | 'period';
 export interface FieldKeyDef {
   key: FieldKey;
   type: ValueType;
@@ -129,6 +129,12 @@ export const FIELD_KEYS: FieldKeyDef[] = [
     organization: 'text', role: 'text', startDate: 'date', endDate: 'date', current: yesNo(),
     description: 'longtext',
   }),
+
+  // A span of dates in one field, worked out from the two ends.
+  def('education.period', 'period', ['education'], { derived: true }),
+  def('work.period', 'period', ['work', 'internship'], { derived: true }),
+  def('projects.period', 'period', ['projects'], { derived: true }),
+  def('campus.period', 'period', ['campus'], { derived: true }),
 
   ...module('awards', ['awards'], {
     name: 'text', date: 'date', level: ['enum', 'awardLevel'], issuer: 'text', description: 'longtext',

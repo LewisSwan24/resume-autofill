@@ -11,13 +11,14 @@ import {
   LIBRARY_OVERLAY_SELECTOR,
   LIBRARY_ROOT_SELECTOR,
   detectDateGranularity,
+  isDateRangeRoot,
   isAriaMultiple,
   isUnsupportedLibraryRoot,
   matchLibraryWidget,
   type LibraryWidget,
 } from '../drivers/libraries';
 import type { Control, OptionInfo } from './types';
-import { isInputVisible, isOutOfSight, isVisible } from './visibility';
+import { isInputVisible, isFarAway, isOutOfSight, isVisible } from './visibility';
 
 export interface DiscoverOptions {
   /** Id allocator, so a caller can keep ids stable across rescans. Called in document order. */
@@ -123,6 +124,7 @@ function buildWidgetDraft(root: HTMLElement, widget: LibraryWidget): Draft {
     }
   } else if (widget.kind === 'date') {
     draft.dateGranularity = detectDateGranularity(root, widget);
+    if (isDateRangeRoot(root)) draft.dateRange = true;
   } else if (widget.kind === 'radio' || widget.kind === 'checkbox') {
     const inputs = Array.from(root.querySelectorAll<HTMLInputElement>(`input[type=${widget.kind}]`));
     draft.options = inputOptions(inputs);
@@ -154,7 +156,9 @@ function isHiddenFromReaders(el: Element): boolean {
 
 /** More boxes than this and it is no sign-up strip, whatever else it offers along the way. */
 const MAX_ASIDE_BOXES = 2;
-const ASIDE_WORDS = /newsletter|subscri|job alerts?|talent (?:community|network|pool)|stay in touch|mailing list|订阅|职位提醒|人才库/i;
+const ASIDE_WORDS = /\bnewsletters?\b|\bsubscribe to\b|\bjob alerts?\b|\btalent (?:community|network)\b|\bstay in touch\b|\bmailing list\b|订阅|职位提醒/i;
+const SIGN_UP_BUTTON = /\bsubscribe\b|\bsign me up\b|\bsign up\b|\bnotify me\b|\bget alerts\b|\bjoin\b|订阅/i;
+const APPLY_BUTTON = /\bapply\b|\bsubmit\b|\bnext\b|\bcontinue\b|申请|投递|提交|下一步|继续/i;
 const TYPED_BOXES = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]):not([type=file]), textarea, select';
 
 /**
@@ -162,11 +166,18 @@ const TYPED_BOXES = 'input:not([type=hidden]):not([type=checkbox]):not([type=rad
  * The applicant's details have no business there, even though nothing would be sent.
  */
 function isBesideTheApplication(el: Element): boolean {
-  if (el.closest(PAGE_CHROME_SELECTOR)) return true;
+  const chrome = el.closest(PAGE_CHROME_SELECTOR);
+  if (chrome && chrome.querySelectorAll(TYPED_BOXES).length <= MAX_ASIDE_BOXES) return true;
   const { body } = el.ownerDocument;
   let box = el.closest('form') ?? el.parentElement;
   // With no form to go by, the smallest block that has a button in it.
   while (box && box !== body && !box.querySelector('button, input[type=submit]') && box.parentElement && box.parentElement !== body) box = box.parentElement;
+  if (!box || box === body || box.querySelectorAll(TYPED_BOXES).length > MAX_ASIDE_BOXES) return false;
+  // What its button does says the most.
+  const buttons = Array.from(box.querySelectorAll<HTMLElement>('button, input[type=submit]')).map((b) => b.textContent || b.getAttribute('value') || '').join(' ');
+  if (APPLY_BUTTON.test(buttons)) return false;
+  if (SIGN_UP_BUTTON.test(buttons)) return true;
+  // Otherwise the words on it, or on the block around it as long as that holds no other boxes.
   for (let level = 0; box && level < 2 && box !== body; level++, box = box.parentElement) {
     if (box.querySelectorAll(TYPED_BOXES).length > MAX_ASIDE_BOXES) return false;
     if (ASIDE_WORDS.test(wordsIn(box))) return true;
@@ -177,7 +188,7 @@ function isBesideTheApplication(el: Element): boolean {
 /** What the box says to someone reading it. A script beside it can say anything. */
 function wordsIn(box: Element): string {
   const copy = box.cloneNode(true) as Element;
-  for (const unread of Array.from(copy.querySelectorAll('script, style, noscript, template'))) unread.remove();
+  for (const unread of Array.from(copy.querySelectorAll('script, style, noscript, template, label:has(input[type=checkbox]), label:has(input[type=radio])'))) unread.remove();
   return copy.textContent ?? '';
 }
 
@@ -350,6 +361,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
       if (type === 'file') {
         candidates.set(el, { el, kind: 'file', lib: 'native', inputType: 'file' });
       } else if (type === 'date' || type === 'month') {
+        if (isFarAway(el) || isBesideTheApplication(el)) continue;
         candidates.set(el, {
           el,
           kind: 'date',
@@ -361,7 +373,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
         candidates.set(el, { el, kind: 'text', lib: 'native', inputType: type });
       }
     } else if (el instanceof HTMLSelectElement) {
-      if (isDisabledEl(el) || !isVisible(el)) continue;
+      if (isDisabledEl(el) || !isVisible(el) || isFarAway(el) || isBesideTheApplication(el)) continue;
       candidates.set(el, {
         el,
         kind: 'select',
@@ -370,10 +382,10 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
         options: selectOptions(el),
       });
     } else if (el instanceof HTMLTextAreaElement) {
-      if (isDisabledEl(el) || !isVisible(el) || isHiddenFromReaders(el) || isOutOfSight(el)) continue;
+      if (isDisabledEl(el) || !isVisible(el) || isHiddenFromReaders(el) || isOutOfSight(el) || isBesideTheApplication(el)) continue;
       candidates.set(el, { el, kind: 'textarea', lib: 'native' });
     } else if (isRichtextHost(el)) {
-      if (isDisabledEl(el) || !isVisible(el)) continue;
+      if (isDisabledEl(el) || !isVisible(el) || isFarAway(el) || isBesideTheApplication(el)) continue;
       candidates.set(el, { el, kind: 'richtext', lib: 'native' });
     }
   }
@@ -381,7 +393,7 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
   for (const inputs of groupLooseRadios(looseRadios, scope)) nativeGroups.push({ kind: 'radio', inputs });
 
   for (const { kind, inputs } of nativeGroups) {
-    if (inputs.every(isDisabledEl) || !inputs.some(isInputVisible)) continue;
+    if (inputs.every(isDisabledEl) || !inputs.some(isInputVisible) || isFarAway(commonAncestor(inputs))) continue;
     const first = inputs[0]!;
     if (kind === 'radio') {
       candidates.set(first, {

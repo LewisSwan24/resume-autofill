@@ -118,15 +118,14 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'element', kind: 'file', root: '.el-upload', input: 'input[type=file]', disabled: '.is-disabled' },
 ];
 
-/** Checked before LIBRARY_WIDGETS. Range / time / multi-date pickers are out of M1 scope. */
+/** Checked before LIBRARY_WIDGETS. Time and multi-date pickers are out of scope. */
 export const LIBRARY_UNSUPPORTED: UnsupportedWidget[] = [
-  { lib: 'antd', root: '.ant-picker-range', reason: 'range picker' },
   {
     lib: 'element',
     root:
-      '.el-date-editor.el-range-editor, .el-date-editor--time, .el-date-editor--dates, ' +
+      '.el-date-editor--datetimerange, .el-date-editor--time, .el-date-editor--dates, ' +
       '.el-date-editor--months, .el-date-editor--years, .el-date-editor--week',
-    reason: 'range / time / multi-date picker',
+    reason: 'time / multi-date picker',
   },
 ];
 
@@ -200,6 +199,9 @@ export function isAriaMultiple(el: HTMLElement): boolean {
   );
 }
 
+/** A picker that holds a start and an end in one field. */
+export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor');
+
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {
   return LIBRARY_UNSUPPORTED.find((u) => el.matches(u.root));
 }
@@ -235,9 +237,9 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
     if (isGranularity(forced)) return forced;
   }
   if (widget.lib === 'element') {
-    if (root.classList.contains('el-date-editor--month')) return 'month';
-    if (root.classList.contains('el-date-editor--year')) return 'year';
-    if (root.classList.contains('el-date-editor--date') || root.classList.contains('el-date-editor--datetime')) {
+    if (root.classList.contains('el-date-editor--month') || root.classList.contains('el-date-editor--monthrange')) return 'month';
+    if (root.classList.contains('el-date-editor--year') || root.classList.contains('el-date-editor--yearrange')) return 'year';
+    if (root.classList.contains('el-date-editor--date') || root.classList.contains('el-date-editor--daterange') || root.classList.contains('el-date-editor--datetime')) {
       return 'day';
     }
   }

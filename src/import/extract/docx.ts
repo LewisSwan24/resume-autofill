@@ -18,11 +18,15 @@ const ENTRY_RECORD = 0x02014b50;
 /** The end record is the last thing in a zip but for a comment of at most this length. */
 const MAX_ZIP_COMMENT = 0xffff;
 
+/** The parts holding markup, which are what gets read into memory as text. */
+const IS_TEXT_PART = /\.(?:xml|rels)$/i;
+
 /**
  * What a zip says it unpacks to, read before anything is unpacked: ten megabytes can hold ten gigabytes.
- * A zip that cannot be read this way is left for the unzipper to refuse. One that lies about its sizes is not caught.
+ * Its directory has to line up from end to end, or what it says cannot be taken as all there is, and the unzipper may
+ * well read it differently. No end record at all is left for the unzipper to refuse. Lying about sizes is not caught.
  */
-function unpacksTooLarge(b: Uint8Array): boolean {
+function problemWithZip(b: Uint8Array): 'too_large' | 'failed' | null {
   const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
   let end = -1;
   for (let i = b.length - 22; i >= 0 && i >= b.length - 22 - MAX_ZIP_COMMENT; i--) {
@@ -31,22 +35,26 @@ function unpacksTooLarge(b: Uint8Array): boolean {
       break;
     }
   }
-  if (end < 0) return false;
+  if (end < 0) return null;
   const count = view.getUint16(end + 10, true);
+  const size = view.getUint32(end + 12, true);
   let at = view.getUint32(end + 16, true);
-  // The larger format these two values give way to has no place in a file of ten megabytes.
-  if (count === 0xffff || at === 0xffffffff) return true;
+  // The larger format these values give way to has no place in a file of ten megabytes.
+  if (count === 0xffff || at === 0xffffffff || size === 0xffffffff) return 'too_large';
+  if (at + size !== end) return 'failed';
   let total = 0;
-  for (let n = 0; n < count && at + 46 <= b.length; n++) {
-    if (view.getUint32(at, true) !== ENTRY_RECORD) return false;
-    const size = view.getUint32(at + 24, true);
+  let seen = 0;
+  while (at < end) {
+    if (at + 46 > end || view.getUint32(at, true) !== ENTRY_RECORD) return 'failed';
+    const unpacked = view.getUint32(at + 24, true);
     const nameLength = view.getUint16(at + 28, true);
     const name = new TextDecoder().decode(b.subarray(at + 46, at + 46 + nameLength));
-    total += size;
-    if (total > MAX_UNPACKED_BYTES || (name === 'word/document.xml' && size > MAX_DOCUMENT_BYTES)) return true;
+    total += unpacked;
+    if (total > MAX_UNPACKED_BYTES || (IS_TEXT_PART.test(name) && unpacked > MAX_DOCUMENT_BYTES)) return 'too_large';
     at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+    seen++;
   }
-  return false;
+  return at === end && seen === count ? null : 'failed';
 }
 
 const BLOCK = 'p, div, li, h1, h2, h3, h4, h5, h6, tr, td, th, br';
@@ -84,7 +92,8 @@ export function linesOfHtml(html: string): TextLine[] {
 export async function extractDocx(data: Uint8Array, toHtml: DocxToHtml): Promise<ExtractResult> {
   if (data.byteLength > MAX_FILE_BYTES) return { ok: false, reason: 'too_large' };
   if (!isZip(data)) return { ok: false, reason: 'unsupported' };
-  if (unpacksTooLarge(data)) return { ok: false, reason: 'too_large' };
+  const problem = problemWithZip(data);
+  if (problem) return { ok: false, reason: problem };
   try {
     const { value } = await toHtml({ arrayBuffer: data.slice().buffer as ArrayBuffer });
     const lines = linesOfHtml(value);

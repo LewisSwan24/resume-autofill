@@ -241,3 +241,78 @@ describe('a file with far too much in it', () => {
     expect(Date.now() - started).toBeLessThan(5000);
   });
 });
+
+describe('a resume in traditional characters', () => {
+  const draft = parseResume(
+    lines(
+      '林知遠',
+      '電話：+886 912 345 678',
+      '電子郵箱：zhiyuan.lin@example.com',
+      '性別：男',
+      '婚姻狀況：未婚',
+      '籍貫：四川成都',
+      '身分證字號：A123456789',
+      '自我介紹',
+      '熱愛虛構的工作。',
+      '教育背景',
+      '虛構大學 碩士 資訊工程 2018.09 - 2020.06',
+      '工作經歷',
+      '虛構科技有限公司 軟體工程師 2020.07 - 至今',
+      '負責虛構系統的開發。',
+      '專業技能',
+      'TypeScript、React',
+      '緊急聯絡人',
+      '電話：+886 987 654 321',
+    ),
+  );
+  const value = (path: string) => draft.fields.find((f) => f.path === path)?.value;
+
+  it('reads the labels and the headings', () => {
+    expect(value('contact.email')).toBe('zhiyuan.lin@example.com');
+    expect(value('contact.phone')).toBe('912345678');
+    expect(value('contact.phoneCountryCode')).toBe('+886');
+    expect(value('basics.gender')).toBe('male');
+    expect(value('basics.maritalStatus')).toBe('single');
+    expect(value('selfIntroduction')).toContain('虛構');
+    expect(value('education.0.degree')).toBe('master');
+    expect(value('work.0.current')).toBe('true');
+    expect(value('skills.0.name')).toBe('TypeScript');
+  });
+
+  it('leaves what the applicant wrote in the characters they wrote it in', () => {
+    expect(value('basics.familyName')).toBe('林');
+    expect(value('basics.givenName')).toBe('知遠');
+    expect(value('basics.nativePlace.city')).toBe('四川成都');
+    expect(value('education.0.school')).toBe('虛構大學');
+    expect(value('work.0.company')).toBe('虛構科技有限公司');
+    expect(value('work.0.position')).toBe('軟體工程師');
+  });
+
+  it('keeps out the identity number and the other person', () => {
+    expect(JSON.stringify(draft.fields)).not.toContain('A123456789');
+    expect(JSON.stringify(draft.fields)).not.toContain('987');
+  });
+});
+
+describe('one line for one school or job, parted by single spaces', () => {
+  const value = (d: Draft, path: string) => d.fields.find((f) => f.path === path)?.value;
+
+  it('tells school, degree and subject apart', () => {
+    const d = parseResume(lines('林知远', '教育背景', '虚构大学 硕士 信息工程 2018.09 - 2020.06'));
+    expect(value(d, 'education.0.school')).toBe('虚构大学');
+    expect(value(d, 'education.0.degree')).toBe('master');
+    expect(value(d, 'education.0.major')).toBe('信息工程');
+  });
+
+  it('tells company and title apart', () => {
+    const d = parseResume(lines('林知远', '工作经历', '虚构科技有限公司 软件工程师 2020.07 - 至今'));
+    expect(value(d, 'work.0.company')).toBe('虚构科技有限公司');
+    expect(value(d, 'work.0.position')).toBe('软件工程师');
+  });
+
+  it('leaves English words together', () => {
+    const d = parseResume(lines('Mia Harper', 'Education', 'Fictional University, Bachelor of Design, 2018 - 2020'));
+    expect(value(d, 'education.0.school')).toBe('Fictional University');
+    expect(value(d, 'education.0.major')).toBe('Design');
+  });
+});

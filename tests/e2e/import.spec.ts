@@ -38,6 +38,9 @@ test('a PDF with Chinese text reads, and cancelling leaves nothing behind', asyn
   await upload(page, 'zh-single.pdf');
   await expect(row(page, 'basics.givenName')).toHaveValue('知远', { timeout: 60_000 });
   await expect(row(page, 'contact.email')).toHaveValue('zhiyuan.lin@example.com');
+  // Folded until asked for: the file may hold a number nothing here recognised.
+  await expect(page.locator('.raf-review__lines')).toHaveCount(0);
+  await page.getByRole('button', { name: /显示文件原文|Show the file text/i }).click();
   await expect(page.locator('.raf-review__lines')).toContainText('华东示例大学');
   await expect(page.locator('.raf-review__field.is-check').first()).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -85,7 +88,8 @@ test('a Word file reads too', async ({ context, serviceWorker, extensionId }) =>
   const requests = watchRequests(context);
   const page = await openOptions(context, serviceWorker, extensionId);
   await upload(page, 'zh-table.docx');
-  await expect(page.locator('.raf-review__lines li').first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: /显示文件原文|Show the file text/i }).click({ timeout: 60_000 });
+  await expect(page.locator('.raf-review__lines li').first()).toBeVisible();
   expect(await page.locator('[data-path]').count()).toBeGreaterThan(5);
   expect(requests).toEqual([]);
 });

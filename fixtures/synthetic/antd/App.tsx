@@ -36,7 +36,7 @@ export function App() {
           name="application"
           layout="vertical"
           autoComplete="off"
-          initialValues={{ education: [{}], internship: [{}, {}], award: [{}] }}
+          initialValues={{ education: [{}], internship: [{}, {}], project: [{}], award: [{}] }}
         >
           <Card title="基本信息" style={gap}>
             <Form.Item label="姓名" name="name">
@@ -134,6 +134,25 @@ export function App() {
                   <Button type="dashed" block onClick={() => add({})}>
                     + 添加教育经历
                   </Button>
+                </>
+              )}
+            </Form.List>
+          </Card>
+
+          <Card title="项目经历" style={gap}>
+            <Form.List name="project">
+              {(fields) => (
+                <>
+                  {fields.map((f, i) => (
+                    <Entry key={f.key} title={`项目经历 ${i + 1}`}>
+                      <Form.Item label="项目名称" name={[f.name, 'name']}>
+                        <Input />
+                      </Form.Item>
+                      <Form.Item label="起止时间" name={[f.name, 'period']}>
+                        <DatePicker.RangePicker picker="month" style={{ width: '100%' }} />
+                      </Form.Item>
+                    </Entry>
+                  ))}
                 </>
               )}
             </Form.List>

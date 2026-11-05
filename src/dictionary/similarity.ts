@@ -146,9 +146,25 @@ function sharesItsWords(a: string, b: string): boolean {
 const PHRASE_IN_QUESTION = 0.55;
 const MIN_PHRASE_WORDS = 3;
 
+/** What can follow a name in Chinese and still be about the same thing. */
+const SAME_SUBJECT_TAIL = /^(?:名称|名字|全称|简称|信息|号码|号|账号|帐号|中文)$/;
+const HAN = /\p{Script=Han}/u;
+const ALL_HAN = /^\p{Script=Han}+$/u;
+const MIN_HAN_OVERLAP = 0.5;
+
+/**
+ * Chinese puts what a phrase is about at its end: 公司规模 is a size and 工作年限 a number of years, whatever they start
+ * with. So words at the start of a label name its subject only if nothing but a word like 名称 comes after them.
+ */
+function endsOnAnotherSubject(longer: string, shorter: string): boolean {
+  const tail = longer.slice(longer.lastIndexOf(shorter) + shorter.length);
+  return HAN.test(tail) && !SAME_SUBJECT_TAIL.test(tail);
+}
+
 function containment(longer: string, shorter: string): number {
   if (!shorter || shorter.length >= longer.length) return 0;
   if (!containsPhrase(longer, shorter)) return 0;
+  if (hasCjk(shorter) && endsOnAnotherSubject(longer, shorter)) return 0;
   const ratio = shorter.length / longer.length;
   if (ratio >= 0.5) return 0.9 * (0.8 + 0.2 * ratio);
   if (hasCjk(shorter)) return 0;
@@ -171,6 +187,9 @@ export function normalizedSimilarity(na: string, nb: string): number {
   const [longer, shorter] = na.length >= nb.length ? [na, nb] : [nb, na];
   const contain = containment(longer, shorter);
   if (!aboutTheSameThing(na, nb) || !sharesItsWords(na, nb)) return contain;
+  // A different start or end is a different field: 工作年限 and 工作地点, 专业类别 and 行业类别. Only a little of the middle
+  // can vary: 毕业学校名称 and 毕业院校名称, though not 学校类型 and 学历类型.
+  if (ALL_HAN.test(na) && ALL_HAN.test(nb) && (na[0] !== nb[0] || na[na.length - 1] !== nb[nb.length - 1] || dice(na, nb) < MIN_HAN_OVERLAP)) return contain;
   const fuzzy = 0.6 * dice(na, nb) + 0.4 * jaroWinkler(na, nb);
   return Math.max(contain, fuzzy);
 }

@@ -16,11 +16,20 @@ export interface FileData {
   dataUrl: string;
 }
 
+export interface DatePart {
+  display: string;
+  year: number;
+  month: number;
+  day?: number;
+}
+
 export type FillIntent =
   | { kind: 'text'; text: string }
   | { kind: 'choice'; display: string; query: string; match: OptionMatcher }
   | { kind: 'multi'; display: string; items: { query: string; match: OptionMatcher }[] }
-  | { kind: 'date'; display: string; year: number; month: number; day?: number }
+  | ({ kind: 'date' } & DatePart)
+  /** Both ends of a span in one field. */
+  | { kind: 'dateRange'; display: string; start: DatePart; end: DatePart }
   /** e.g. ['浙江省', '杭州市', '西湖区'] */
   | { kind: 'cascade'; display: string; path: string[] }
   | { kind: 'check'; checked: boolean }

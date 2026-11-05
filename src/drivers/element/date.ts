@@ -1,4 +1,4 @@
-// Element Plus driver: el-date-picker (year / month / date).
+// Element Plus driver: el-date-picker (year / month / date), and its ranges with their two inputs.
 import type { Control } from '../../engine/types';
 import { isVisible } from '../../engine/visibility';
 import { findDropdownNear } from '../dropdown';
@@ -117,7 +117,56 @@ async function pickViaPanel(
   }
 }
 
+/** What a range shows, in the same form the report gives: "2022-03 ~ 2022-06". Null when empty. */
+export function readRange(root: HTMLElement): string | null {
+  const [start, end] = root.querySelectorAll('input');
+  return start?.value || end?.value ? `${start?.value ?? ''} ~ ${end?.value ?? ''}` : null;
+}
+
+/** Typing is all there is: a range whose inputs cannot be typed in is left to the applicant. */
+async function fillRange(control: Control, intent: Extract<FillIntent, { kind: 'dateRange' }>, ctx: DriverContext): Promise<FillResult> {
+  const root = control.el;
+  const [startInput, endInput] = Array.from(root.querySelectorAll<HTMLInputElement>('input'));
+  if (!startInput || !endInput) return failed('range picker has no inputs');
+  if (startInput.readOnly) return failed('range picker cannot be typed in');
+  const g: Granularity = control.dateGranularity ?? 'day';
+  const from = dateText({ kind: 'date', ...intent.start }, g);
+  const to = dateText({ kind: 'date', ...intent.end }, g);
+  const committed = (): boolean => valuesEquivalent(from, startInput.value) && valuesEquivalent(to, endInput.value);
+  const popper = (): HTMLElement | null => datePopper(root, startInput);
+  const live = (): HTMLElement | null => {
+    const p = popper();
+    return isPopperLive(p) ? p : null;
+  };
+  try {
+    scrollIntoView(root);
+    if (!live()) {
+      focusElement(startInput);
+      simulateClick(startInput);
+    }
+    await waitFor(live, { timeout: Math.min(ctx.timeoutMs, 1500), root: ctx.doc, signal: ctx.signal });
+    for (const [input, text] of [[startInput, from], [endInput, to]] as const) {
+      focusElement(input);
+      setNativeValue(input, text);
+      fireInput(input, text);
+      input.dispatchEvent(new (winOf(input).Event)('change', { bubbles: true }));
+    }
+    pressKey(endInput, 'Enter');
+    const ok = (await waitFor(() => (committed() && !live() ? true : null), { timeout: 1200, root: ctx.doc, signal: ctx.signal })) !== null;
+    if (!ok) {
+      await closePopper(endInput, root, popper, ctx);
+      return failed('typed dates were not accepted', readRange(root));
+    }
+    fireBlur(endInput);
+    return { ok: true, observed: readRange(root) };
+  } catch (error) {
+    await closePopper(endInput, root, popper, ctx).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function fillDate(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
+  if (intent.kind === 'dateRange') return fillRange(control, intent, ctx);
   if (intent.kind !== 'date') return failed(`unsupported intent for el-date-picker: ${intent.kind}`);
   const root = control.el;
   const input =

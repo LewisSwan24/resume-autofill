@@ -26,6 +26,7 @@ export interface InternshipEntry {
 export interface ProjectEntry {
   name: string;
   role: string;
+  period: string[] | null;
   description: string;
 }
 export interface FamilyRow {
@@ -83,6 +84,7 @@ export function snapshot(m: FormModel): FixtureState {
     out[`internship[${i}].current`] = r.current === true;
   });
   m.project.forEach((r, i) => {
+    out[`project[${i}].period`] = (r.period ?? []).join(' ~ ');
     for (const k of ['name', 'role', 'description'] as const) out[`project[${i}].${k}`] = str(r[k]);
   });
   m.family.forEach((r, i) => {

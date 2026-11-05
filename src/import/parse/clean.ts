@@ -1,74 +1,148 @@
-// What every line goes through before anything reads it: identity numbers come out, and no line can hang the page.
-// There are too many ways to write one to recognise the number, so the word decides: from the word on, the line is gone.
+// What every line goes through before anything reads it: no line can hang the page, and a number standing beside the
+// word for a document comes out. That part is best effort, and says so on the page: the ways to write a number have no
+// end, and no shape tells it from a phone. What keeps the rest safe is that the source stays folded away until asked for,
+// that free text is always left to check, and that the fields with a format of their own have to meet it (parse/index.ts).
+import { toSimplified } from '../../dictionary/normalize';
 import type { TextLine } from '../extract/types';
+import { findPhone } from './contact';
 
 /** A line longer than this is no line of a resume, and the rest of it is not read. */
 const MAX_LINE = 4000;
 /** More lines than this is no resume, and the rest of the file is not read. */
 const MAX_LINES = 2000;
+/** More stretches than this on one line is no table, and the rest of the line is not read. */
+const MAX_CELLS = 50;
 /** A label alone on its line or in its cell is no longer than this. */
 const MAX_LABEL = 30;
 
-const ID_WORD = new RegExp(
-  [
-    '身份[证證]|[证證]件|[护護][照]|通行[证證]|社保|社会保障|社會保障|[驾駕]照|[驾駕]驶[证證]|[驾駕]駛[證证]|居住[证證]',
-    "(?<![A-Za-z])(?:passport|social security|tax file|national insurance|national id|national identity|identity (?:number|no|card)|government id|driving licen[cs]e|driver'?s? licen[cs]e|medicare|aadhaar|id (?:number|no\\b|card)|id#)",
-    '(?<![A-Za-z])(?:PASSPORT|SSN|TFN|NRIC|HKID|SIN|NI|CPF|DNI|ssn|tfn|nric|hkid)(?![A-Za-z])',
-  ].join('|'),
-);
+const ID_WORD_HAN = '身份证|身份号|证件|护照|通行证|社保|社会保障|社会保险|驾照|驾驶证|驾驶执照|居住证|军官证|士兵证|パスポート|マイナンバー|在留カード|免許証|주민등록|여권';
 const ID_WORD_ANY_CASE = new RegExp(
-  "身份[证證]|[证證]件|[护護]照|通行[证證]|社保|社会保障|社會保障|[驾駕]照|[驾駕]驶[证證]|[驾駕]駛[證证]|居住[证證]|(?<![a-z])(?:passport|social security|tax file|national insurance|national id|national identity|identity (?:number|no|card)|government id|driving licen[cs]e|driver'?s? licen[cs]e|medicare|aadhaar|id (?:number|no\\b|card)|id#)",
+  `${ID_WORD_HAN}` +
+    "|(?<![a-z])(?:passport|passeport|pasaporte|reisepass|personalausweis|c[eé]dula|social security|social insurance|tax file|tax id|national insurance|national id|national identity|identity (?:number|no|card)|government id|driving licen[cs]e|driver['’]?s? licen[cs]e|medicare|aadha?a?r|id (?:number|no\\b|card)|id#|ic no|hk ?id|nric|ssn|tfn)(?![a-z])" +
+    '|(?<![a-z] )(?<![A-Za-z])id\\s*[:#]',
   'i',
 );
+/** Short forms that are words too, in lower case: "sin", "ni", "pan". */
+const ID_WORD_CAPITALS = /(?<![A-Za-z])(?:SIN|NI|CPF|DNI|PAN)(?![A-Za-z])/;
 
-/** China's number, in one piece or in groups, which means one thing wherever it stands. */
-const BARE_CN_ID = /(?<!\d)\d{6}[ -]?(?:19|20)\d{2}[ -]?(?:0[1-9]|1[0-2])[ -]?(?:0[1-9]|[12]\d|3[01])[ -]?\d{3}[\dXx](?![\dA-Za-z])/g;
-const YEAR_RANGE = /(?:19|20)\d{2}(?:[./-]\d{1,2})?\s*(?:-|–|—|~|to|至)\s*(?:(?:19|20)\d{2}(?:[./-]\d{1,2})?)/g;
+const INVISIBLE = /[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g;
+const ODD_SPACE = /[\u00a0\u1680\u2000-\u200a\u202f\u205f]/g;
 
-const digitCount = (s: string): number => (s.match(/\d/g) ?? []).length;
-
-/** Something that could be an identity number: five digits or more in a run, or a code of letters and digits. */
-function holdsNumber(text: string): boolean {
-  const t = text.replace(YEAR_RANGE, ' ');
-  for (const m of t.match(/\d[\d\s.\-()]{3,}/g) ?? []) if (digitCount(m) >= 5) return true;
-  return (t.match(/[A-Za-z0-9]{6,}/g) ?? []).some((w) => digitCount(w) >= 2);
+/** One way of writing everything: full-width digits and letters, spaces that are not spaces, characters nobody can see. */
+function plain(text: string): string {
+  // The wide space parts things as two spaces do, and would otherwise turn into one.
+  return text.replace(/\u3000/g, '  ').normalize('NFKC').replace(INVISIBLE, '').replace(ODD_SPACE, ' ');
 }
 
+/** The same with its words pulled together, for finding a word however it was spaced out. */
+const pulledTogether = (text: string): string =>
+  toSimplified(text)
+    .replace(/(?<=\p{Script=Han}) +(?=\p{Script=Han})/gu, '')
+    .replace(/ {2,}/g, ' ');
+
 function wordAt(text: string): number {
-  const a = text.search(ID_WORD);
-  const b = text.search(ID_WORD_ANY_CASE);
+  const a = toSimplified(text).search(ID_WORD_ANY_CASE);
+  const b = text.search(ID_WORD_CAPITALS);
   if (a < 0) return b;
   return b < 0 ? a : Math.min(a, b);
 }
 
-/** Runs of blank space hold nothing, and every pattern that looks past them pays for each one. */
-const tidy = (text: string): string => text.slice(0, MAX_LINE).replace(/[ \t ]{3,}/g, '  ').replace(/　{2,}/g, '　');
+const namesDocument = (text: string): boolean => wordAt(text) >= 0 || ID_WORD_ANY_CASE.test(pulledTogether(text));
 
-/** The text without its identity number, and whether it was a label waiting for one on the next line or in the next cell. */
-function scrub(raw: string): { text: string; labelOnly: boolean } {
-  const at = wordAt(raw);
-  const text = raw.replace(BARE_CN_ID, ' ');
-  if (at < 0) return { text, labelOnly: false };
-  const before = raw.slice(0, at);
-  if (!holdsNumber(raw.slice(at))) {
-    // "E12345678 (passport)": the number first.
-    if (holdsNumber(before)) return { text: '', labelOnly: false };
-    return { text, labelOnly: text.trim().length <= MAX_LABEL };
-  }
-  return { text: holdsNumber(before) ? '' : before.replace(/[\s:：,，;；|｜(（-]+$/, ''), labelOnly: false };
+const EMAIL_OR_LINK = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}|(?:https?:\/\/|www\.)\S+/g;
+const DATES = /(?<![A-Za-z0-9])(?:19|20)\d{2}(?:[./-](?:0?[1-9]|1[0-2])(?:[./-](?:0?[1-9]|[12]\d|3[01]))?)?(?![A-Za-z0-9])/g;
+
+/** Digits, leaving out the things with digits in them that are no document's number. */
+const holdsDigits = (text: string): boolean => /\d/.test(text.replace(EMAIL_OR_LINK, ' ').replace(DATES, ' '));
+
+/** Runs of blank space hold nothing, and every pattern that looks past them pays for each one. */
+const tidy = (text: string): string => plain(text.slice(0, MAX_LINE)).replace(/[ \t]{3,}/g, '  ');
+
+/** The word and little else: "Passport No.", "身份证号：". */
+function isBareLabel(chunk: string): boolean {
+  if (chunk.trim().length > MAX_LABEL) return false;
+  const rest = pulledTogether(chunk)
+    .replace(ID_WORD_ANY_CASE, '')
+    .replace(ID_WORD_CAPITALS, '')
+    .replace(/number|num\b|no\b|号码|字号|号|番号|번호|[\s:：#.()（）-]/gi, '');
+  return rest.length === 0;
 }
 
-function cleanCells(cells: string[]): string[] {
+/** A list, a wide gap, or the next label along: "驾驶证：C1 手机：13812345678". */
+const PARTS = /(\s*[|｜•·,，;；]\s*|\s{2,}|\t+|(?<=[:：]\s*\S+)\s+(?=[\p{Script=Han}A-Za-z-]{1,12}\s*[:：]))/u;
+
+/** Part of a line, without a number that stands beside the word, and whether what remains is a label waiting for one. */
+function scrubPart(part: string): { text: string; labelOnly: boolean } {
+  if (!namesDocument(part)) return { text: part, labelOnly: false };
+  if (isBareLabel(part)) return { text: part, labelOnly: true };
+  const at = wordAt(part);
+  // Only found with its words pulled together: "身 份 证 号：E12345678".
+  if (at < 0) return { text: holdsDigits(part) ? '' : part, labelOnly: false };
+  if (!holdsDigits(part)) return { text: part, labelOnly: false };
+  // The number can come first: "E12345678 (passport)".
+  const before = part.slice(0, at).replace(/[\s:：,，;；|｜(（-]+$/, '');
+  return { text: holdsDigits(before) ? '' : before, labelOnly: false };
+}
+
+/** What can stand after a label and be its number, unless it is plainly a phone or a date. */
+function isNumberAfterLabel(text: string): boolean {
+  const t = text.trim();
+  return t.length > 0 && t.length <= MAX_LABEL && !/[:：]/.test(t) && holdsDigits(t) && !findPhone(t);
+}
+
+/** A Chinese ID number with no word beside it: 18 or 15 digits with a date of birth inside. Nothing else looks like one. */
+const CN_ID_RUN = /(?<![\dA-Za-z])\d(?:[ -]?\d){14,16}(?:[ -]?[\dXx])?(?![\dA-Za-z])/g;
+function isChineseId(run: string): boolean {
+  const all = run.replace(/[ -]/g, '');
+  if (all.length === 18) return /^\d{6}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]$/.test(all);
+  return all.length === 15 && /^\d{8}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}$/.test(all);
+}
+
+const withoutChineseId = (text: string): string => text.replace(CN_ID_RUN, (run) => (isChineseId(run) ? ' ' : run)).trim();
+
+function scrub(raw: string): { text: string; labelOnly: boolean } {
+  const parts = raw
+    // "ID  Number" is one thing, however wide the gap.
+    .replace(/(?<![A-Za-z])(id|identity|tax|national|social)\s{2,}(?=[A-Za-z])/gi, '$1 ')
+    .split(PARTS);
+  if (parts.length === 1) {
+    const { text, labelOnly } = scrubPart(parts[0]!);
+    return { text: withoutChineseId(text), labelOnly };
+  }
   const out: string[] = [];
-  for (let i = 0; i < cells.length; i++) {
-    const { text, labelOnly } = scrub(tidy(cells[i]!));
+  for (let i = 0; i < parts.length; i += 2) {
+    const { text, labelOnly } = scrubPart(parts[i]!);
+    // A label beside other things, with its number next along the same line, goes with it.
+    if (labelOnly && isNumberAfterLabel(parts[i + 2] ?? '')) {
+      i += 2;
+      continue;
+    }
+    if (text) out.push(out.length > 0 ? `${parts[i - 1] ?? ' '}${text}` : text);
+  }
+  return { text: withoutChineseId(out.join('')), labelOnly: false };
+}
+
+function cleanCells(raw: string[]): string[] {
+  const cells = raw.slice(0, MAX_CELLS).map(tidy);
+  const out: string[] = [];
+  let length = 0;
+  for (let i = 0; i < cells.length && length < MAX_LINE; i++) {
+    const { text, labelOnly } = scrub(cells[i]!);
     if (labelOnly) {
-      if (i + 1 < cells.length && holdsNumber(cells[i + 1]!)) {
-        i++;
+      // Any punctuation between the label and its value is its own cell in some files, and so are groups of digits.
+      let next = i + 1;
+      while (next < cells.length && !/[\p{L}\d]/u.test(cells[next]!)) next++;
+      if (next < cells.length && isNumberAfterLabel(cells[next]!)) {
+        while (next + 1 < cells.length && isNumberAfterLabel(cells[next + 1]!)) next++;
+        i = next;
         continue;
       }
     }
-    if (text.trim()) out.push(text.trim());
+    const kept = text.trim().slice(0, MAX_LINE - length);
+    if (kept) {
+      out.push(kept);
+      length += kept.length + 1;
+    }
   }
   return out;
 }
@@ -85,7 +159,7 @@ export function cleanLines(all: TextLine[]): TextLine[] {
       continue;
     }
     const tidied = tidy(line.text);
-    if (afterLabel && holdsNumber(tidied) && tidied.length <= MAX_LABEL) {
+    if (afterLabel && isNumberAfterLabel(tidied)) {
       out.push({ ...line, text: '', cells: [''] });
       afterLabel = false;
       continue;
@@ -93,7 +167,7 @@ export function cleanLines(all: TextLine[]): TextLine[] {
     const { text, labelOnly } = scrub(tidied);
     const next = lines[index + 1];
     // The label goes with its number, or it reads as something of its own.
-    const paired = labelOnly && !!next && next.cells.length <= 1 && holdsNumber(tidy(next.text)) && next.text.length <= MAX_LABEL;
+    const paired = labelOnly && !!next && next.cells.length <= 1 && isNumberAfterLabel(tidy(next.text));
     const kept = paired ? '' : text;
     out.push({ ...line, text: kept, cells: [kept] });
     afterLabel = paired;
@@ -101,17 +175,10 @@ export function cleanLines(all: TextLine[]): TextLine[] {
   return out;
 }
 
-const LONG_NUMBER = /(?<![\dA-Za-z])(?:[A-Za-z]{1,3}[ -]?)?\d(?:[ .-]?\d){7,}[A-Za-z]?(?![\dA-Za-z])/g;
-const LETTERS_THEN_NUMBER = /(?<![\dA-Za-z])[A-Za-z]{1,3}\d{6,}[A-Za-z]?(?![\dA-Za-z])/g;
-
-/**
- * For what the applicant wrote freely, where no number this long belongs anyway: it could be anyone's anything.
- * Amounts with commas and years stay. Whatever else this takes, the check page shows the line it came from.
- */
-export function withoutLongNumbers(text: string): string {
-  return text
-    .replace(LONG_NUMBER, (m) => (/^(?:19|20)\d{2}\D+(?:19|20)\d{2}/.test(m) ? m : ' '))
-    .replace(LETTERS_THEN_NUMBER, ' ')
+/** A title from a file's name, which can be named after what is in it: no run of six digits or more. */
+export function titleFromFileName(fileName: string): string {
+  return plain(fileName.replace(/\.[^.]+$/, ''))
+    .replace(/[A-Za-z]{0,3}\d(?:[ ._()-]{0,2}\d){5,30}[A-Za-z]?/g, ' ')
     .replace(/ {2,}/g, ' ')
     .trim();
 }

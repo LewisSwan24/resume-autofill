@@ -96,7 +96,7 @@ test.describe('antd fixture (zh-CN)', () => {
   const s = (k: string) => e[k] as string;
   const list = (k: string) => e[k] as string[];
 
-  test('initial __fixtureState is all-empty with 1 education / 2 internship / 1 award cards', async ({ page }) => {
+  test('initial __fixtureState is all-empty with 1 education / 2 internship / 1 project / 1 award cards', async ({ page }) => {
     await page.goto('/antd/');
     await page.getByLabel('姓名', { exact: true }).waitFor();
     const initial = await fixtureState(page);
@@ -104,7 +104,7 @@ test.describe('antd fixture (zh-CN)', () => {
     const expectedInitialKeys = Object.keys(expected).filter((k) => !k.startsWith('education[1].'));
     expect(Object.keys(initial).sort()).toEqual(expectedInitialKeys.sort());
     for (const [k, v] of Object.entries(initial)) expect(v, k).toEqual(emptyLike(expected[k]));
-    await expect(page.locator('.ant-card-type-inner')).toHaveCount(1 + 2 + 1);
+    await expect(page.locator('.ant-card-type-inner')).toHaveCount(1 + 2 + 1 + 1);
   });
 
   test('"+ 添加教育经历" appends an identical education card', async ({ page }) => {
@@ -189,6 +189,14 @@ test.describe('antd fixture (zh-CN)', () => {
 
     // 获奖情况
     const award = entry(page, '获奖情况 1');
+    const project = page.locator('.ant-card-type-inner', { hasText: '项目经历 1' });
+    await project.getByLabel('项目名称', { exact: true }).fill(s('project[0].name'));
+    const [from, to] = s('project[0].period').split(' ~ ') as [string, string];
+    await project.locator('.ant-picker-range input').nth(0).click();
+    await project.locator('.ant-picker-range input').nth(0).fill(from);
+    await project.locator('.ant-picker-range input').nth(0).press('Enter');
+    await project.locator('.ant-picker-range input').nth(1).fill(to);
+    await project.locator('.ant-picker-range input').nth(1).press('Enter');
     await award.getByLabel('奖项名称', { exact: true }).fill(s('award[0].name'));
     await typeDate(award, '获奖时间', s('award[0].date'));
     await pickSelect(page, award, '奖项级别', s('award[0].level'));

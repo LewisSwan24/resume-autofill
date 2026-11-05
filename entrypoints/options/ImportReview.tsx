@@ -5,6 +5,7 @@ import { enumOptions } from '../../src/editor';
 import { useLanguage, useT, type MessageKey } from '../../src/i18n';
 import type { TextLine } from '../../src/import/extract/types';
 import type { Draft, DraftField } from '../../src/import/parse';
+import { titleFromFileName } from '../../src/import/parse/clean';
 import { LOCALES, type Locale } from '../../src/schema';
 import { Button, Field, Input, Notice, Segmented, SelectInput, Textarea } from './ui/controls';
 
@@ -69,7 +70,10 @@ export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, 
   const language = useLanguage();
   const [fields, setFields] = useState(draft.fields);
   const [locale, setLocale] = useState<Locale>(draft.locale);
-  const [title, setTitle] = useState(firstTitle ?? fileName.replace(/\.[^.]+$/, ''));
+  // A file can be named after what is in it.
+  const [title, setTitle] = useState(firstTitle ?? titleFromFileName(fileName));
+  // The file as it was read can hold what nobody wants on screen: it stays folded until asked for.
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const groups = useMemo(() => groupsOf(fields), [fields]);
   useEffect(() => onEdit?.({ locale, fields }, title), [locale, fields, title, onEdit]);
@@ -87,6 +91,7 @@ export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, 
     // A skill has a name, a native place has a city, and everything else has a field of the same name.
     if (path.startsWith('skills.')) return t('options.module.skills');
     if (path.startsWith('basics.nativePlace.')) return t('options.field.nativePlace');
+    if (/^projects\.\d+\.name$/.test(path)) return t('options.module.projects');
     return t(`options.field.${name}` as MessageKey);
   };
 
@@ -113,13 +118,19 @@ export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, 
       <div className="raf-review__body">
         <div className="raf-review__source" tabIndex={0} role="region" aria-label={t('options.import.source')}>
           <h3 className="raf-subheading">{t('options.import.source')}</h3>
-          <ol className="raf-review__lines">
-            {lines.map((line, i) => (
-              <li key={i} id={`raf-source-${i}`} className={i === activeLine ? 'is-active' : undefined}>
-                {line.text}
-              </li>
-            ))}
-          </ol>
+          <Notice>{t('options.import.sourceNote')}</Notice>
+          <Button onClick={() => setSourceOpen((v) => !v)} aria-expanded={sourceOpen}>
+            {t(sourceOpen ? 'options.import.sourceHide' : 'options.import.sourceShow')}
+          </Button>
+          {sourceOpen && (
+            <ol className="raf-review__lines">
+              {lines.map((line, i) => (
+                <li key={i} id={`raf-source-${i}`} className={i === activeLine ? 'is-active' : undefined}>
+                  {line.text}
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
 
         <div className="raf-review__fields">

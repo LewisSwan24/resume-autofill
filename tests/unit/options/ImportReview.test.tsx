@@ -66,6 +66,7 @@ describe('the check page', () => {
 
   it('shows the line a field came from', () => {
     render(<ImportReview fileName="mine.pdf" lines={LINES} draft={DRAFT} onCancel={() => undefined} onSave={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: /show the file text/i }));
     fireEvent.focus(within(document.querySelector('[data-path="contact.email"]')!).getByRole('textbox'));
     expect(document.getElementById('raf-source-1')!.className).toContain('is-active');
   });
@@ -269,6 +270,12 @@ describe('uploading from the options page', () => {
     read.result = { ok: true, lines: many.map((text) => ({ text, cells: [text], page: 1, fontSize: 0 })), pages: 1 };
     await upload();
     const source = await review();
+    // Folded until asked for, and it says why.
+    expect(source.textContent).not.toContain('Mia Harper');
+    expect(source.textContent).toMatch(/passport or ID number/i);
+    expect(screen.getByRole('button', { name: /show the file text/i }).getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: /show the file text/i }));
+    expect(screen.getByRole('button', { name: /hide the file text/i }).getAttribute('aria-expanded')).toBe('true');
     expect(source.textContent).toContain('Mia Harper');
     expect(source.textContent).not.toContain('E12345678');
     expect(source.querySelectorAll('li').length).toBeLessThanOrEqual(2000);

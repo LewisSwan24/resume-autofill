@@ -18,9 +18,11 @@ export default defineConfig({
     },
   },
   manifest: {
-    // The extension's own pages read from the package and nothing else. Resume data has nowhere to go from here.
+    // The extension's own pages read from the package and nothing else: no requests, images, frames or forms leave them.
+    // Styles stay inline for the style attributes React writes. What runs on other pages is held to this by a test.
     content_security_policy: {
-      extension_pages: "script-src 'self'; object-src 'self'; connect-src 'self'",
+      extension_pages:
+        "default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'none'; frame-src 'none'",
     },
     name: '网申简历一键填写助手 / Resume Autofill',
     description: 'One-click autofill of job application forms from a locally stored resume.',

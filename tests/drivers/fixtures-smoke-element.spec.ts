@@ -172,6 +172,12 @@ test.describe('Element Plus fixture (zh-CN)', () => {
     const project = entry(page, '项目经历 1');
     await item(project, '项目名称').locator('input').fill(s('project[0].name'));
     await item(project, '担任角色').locator('input').fill(s('project[0].role'));
+    const [periodFrom, periodTo] = s('project[0].period').split(' ~ ') as [string, string];
+    const period = item(project, '起止时间').locator('input');
+    await period.nth(0).click();
+    await period.nth(0).fill(periodFrom);
+    await period.nth(1).fill(periodTo);
+    await period.nth(1).press('Enter');
     await item(project, '项目描述').locator('textarea').fill(s('project[0].description'));
 
     // 家庭成员: plain table, header cells only, inputs addressed by row/column.

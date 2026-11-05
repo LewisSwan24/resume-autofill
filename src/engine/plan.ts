@@ -113,6 +113,11 @@ export function planFill(
       dialCode: resume.contact.phoneCountryCode.trim(),
       genderAnswer: resume.diversity.genderAnswer,
     });
+    if (!intent && def.type === 'period' && ctx.control.kind === 'date') {
+      // A job still going, or a picker that holds one date: what to put is for the applicant to say.
+      reports.push({ ...report, outcome: 'needs_review', source: resolved.source });
+      return;
+    }
     if (!intent) {
       // The data exists but this control cannot take it (e.g. a bool for a text box).
       reports.push({ ...report, outcome: 'no_data', source: resolved.source });
@@ -134,7 +139,7 @@ export function planFill(
 
 /** The answer depends on the country in the question, so it is worked out here where the question is known. */
 function inNamedCountry(ctx: FieldContext, resume: Resume): { raw: boolean; source: string } | null {
-  const asked = ctx.evidence.map((e) => countryAskedAbout(e.text)).find(Boolean);
+  const asked = countryAskedAbout(ctx.evidence[0]?.text ?? '');
   const raw = asked ? livesInCountry(resume.contact.address.country, asked) : null;
   return raw === null ? null : { raw, source: 'contact.address.country' };
 }

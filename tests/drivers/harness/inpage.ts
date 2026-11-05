@@ -10,11 +10,19 @@ import type { OptionInfo } from '../../../src/engine/types';
 
 /** Serializable counterpart of `FillIntent`: choice / multi matchers are described, not passed. */
 export type OptionSpec = { matchLabel?: string };
+interface DateJson {
+  display: string;
+  year: number;
+  month: number;
+  day?: number;
+}
+
 export type IntentJson =
   | { kind: 'text'; text: string }
   | { kind: 'choice'; display: string; query: string; options?: OptionSpec }
   | { kind: 'multi'; display: string; items: { query: string; options?: OptionSpec }[] }
   | { kind: 'date'; display: string; year: number; month: number; day?: number }
+  | { kind: 'dateRange'; display: string; start: DateJson; end: DateJson }
   | { kind: 'cascade'; display: string; path: string[] }
   | { kind: 'check'; checked: boolean }
   | { kind: 'file'; file: FileData };

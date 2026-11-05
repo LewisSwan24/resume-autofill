@@ -1,16 +1,18 @@
 // Other spellings of countries and states, for reading the results of a place search. Search services
 // write "Brisbane, Queensland, AUS" for an address a person wrote as "Brisbane, QLD, Australia".
 
+import { toSimplified } from './normalize';
+
 const COUNTRIES: readonly (readonly string[])[] = [
-  ['Australia', 'AUS', 'AU'],
-  ['New Zealand', 'NZL', 'NZ'],
-  ['United States', 'United States of America', 'USA', 'US'],
-  ['United Kingdom', 'GBR', 'UK'],
-  ['Canada', 'CAN'],
-  ['China', 'CHN', '中国'],
-  ['Singapore', 'SGP'],
-  ['Hong Kong', 'HKG'],
-  ['India', 'IND'],
+  ['Australia', 'AUS', 'AU', '澳大利亚', '澳洲'],
+  ['New Zealand', 'NZL', 'NZ', '新西兰'],
+  ['United States', 'United States of America', 'USA', 'US', '美国'],
+  ['United Kingdom', 'GBR', 'UK', '英国'],
+  ['Canada', 'CAN', '加拿大'],
+  ['China', 'CHN', 'PRC', 'P.R. China', "People's Republic of China", '中国', '中华人民共和国', '中国大陆'],
+  ['Singapore', 'SGP', '新加坡'],
+  ['Hong Kong', 'HKG', '香港'],
+  ['India', 'IND', '印度'],
 ];
 
 const STATES: readonly (readonly string[])[] = [
@@ -31,12 +33,17 @@ const groupOf = (groups: readonly (readonly string[])[], name: string): readonly
 /** The state table is Australian: WA in another country is something else. */
 const usesStateTable = (country: string): boolean => !country.trim() || groupOf(COUNTRIES, country)?.[0] === 'Australia';
 
-const ASKS_IN_COUNTRY = /(?:located|based|living|residing|reside|live)\s+in\s+(?:the\s+)?([\p{L} ]{2,40}?)\s*[?？]?\s*$/iu;
-const ASKS_IN_COUNTRY_ZH = /(?:是否|目前)(?:现在)?(?:在|位于|居住在|身在)([\p{Script=Han}]{2,8}?)(?:境内)?\s*[?？]?\s*$/u;
+const ASKS_IN_COUNTRY = /^(?:(?:are|do) you\s+)?(?:(?:currently|presently|now)\s+)?(?:located|based|living|residing|reside|live)\s+in\s+(?:the\s+)?([\p{L} ]{2,40}?)[\s?？*]*$/iu;
+const ASKS_IN_COUNTRY_ZH = /^(?:请问)?(?:您|你)?(?:目前|现在|当前)?(?:是否)?(?:在|位于|居住在|身在)([\p{Script=Han}]{2,8}?)(?:境内)?(?:吗)?[\s?？*]*$/u;
 
-/** The country a yes-or-no question asks about: "Are you located in Australia?". Only a country known by name. */
+/**
+ * The country a yes-or-no question asks about, when the question asks nothing else: "Are you located in Australia?".
+ * The whole question has to fit: "Do you need a visa to live in Australia?" and "Is your referee based in Australia?"
+ * end the same way and ask something else. Only a country known by name.
+ */
 export function countryAskedAbout(question: string): string | null {
-  const named = (ASKS_IN_COUNTRY.exec(question) ?? ASKS_IN_COUNTRY_ZH.exec(question))?.[1];
+  const asked = toSimplified(question);
+  const named = (ASKS_IN_COUNTRY.exec(asked) ?? ASKS_IN_COUNTRY_ZH.exec(asked))?.[1];
   return named ? (groupOf(COUNTRIES, named)?.[0] ?? null) : null;
 }
 
@@ -68,7 +75,8 @@ export function namesOtherState(text: string, home: string, homeCountry = ''): b
 /** True when a result ends in a country that is known not to be `home`. */
 export function isInOtherCountry(label: string, home: string): boolean {
   const mine = groupOf(COUNTRIES, home);
-  const parts = label.split(',');
+  // "Sydney, New South Wales, 2000": a postcode at the end says nothing about the country.
+  const parts = label.split(',').filter((part) => !/^\s*\d+\s*$/.test(part));
   const last = parts[parts.length - 1] ?? '';
   const theirs = groupOf(COUNTRIES, last);
   if (mine && theirs) return mine !== theirs;

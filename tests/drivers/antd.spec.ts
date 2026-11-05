@@ -276,6 +276,36 @@ test.describe('antd drivers on the antd fixture', () => {
     await expectPopupsClosed();
   });
 
+  const span = (): IntentJson => ({
+    kind: 'dateRange',
+    display: '2022-03 ~ 2022-06',
+    start: { display: '2022-03', year: 2022, month: 3 },
+    end: { display: '2022-06', year: 2022, month: 6 },
+  });
+
+  test('range picker: types both ends, and reads both back', async () => {
+    const d = await fillAttempt('起止时间', span(), 1);
+    expect(d.result.ok, JSON.stringify(d.result)).toBe(true);
+    expect((await fixtureState(page))['project[0].period']).toBe('2022-03 ~ 2022-06');
+    expect(d.observed).toBe('2022-03 ~ 2022-06');
+    await expectPopupsClosed();
+  });
+
+  test('range picker: goes through the panel on the second attempt', async () => {
+    const d = await fillAttempt('起止时间', span(), 2);
+    expect(d.result.ok, JSON.stringify(d.result)).toBe(true);
+    expect((await fixtureState(page))['project[0].period']).toBe('2022-03 ~ 2022-06');
+    await expectPopupsClosed();
+  });
+
+  test('range picker: a year away on the panel too', async () => {
+    const far: IntentJson = { kind: 'dateRange', display: '2015-09 ~ 2019-06', start: { display: '2015-09', year: 2015, month: 9 }, end: { display: '2019-06', year: 2019, month: 6 } };
+    const d = await fillAttempt('起止时间', far, 2);
+    expect(d.result.ok, JSON.stringify(d.result)).toBe(true);
+    expect((await fixtureState(page))['project[0].period']).toBe('2015-09 ~ 2019-06');
+    await expectPopupsClosed();
+  });
+
   test('attempt 1 commits typed dates on its own (no fallback to the panel)', async () => {
     const m = await fillAttempt('入学时间', month(2020, 9), 1);
     expect(m.result.ok, JSON.stringify(m.result)).toBe(true);
@@ -416,6 +446,8 @@ test.describe('antd drivers on the antd fixture', () => {
       await text('工作内容', s(`internship[${i}].description`), i);
     }
     await run('英语等级', choice(s('englishLevel')));
+    await text('项目名称', s('project[0].name'));
+    await run('起止时间', span());
     await text('奖项名称', s('award[0].name'));
     await run('获奖时间', dateOf(s('award[0].date')));
     await run('奖项级别', choice(s('award[0].level')));

@@ -3,7 +3,7 @@ import type { FormInstance, UploadFile } from 'antd';
 import { installFixtureState, type FixtureState } from '../shared/state';
 
 // How a form value is normalised into the fixture contract.
-type Kind = 'text' | 'bool' | 'list' | 'date' | 'month' | 'files';
+type Kind = 'text' | 'bool' | 'list' | 'date' | 'month' | 'files' | 'monthRange';
 
 const FLAT: Array<[string, Kind]> = [
   ['name', 'text'],
@@ -60,6 +60,13 @@ const INTERNSHIP: ListSpec = {
     ['description', 'text'],
   ],
 };
+const PROJECT: ListSpec = {
+  name: 'project',
+  items: [
+    ['name', 'text'],
+    ['period', 'monthRange'],
+  ],
+};
 const AWARD: ListSpec = {
   name: 'award',
   items: [
@@ -77,6 +84,8 @@ function normalise(kind: Kind, v: unknown): unknown {
       return Array.isArray(v) ? v.map(String) : [];
     case 'files':
       return Array.isArray(v) ? (v as UploadFile[]).map((f) => f.name) : [];
+    case 'monthRange':
+      return Array.isArray(v) && v.every((d) => dayjs.isDayjs(d)) ? v.map((d) => dayjs(d as never).format('YYYY-MM')).join(' ~ ') : '';
     case 'date':
     case 'month':
       return dayjs.isDayjs(v) ? v.format(kind === 'date' ? 'YYYY-MM-DD' : 'YYYY-MM') : '';
@@ -100,6 +109,7 @@ function snapshot(form: FormInstance): FixtureState {
   flat(FLAT);
   list(EDUCATION);
   list(INTERNSHIP);
+  list(PROJECT);
   flat(TAIL.slice(0, 2));
   list(AWARD);
   flat(TAIL.slice(2));

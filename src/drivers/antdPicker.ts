@@ -1,4 +1,4 @@
-// antd v5 DatePicker driver (picker = date | month | year; range pickers are unsupported upstream).
+// antd v5 DatePicker driver (picker = date | month | year), and RangePicker with its two inputs.
 // Attempt 1: type the formatted value into the (non-readonly) input and press Enter.
 // Attempt 2: open the panel and navigate it with the header buttons, then click the cell.
 import type { Control } from '../engine/types';
@@ -35,6 +35,10 @@ function targetOf(control: Control, intent: FillIntent): Target | null {
 
 const inputOf = (root: HTMLElement): HTMLInputElement | null => root.querySelector<HTMLInputElement>('input');
 const readValue = (root: HTMLElement): string | null => {
+  if (root.classList.contains('ant-picker-range')) {
+    const [start, end] = root.querySelectorAll('input');
+    return start?.value || end?.value ? `${start?.value ?? ''} ~ ${end?.value ?? ''}` : null;
+  }
   const v = inputOf(root)?.value ?? '';
   return v === '' ? null : v;
 };
@@ -137,7 +141,42 @@ async function navigateAndClick(popup: HTMLElement, t: Target, signal?: AbortSig
   return false;
 }
 
+/** The two ends of a range: type one, Enter moves on to the other, Enter commits both. */
+async function fillRange(control: Control, intent: Extract<FillIntent, { kind: 'dateRange' }>, ctx: DriverContext): Promise<FillResult> {
+  const root = control.el;
+  const [startInput, endInput] = Array.from(root.querySelectorAll<HTMLInputElement>('input'));
+  if (!startInput || !endInput) return failed('range picker inputs not found');
+  const from = targetOf(control, { kind: 'date', ...intent.start })!;
+  const to = targetOf(control, { kind: 'date', ...intent.end })!;
+  const done = (): boolean => valuesEquivalent(from.text, startInput.value) && valuesEquivalent(to.text, endInput.value);
+  const settled = (): Promise<true | null> => waitFor(() => done() || null, { timeout: Math.min(ctx.timeoutMs, 800), root: root.ownerDocument, signal: ctx.signal });
+  const attempt = startInput.readOnly ? 2 : ctx.attempt;
+
+  let popup: HTMLElement | null = null;
+  try {
+    popup = await openPanel(root, startInput, ctx);
+    if (attempt === 1) {
+      for (const [input, target] of [[startInput, from], [endInput, to]] as const) {
+        focusElement(input);
+        setNativeValue(input, target.text);
+        fireInput(input, target.text);
+        pressKey(input, 'Enter');
+      }
+      fireBlur(endInput);
+      return (await settled()) ? { ok: true, observed: readValue(root) } : failed('typed dates were not accepted', readValue(root));
+    }
+    if (!popup) return failed('date panel did not open', readValue(root));
+    for (const target of [from, to]) {
+      if (!(await navigateAndClick(popup, target, ctx.signal))) return failed(`date ${target.text} not reachable in the panel`, readValue(root));
+    }
+    return (await settled()) ? { ok: true, observed: readValue(root) } : failed('panel clicks not committed', readValue(root));
+  } finally {
+    await settleClosed(root, endInput, popup, ctx);
+  }
+}
+
 async function fillDate(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
+  if (intent.kind === 'dateRange') return fillRange(control, intent, ctx);
   const root = control.el;
   const input = inputOf(root);
   const t = targetOf(control, intent);

@@ -29,7 +29,7 @@ const newInternship = (): InternshipEntry => ({
   current: false,
   description: '',
 });
-const newProject = (): ProjectEntry => ({ name: '', role: '', description: '' });
+const newProject = (): ProjectEntry => ({ name: '', role: '', period: null, description: '' });
 const newFamily = (): FamilyRow => ({ relationship: '', name: '', employer: '', position: '' });
 
 const model = reactive<FormModel>({
@@ -191,6 +191,9 @@ function searchSchools(entry: EducationEntry, query: string): void {
             </el-form-item>
             <el-form-item label="担任角色">
               <el-input v-model="entry.role" />
+            </el-form-item>
+            <el-form-item label="起止时间">
+              <el-date-picker v-model="entry.period" type="monthrange" value-format="YYYY-MM" />
             </el-form-item>
             <el-form-item label="项目描述">
               <el-input v-model="entry.description" type="textarea" :rows="3" />

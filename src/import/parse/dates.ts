@@ -14,7 +14,7 @@ const MONTHS: Record<string, string> = {
   jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12',
 };
 const MONTH_WORD = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?';
-const NOW = '(?:至今|今|现在|目前|(?:present|current|now|ongoing|today)(?![A-Za-z]))';
+const NOW = '(?:至今|迄今|今|现在|現在|目前|(?:present|current|now|ongoing|today)(?![A-Za-z]))';
 const SEPARATOR = '\\s*(?:-|–|—|―|~|～|至|到|to)\\s*';
 
 const NUMERIC = '(?:19|20)\\d{2}\\s*(?:[./-]|年)\\s*(?:0?[1-9]|1[0-2])(?:\\s*月)?';

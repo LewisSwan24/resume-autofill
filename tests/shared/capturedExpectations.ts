@@ -126,6 +126,8 @@ export interface WrongField {
 export interface SampleScore {
   sample: string;
   mode: string;
+  /** From the click to the last field, as the fill itself reports it. */
+  fillMs: number;
   fields: number;
   correct: number;
   /** Stayed empty although a value was expected. */
@@ -298,6 +300,7 @@ export function scoreSample(
   );
 
   return {
+    fillMs: report.finishedAt - report.startedAt,
     sample: `${sample.ats}/${sample.name}`,
     mode,
     fields: Object.keys(checked).length + entryTexts,
@@ -367,10 +370,10 @@ const falseReports = (r: SampleScore): number => r.falselyFilled.length + r.fals
 export function renderAccuracyTable(rows: SampleScore[]): string {
   const sorted = [...rows].sort((a, b) => `${a.sample} ${a.mode}`.localeCompare(`${b.sample} ${b.mode}`));
   const lines = [
-    '| 样本 | 运行方式 | 应填 | 填对 | 填对率 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 |',
-    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| 样本 | 运行方式 | 应填 | 填对 | 填对率 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 耗时（秒） |',
+    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
     ...sorted.map((r) =>
-      `| ${r.sample} | ${r.mode} | ${r.fields + r.gaps.length} | ${r.correct} | ${accuracyOf(r)}% | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} |`,
+      `| ${r.sample} | ${r.mode} | ${r.fields + r.gaps.length} | ${r.correct} | ${accuracyOf(r)}% | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${(r.fillMs / 1000).toFixed(1)} |`,
     ),
   ];
   return `${lines.join('\n')}\n`;
@@ -378,5 +381,5 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
 
 /** One line per sample and mode, printed by the specs and used for the accuracy table. */
 export function scoreLine(score: SampleScore): string {
-  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}`;
+  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}, took ${(score.fillMs / 1000).toFixed(1)}s`;
 }

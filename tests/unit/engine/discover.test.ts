@@ -319,11 +319,11 @@ describe('discover: antd v5 widgets', () => {
     expect(controls.map((c) => c.dateGranularity)).toEqual(['month', 'month']);
   });
 
-  it('antd range picker is unsupported: nothing reported, inner inputs consumed', () => {
+  it('antd range picker is one field, with both its inputs inside', () => {
     const controls = scan(`
       <div class="ant-picker ant-picker-range"><div class="ant-picker-input"><input placeholder="开始日期"></div>
       <div class="ant-picker-range-separator"></div><div class="ant-picker-input"><input placeholder="结束日期"></div></div>`);
-    expect(controls).toEqual([]);
+    expect(controls.map((c) => [c.kind, c.lib, c.dateRange])).toEqual([['date', 'antd', true]]);
   });
 
   it('antd plain Input is a native text control', () => {
@@ -429,12 +429,12 @@ describe('discover: Element Plus widgets', () => {
     expect(controls.map((c) => c.dateGranularity)).toEqual(['day', 'month', 'year', 'day']);
   });
 
-  it('Element range / time pickers are unsupported (consumed, not reported)', () => {
+  it('Element ranges are one field each, and time pickers are left alone (consumed, not reported)', () => {
     const controls = scan(`
       <div class="el-date-editor el-date-editor--daterange el-range-editor el-input__wrapper"><input class="el-range-input" placeholder="开始"><span class="el-range-separator">-</span><input class="el-range-input" placeholder="结束"></div>
       <div class="el-date-editor el-date-editor--monthrange el-range-editor el-input__wrapper"><input class="el-range-input"><input class="el-range-input"></div>
       <div class="el-date-editor el-date-editor--time el-input"><div class="el-input__wrapper"><input class="el-input__inner"></div></div>`);
-    expect(controls).toEqual([]);
+    expect(controls.map((c) => [c.kind, c.lib, c.dateRange, c.dateGranularity])).toEqual([['date', 'element', true, 'day'], ['date', 'element', true, 'month']]);
   });
 
   it('plain el-input exposes its inner native input / textarea as text', () => {

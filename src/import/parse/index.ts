@@ -1,9 +1,10 @@
 // Lines of a resume to a draft for the applicant to check. Pure: no DOM, no storage, no network.
+import { toSimplified } from '../../dictionary/normalize';
 import { matchSection } from '../../dictionary/sections';
 import type { SectionKey } from '../../schema/fieldKeys';
 import type { TextLine } from '../extract/types';
-import { cleanLines, withoutLongNumbers } from './clean';
-import { phoneUnderLabel, readFormats, readLabels } from './contact';
+import { cleanLines } from './clean';
+import { isEmail, phoneUnderLabel, readFormats, readLabels } from './contact';
 import { readEducation, readJobs, readProjects, readSkills } from './entries';
 import type { Draft, DraftField } from './types';
 
@@ -15,7 +16,7 @@ const NOT_A_NAME = /(?:简历|履历|resume|curriculum vitae|\bcv\b)/i;
 
 /** A heading stands alone, says what follows, and holds no value. */
 function headingOf(line: TextLine): SectionKey | 'other_people' | 'summary' | null {
-  const t = line.text.trim().replace(/[：:]$/, '');
+  const t = toSimplified(line.text.trim().replace(/[：:]$/, ''));
   if (line.cells.length > 1 || t.length > MAX_HEADING_CHARS) return null;
   if (/^(?:推荐人|证明人|紧急联系人|家庭成员|家庭情况|(?:professional |character |work )?(?:referees?|references?)(?: details| contacts?| information)?|emergency contacts?(?: details| information)?|next of kin)(?:\s*\d+)?$/i.test(t)) return 'other_people';
   if (/\d|@/.test(t)) return null;
@@ -33,7 +34,7 @@ function splitName(name: string, line: number): DraftField[] {
   const f = (path: string, value: string): DraftField => ({ path, value, certainty: 'check', line });
   const han = name.replace(/\s/g, '');
   if (/^\p{Script=Han}{2,5}$/u.test(han)) {
-    const family = ZH_TWO_CHAR_FAMILY.exec(han)?.[0] ?? han[0]!;
+    const family = han.slice(0, ZH_TWO_CHAR_FAMILY.exec(toSimplified(han))?.[0]?.length ?? 1);
     return [f('basics.familyName', family), f('basics.givenName', han.slice(family.length))];
   }
   const preferred = /[(（]([^)）]+)[)）]/.exec(name)?.[1]?.trim();
@@ -93,7 +94,7 @@ const MARITAL_WORDS: Record<string, string> = { 未婚: 'single', 已婚: 'marri
 /** Words a label's value is written in, to the codes a resume keeps. What cannot be turned into a code is dropped. */
 function settle(fields: DraftField[]): DraftField[] {
   return fields.flatMap((f): DraftField[] => {
-    const key = f.value.trim().toLowerCase();
+    const key = toSimplified(f.value.trim().toLowerCase());
     if (f.path === 'name') return splitName(f.value, f.line);
     if (f.path === 'location') return [{ ...f, path: 'contact.address.city', certainty: 'check' }];
     if (f.path === 'contact.phone') {
@@ -123,23 +124,38 @@ export const MAX_DRAFT_FIELDS = 500;
 const OTHER_PERSON_LINE = /紧急联系人|推荐人|证明人|referee|emergency contact|next of kin/i;
 const isSentence = (text: string): boolean => /[.。!！?？]\s*$/.test(text) || text.length > 120;
 
-/** What the applicant wrote freely has no business holding a long number, whoever's it is. */
-const FREE_TEXT = /^(?:selfIntroduction$|skills\.|(?:work|projects|education)\.\d+\.(?:description|major|school|company|position|name|role)$|contact\.address\.street$|basics\.nationality$)/;
+const IS_DATE = /^\d{4}-\d{2}(?:-\d{2})?$/;
+const IS_LINK = /^https?:\/\/\S+$/;
+/** The fields with a format of their own. What does not meet it was misread, and is not offered at all. */
+const FORMATS: [RegExp, (value: string) => boolean][] = [
+  [/^contact\.email$/, isEmail],
+  [/^contact\.phone$/, (v) => /^[+()\d\s.-]+$/.test(v) && v.replace(/\D/g, '').length >= 6 && v.replace(/\D/g, '').length <= 15],
+  [/^contact\.phoneCountryCode$/, (v) => /^\+\d{1,4}$/.test(v)],
+  [/^contact\.(?:website|linkedin|github|portfolio)$/, (v) => IS_LINK.test(v)],
+  [/(?:startDate|endDate|birthDate|\.date)$/, (v) => IS_DATE.test(v)],
+];
+/** Whatever the applicant wrote in their own words could hold anything, and is for them to look over. */
+const FREE_TEXT = /^selfIntroduction$|^skills\.|\.(?:description|courses|honors)$/;
+/** A name, a school, a company: none of them has a reason to hold this much of a number. */
+const LONG_NUMBER = /\d(?:[ .()/_-]{0,2}\d){5,}|(?<![A-Za-z0-9])[A-Za-z]{0,3}\d{4,}[A-Za-z0-9]*/;
 
-function withoutStrayNumbers(f: DraftField): DraftField[] {
-  if (!FREE_TEXT.test(f.path)) return [f];
-  const value = f.value.split('\n').map(withoutLongNumbers).filter(Boolean).join('\n');
-  return value ? [{ ...f, value }] : [];
+function checkedAgainstFormat(f: DraftField): DraftField[] {
+  const format = FORMATS.find(([path]) => path.test(f.path));
+  if (format) return format[1](f.value.trim()) ? [f] : [];
+  if (FREE_TEXT.test(f.path) || LONG_NUMBER.test(f.value)) return [{ ...f, certainty: 'check' }];
+  return [f];
 }
 
-/** One box per field on the check page: what is certain if something is, or else the first one found. */
 function oncePerPath(fields: DraftField[]): DraftField[] {
   const out = new Map<string, DraftField>();
+  const disputed = new Set<string>();
   for (const f of fields) {
     const seen = out.get(f.path);
+    if (seen && seen.value.trim().toLowerCase() !== f.value.trim().toLowerCase()) disputed.add(f.path);
     if (!seen || (seen.certainty === 'check' && f.certainty === 'high')) out.set(f.path, f);
   }
-  return [...out.values()];
+  // Two different answers in the same file: which is meant is for the applicant to say.
+  return [...out.values()].map((f) => (disputed.has(f.path) ? { ...f, certainty: 'check' as const } : f));
 }
 
 export function parseResume(raw: TextLine[]): Draft {
@@ -169,7 +185,7 @@ export function parseResume(raw: TextLine[]): Draft {
   const otherPeople = new Set(section('other_people'));
   // A line that says whose details it holds, wherever it stands.
   lines.forEach((l, i) => {
-    if (OTHER_PERSON_LINE.test(l.text)) otherPeople.add(i);
+    if (OTHER_PERSON_LINE.test(toSimplified(l.text))) otherPeople.add(i);
   });
 
   // A file with no headings at all has only a top, and no reason to call all of it the applicant's own. A sentence is
@@ -204,5 +220,5 @@ export function parseResume(raw: TextLine[]): Draft {
   fields.push(...readProjects(section('projects'), lines));
   fields.push(...readSkills(section('skills'), lines));
 
-  return { locale, fields: oncePerPath(settle(fields).flatMap(withoutStrayNumbers)).slice(0, MAX_DRAFT_FIELDS) };
+  return { locale, fields: oncePerPath(settle(fields).flatMap(checkedAgainstFormat)).slice(0, MAX_DRAFT_FIELDS) };
 }

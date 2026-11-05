@@ -1,4 +1,5 @@
 // What a resume proves by its format: emails, phone numbers, links. And what it says by a label.
+import { toSimplified } from '../../dictionary/normalize';
 import type { TextLine } from '../extract/types';
 import type { DraftField } from './types';
 
@@ -33,10 +34,15 @@ export function phoneUnderLabel(text: string): Phone | { code: null; number: str
   const t = text.trim();
   if (!/^[+()\d\s.-]+$/.test(t) || YEARS.test(t)) return null;
   const known = findPhone(t);
-  if (known) return known;
+  if (known) return isAllOfIt(t, known) ? known : null;
   if (t.startsWith('+')) return null;
   const m = ANY_NUMBER.exec(t);
   return m ? { code: null, number: digits(m[1]!) } : null;
+}
+
+/** A phone found in a longer run of digits is no phone: "0412 345 678 123 456 782". */
+function isAllOfIt(text: string, phone: Phone): boolean {
+  return digits(text).length <= digits(phone.code).length + phone.number.length;
 }
 
 export const isEmail = (text: string): boolean => {
@@ -72,18 +78,62 @@ function endsCleanly(text: string, email: RegExpExecArray): boolean {
   return !(next && /[A-Za-z0-9]/.test(next)) && (tld === tld.toLowerCase() || tld === tld.toUpperCase());
 }
 
+const OTHER_PEOPLE_WORDS = /父|母|爸|妈|配偶|爱人|丈夫|妻子|兄|弟|姐|妹|联系人|老师|导师|教授|同学|经理|主管|\b(?:father|mother|dad|mum|mom|parent|spouse|wife|husband|brother|sister|manager|recruiter|agent|referee|supervisor|emergency|prof|professor|dr)\b/i;
+const NAME_OR_PLACE = /^(?:\p{Lu}[\p{L}'’.-]*(?: \p{Lu}[\p{L}'’.-]*){0,3}(?: \d{3,6})?|\p{Script=Han}{2,5})$/u;
+const CLEARLY_A_PLACE = /^(?:\p{Lu}[\p{L} ]{1,24}\s+(?:NSW|VIC|QLD|SA|WA|TAS|ACT|NT)(?: \d{4})?|(?:NSW|VIC|QLD|SA|WA|TAS|ACT|NT) \d{4}|\p{Script=Han}{2,12}[省市区县])$/u;
+const ABOUT_THEMSELVES = /^(?:男|女|\d{1,2}岁|已婚|未婚)$/;
+const CONTACT_WORD = 'phone|mobile|mob|tel|ph|cell|email|e-mail|linkedin|github|website|web|site|blog|portfolio|location|city|address|电话|手机|手机号|手机号码|电话号码|联系电话|联系方式|邮箱|邮件|个人网站|个人主页|网站|主页|博客|领英|现居城市|现居地|居住地|所在地|所在城市|城市|地址';
+const CONTACT_LABEL = new RegExp(String.raw`^(?:${CONTACT_WORD})\s*[:：]?\s*`, 'i');
+const SAYS_ITS_LABEL = new RegExp(String.raw`^(?:${CONTACT_WORD})\s*[:：]\s*(.*)$`, 'i');
+/** What only the applicant would say of themselves on this line, followed by one thing and no more. */
+const ABOUT_THEMSELVES_LABEL = /^(?:微信|wechat|qq|性别|年龄|籍贯|民族|学历|政治面貌|出生年月|出生日期|婚姻状况)\s*[:：]\s*\S*$/i;
+
+const BEFORE_A_LABEL = /\s+(?=[\p{Script=Han}A-Za-z-]{1,12}\s*[:：])/gu;
+
+/** The pieces of a line, once the addresses and links that hold the marks parting everything else are out of it. */
+const partsOf = (text: string): string[] => text.replace(EMAIL, ' ').replace(URL_LIKE, ' ').replace(BEFORE_A_LABEL, '  ').split(CHUNKS);
+
+/** The line above says whose this is: "Agent:", "Father". */
+function introducedBySomeoneElse(above: string | undefined): boolean {
+  const t = toSimplified(above?.trim() ?? '');
+  if (!t || t.length > 30) return false;
+  return OTHER_PEOPLE_WORDS.test(t) || (/[:：]$/.test(t) && !CONTACT_LABEL.test(t));
+}
+
+/**
+ * Whether the details on a line can be called the applicant's. Numbers, addresses and links can stand alone, or under
+ * a label of their own. Any other word could be whose they are ("Dad", "李教授"). Only the line with the applicant's
+ * name on it gets to have any, as the name or a town, and the line right after it gets to have a town that says so.
+ */
+function holdsOnlyContactDetails(line: TextLine, isNameLine: boolean, afterName: boolean, above: string | undefined): boolean {
+  if (introducedBySomeoneElse(above)) return false;
+  const texts = line.cells.length > 1 ? line.cells : [line.text];
+  return texts.every((text) =>
+    partsOf(text).every((raw) => {
+      const whole = toSimplified(raw.trim());
+      if (OTHER_PEOPLE_WORDS.test(whole)) return false;
+      if (ABOUT_THEMSELVES_LABEL.test(whole)) return true;
+      const labelled = SAYS_ITS_LABEL.exec(whole);
+      if (labelled) return (labelled[1] ?? '').trim().split(/\s+/).length <= 4;
+      const chunk = whole.replace(CONTACT_LABEL, '');
+      if (!chunk || /^[+()\d\s.-]+$/.test(chunk) || ABOUT_THEMSELVES.test(chunk)) return true;
+      if (isNameLine) return NAME_OR_PLACE.test(chunk);
+      return afterName && CLEARLY_A_PLACE.test(chunk);
+    }),
+  );
+}
+
 const CHUNKS = /\s*[|｜•·,，;；/]\s*|\s{2,}|　+/;
 
 /** A number in a piece of its own. On a line that goes on about something else it could be anything. */
-function standingPhone(line: TextLine, email: RegExpExecArray | null): Phone | null {
+function standingPhone(line: TextLine): Phone | null {
   const cells = line.cells.length > 1 ? line.cells : [line.text];
   for (const cell of cells) {
-    const text = (email ? cell.replace(EMAIL, ' ') : cell).replace(URL_LIKE, ' ');
-    for (const chunk of text.split(CHUNKS)) {
-      const t = chunk.trim();
+    for (const chunk of partsOf(cell)) {
+      const t = toSimplified(chunk.trim()).replace(CONTACT_LABEL, '');
       if (!/^[+()\d\s.-]+$/.test(t)) continue;
       const phone = findPhone(t);
-      if (phone) return phone;
+      if (phone && isAllOfIt(t, phone)) return phone;
     }
   }
   return null;
@@ -97,6 +147,11 @@ function standingPhone(line: TextLine, email: RegExpExecArray | null): Phone | n
 export function readFormats(lines: TextLine[], otherPeople: Set<number>, ownLines: Set<number>): DraftField[] {
   const out: DraftField[] = [];
   const once = new Set<string>();
+  // The first thing in a file, when it starts with what could be a name.
+  const first = lines.findIndex((l) => l.text.trim());
+  // "Zhiyuan (Leo) Lin": what goes by another name is still a name.
+  const firstPart = toSimplified((lines[first]?.cells[0] ?? '').split(CHUNKS)[0] ?? '').replace(/\s*[(（][^)）]*[)）]/g, '').trim();
+  const nameLine = NAME_OR_PLACE.test(firstPart) && !OTHER_PEOPLE_WORDS.test(firstPart) ? first : -1;
   const add = (f: DraftField): void => {
     if (once.has(f.path)) return;
     once.add(f.path);
@@ -107,21 +162,22 @@ export function readFormats(lines: TextLine[], otherPeople: Set<number>, ownLine
     const own = ownLines.has(i);
     const email = l.text.includes('@') ? EMAIL.exec(l.text) : null;
     // Not once: a certain one further down is better than one to check higher up, and parseResume keeps the better.
-    if (email) out.push(field('contact.email', email[0], i, own && endsCleanly(l.text, email) ? 'high' : 'check'));
+    const plainContact = own && holdsOnlyContactDetails(l, i === nameLine, nameLine >= 0 && i === nameLine + 1, lines[i - 1]?.text);
+    if (email) out.push(field('contact.email', email[0], i, plainContact && endsCleanly(l.text, email) ? 'high' : 'check'));
     const noMail = email ? l.text.replace(EMAIL, ' ') : l.text;
     for (const hit of noMail.match(URL_LIKE) ?? []) {
       const url = hit.replace(/[.。]+$/, '');
       const full = /^https?:/i.test(url) ? url : `https://${url}`;
-      if (/linkedin\.com\/in\//i.test(url)) add(field('contact.linkedin', full, i, own ? 'high' : 'check'));
+      if (/linkedin\.com\/in\//i.test(url)) add(field('contact.linkedin', full, i, plainContact ? 'high' : 'check'));
       else if (/github\.com\//i.test(url)) {
-        if (GITHUB_PROFILE.test(url)) add(field('contact.github', full, i, own ? 'high' : 'check'));
-      } else if (own) add(field('contact.website', full, i));
+        if (GITHUB_PROFILE.test(url)) add(field('contact.github', full, i, plainContact ? 'high' : 'check'));
+      } else if (own) add(field('contact.website', full, i, plainContact ? 'high' : 'check'));
     }
     if (!own || once.has('contact.phone')) return;
-    const phone = standingPhone(l, email);
+    const phone = standingPhone(l);
     if (phone) {
-      add(field('contact.phone', phone.number, i));
-      add(field('contact.phoneCountryCode', phone.code, i, phone.inferred ? 'check' : 'high'));
+      add(field('contact.phone', phone.number, i, plainContact ? 'high' : 'check'));
+      add(field('contact.phoneCountryCode', phone.code, i, phone.inferred || !plainContact ? 'check' : 'high'));
     }
   });
   return out;
@@ -154,12 +210,12 @@ const LABELS: Label[] = [
 const NEVER_READ = /^(?:身份证|身份证号|身份证号码|证件号|证件号码|护照|护照号|护照号码|passport|passport number|id number|id card)$/i;
 
 const labelOf = (raw: string): Label | null => {
-  const t = raw.replace(/[：:\s]+$/, '').trim();
+  const t = toSimplified(raw.replace(/[：:\s]+$/, '').trim());
   if (NEVER_READ.test(t)) return null;
   return LABELS.find((l) => l.words.test(t)) ?? null;
 };
 
-const isLabelCell = (raw: string): boolean => /[：:]\s*$/.test(raw) && (!!labelOf(raw) || NEVER_READ.test(raw.replace(/[：:\s]+$/, '').trim()));
+const isLabelCell = (raw: string): boolean => /[：:]\s*$/.test(raw) && (!!labelOf(raw) || NEVER_READ.test(toSimplified(raw).replace(/[：:\s]+$/, '').trim()));
 
 /** Label and value: in two cells of a table, or in a run of text. */
 export function readLabels(lines: TextLine[], otherPeople: Set<number>, ownLines: Set<number>): DraftField[] {

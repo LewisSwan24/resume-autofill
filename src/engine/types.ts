@@ -35,6 +35,8 @@ export interface Control {
   /** Statically known options (native select / radio group / checkbox group). */
   options?: OptionInfo[];
   dateGranularity?: 'day' | 'month' | 'year';
+  /** A date picker that holds a start and an end in one field. */
+  dateRange?: boolean;
   /** A question an adapter found outside any label. */
   questionText?: string;
   /** From an adapter: what this control is for, whatever else the page says about it. */

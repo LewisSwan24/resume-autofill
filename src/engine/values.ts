@@ -123,6 +123,22 @@ function ageOf(birthDate: string, now: Date): number | null {
   return age >= 0 ? age : null;
 }
 
+const STILL_GOING = 'now';
+
+/** A span as "start/end". The end is the word for a current entry, and empty when the file does not say. */
+function periodOf(entry: Record<string, unknown>, source: string): ResolvedValue | null {
+  const start = clean(entry.startDate);
+  if (typeof start !== 'string') return null;
+  const end = clean(entry.endDate);
+  return { raw: `${start}/${typeof end === 'string' ? end : entry.current === true ? STILL_GOING : ''}`, source };
+}
+
+function periodText(start: string, end: string, locale: Locale): string | null {
+  if (!end) return null;
+  if (locale === 'zh-CN') return `${start.replaceAll('-', '.')}-${end === STILL_GOING ? '至今' : end.replaceAll('-', '.')}`;
+  return `${start} - ${end === STILL_GOING ? 'Present' : end}`;
+}
+
 function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): ResolvedValue | null {
   const { basics, contact } = resume;
   switch (fieldKey) {
@@ -205,6 +221,7 @@ export function resolveValue(
     const entry = row.entry as Record<string, unknown>;
     const source = `${module}[${row.index}].${field}`;
     if (field === 'endDate' && entry.current === true && !entry.endDate) return null;
+    if (field === 'period') return periodOf(entry, source);
     return wrap(entry[field], source);
   }
   const single = (resume as unknown as Record<string, Record<string, unknown> | undefined>)[module];
@@ -369,8 +386,19 @@ export function toIntent(
   if (kind === 'checkbox' && !control.options) {
     return def.type === 'bool' && typeof raw === 'boolean' ? { kind: 'check', checked: raw } : null;
   }
+  if (def.type === 'period') {
+    if (typeof raw !== 'string') return null;
+    const [start = '', end = ''] = raw.split('/');
+    if (kind === 'date') {
+      const [from, to] = control.dateRange ? [dateIntent(start, control), dateIntent(end, control)] : [null, null];
+      if (from?.kind !== 'date' || to?.kind !== 'date') return null;
+      return { kind: 'dateRange', display: `${from.display} ~ ${to.display}`, start: from, end: to };
+    }
+    const text = isTextLike(control) ? periodText(start, end, locale) : null;
+    return text === null ? null : { kind: 'text', text };
+  }
   if (kind === 'date') {
-    return def.type === 'date' && typeof raw === 'string' ? dateIntent(raw, control) : null;
+    return def.type === 'date' && !control.dateRange && typeof raw === 'string' ? dateIntent(raw, control) : null;
   }
 
   switch (def.type) {

@@ -1,6 +1,6 @@
 // Education, jobs and projects: a date range marks each entry, and the words around it say what is what.
 import { OPTION_SYNONYMS } from '../../dictionary';
-import { normalizeLabel } from '../../dictionary/normalize';
+import { normalizeLabel, toSimplified } from '../../dictionary/normalize';
 import type { TextLine } from '../extract/types';
 import { findDateRange, type DateRange } from './dates';
 import type { DraftField } from './types';
@@ -42,7 +42,8 @@ function piecesOf(line: TextLine, range: DateRange | null): string[] {
   const cells = line.cells.length > 1 ? line.cells : [line.text];
   const pieces = cells.flatMap((c) => {
     const inner = range ? (findDateRange(c)?.rest ?? c) : c;
-    return inner.split(/\s*[,，|｜]\s*|\s{2,}|　+/);
+    // A single space keeps "Bachelor of Design" whole and is all that stands between 虚构大学 and 硕士.
+    return inner.split(/\s*[,，|｜]\s*|\s{2,}|　+|(?<=\p{Script=Han}) (?=\p{Script=Han})/u);
   });
   return pieces.map((p) => p.trim()).filter(Boolean);
 }
@@ -75,7 +76,9 @@ function blocksOf(section: number[], all: TextLine[]): Block[] {
 }
 
 function datesOf(prefix: string, b: Block): DraftField[] {
-  const certainty = b.range.monthGuessed ? 'check' : 'high';
+  const beside = toSimplified(b.range.rest);
+  // Dates on a line that names no employer, school or role could be the dates of anything.
+  const certainty = b.range.monthGuessed || !(COMPANY_WORDS.test(beside) || TITLE_WORDS.test(beside) || SCHOOL_WORDS.test(beside)) ? 'check' : 'high';
   const out: DraftField[] = [{ path: `${prefix}.startDate`, value: b.range.start, certainty, line: b.anchor }];
   if (b.range.current) out.push({ path: `${prefix}.current`, value: 'true', certainty: 'high', line: b.anchor });
   else out.push({ path: `${prefix}.endDate`, value: b.range.end!, certainty, line: b.anchor });
@@ -97,7 +100,7 @@ export function readEducation(section: number[], all: TextLine[], start = 0): Dr
       for (const piece of piecesOf(line, i === b.anchor ? b.range : null)) {
         const found = degreeIn(piece);
         // "Bachelor of Design" gives both, "本科" gives one, and a school can hold a degree's word without being one.
-        if (!school && SCHOOL_WORDS.test(piece)) {
+        if (!school && SCHOOL_WORDS.test(toSimplified(piece))) {
           school = piece;
           out.push(check(`${prefix}.school`, piece, i));
           continue;
@@ -146,8 +149,8 @@ export function readJobs(section: number[], all: TextLine[], start: number, kind
       }
       for (const text of piecesOf(line, i === b.anchor ? b.range : null)) pieces.push({ text, line: i });
     }
-    const company = pieces.find((p) => COMPANY_WORDS.test(p.text) && !TITLE_WORDS.test(p.text)) ?? null;
-    const title = pieces.find((p) => p !== company && TITLE_WORDS.test(p.text)) ?? null;
+    const company = pieces.find((p) => COMPANY_WORDS.test(toSimplified(p.text)) && !TITLE_WORDS.test(toSimplified(p.text))) ?? null;
+    const title = pieces.find((p) => p !== company && TITLE_WORDS.test(toSimplified(p.text))) ?? null;
     const left = pieces.filter((p) => p !== company && p !== title);
     const companyFound = company ?? left.shift() ?? null;
     const titleFound = title ?? left.shift() ?? null;

@@ -37,7 +37,7 @@ export const SECTION_SYNONYMS: Record<SectionKey, string[]> = {
     'Projects', 'Project experience', 'Project history', 'Key projects', 'Personal projects',
   ],
   campus: [
-    '校园经历', '校园活动', '社会实践', '社团经历', '学生干部经历', '实践经历', '校内经历', '课外活动',
+    '校园经历', '校园活动', '社会实践', '社团经历', '学生干部经历', '实践经历', '校内经历', '课外活动', '在校实践', '在校经历', '校内实践',
     'Campus activities', 'Campus experience', 'Extracurricular activities', 'Extracurriculars',
     'Leadership and activities', 'Volunteering', 'Student activities',
   ],

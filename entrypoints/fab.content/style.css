@@ -32,6 +32,14 @@
   overflow: visible !important;
 }
 
+/* Moved by hand (drag.ts): the stored place wins over the corner and over keepClear's lift. */
+:host([data-placed]) {
+  top: var(--resume-autofill-fab-top) !important;
+  left: var(--resume-autofill-fab-left) !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+
 .raf-root {
   position: relative;
   display: block;
@@ -139,10 +147,17 @@
   padding: 0 var(--raf-space-4) 0 var(--raf-space-3);
   text-align: start;
   white-space: nowrap;
+  /* A finger on the button drags it (drag.ts) instead of scrolling the page. */
+  touch-action: none;
+  user-select: none;
 }
 
 .raf-fab[aria-busy='true'] {
   cursor: progress;
+}
+
+:host([data-dragging]) .raf-fab {
+  cursor: grabbing;
 }
 
 /*
@@ -222,7 +237,8 @@
   display: flex;
   flex-direction: column;
   width: min(var(--raf-size-card-width), calc(100vw - 2 * var(--raf-space-4)));
-  max-height: var(--raf-size-card-max-height);
+  /* A button moved by hand may have less room than that on the side the card opens to (drag.ts sets it). */
+  max-height: min(var(--raf-size-card-max-height), var(--resume-autofill-card-room, 100vh));
   padding: var(--raf-space-1) var(--raf-space-1) var(--raf-space-3) var(--raf-space-3);
   border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-md);
@@ -230,6 +246,23 @@
   color: var(--raf-color-text);
   transform-origin: bottom right;
   animation: raf-pop var(--raf-motion-move);
+}
+
+/* A button moved towards the left or the top opens its card towards the middle of the window (drag.ts sets these). */
+:host([data-card-x='start']) .raf-card {
+  right: auto;
+  left: 0;
+  transform-origin: bottom left;
+}
+
+:host([data-card-y='down']) .raf-card {
+  top: calc(100% + var(--raf-space-2));
+  bottom: auto;
+  transform-origin: top right;
+}
+
+:host([data-card-x='start'][data-card-y='down']) .raf-card {
+  transform-origin: top left;
 }
 
 /* Leaving things settle (no bounce); the card stays mounted until this finishes, then Fab removes it. */

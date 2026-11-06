@@ -128,6 +128,11 @@ function buildWidgetDraft(root: HTMLElement, widget: LibraryWidget): Draft {
     if (isDateRangeRoot(root)) draft.dateRange = true;
   } else if (widget.kind === 'radio' || widget.kind === 'checkbox') {
     const inputs = Array.from(root.querySelectorAll<HTMLInputElement>(`input[type=${widget.kind}]`));
+    if (inputs.length === 0 && widget.answer) {
+      const { option, label } = widget.answer;
+      draft.options = Array.from(root.querySelectorAll(option)).map((o) => ({ label: text((o.querySelector(label) ?? o).textContent) }));
+      return draft;
+    }
     draft.options = inputOptions(inputs);
     draft.inputs = inputs;
     if (widget.kind === 'checkbox') draft.multiple = true;

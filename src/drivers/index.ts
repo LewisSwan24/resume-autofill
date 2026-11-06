@@ -2,6 +2,7 @@
 import { antdDrivers } from './antd';
 import { ariaAnswerButtonsDriver, ariaDriver } from './aria';
 import { elementDrivers } from './element';
+import { beisenDrivers } from './beisen';
 import { feishuDrivers } from './feishu';
 import { mokaDrivers } from './moka';
 import { registerDriver } from './registry';
@@ -13,5 +14,5 @@ let registered = false;
 export function registerAllDrivers(): void {
   if (registered) return;
   registered = true;
-  for (const d of [...antdDrivers, ...elementDrivers, ...mokaDrivers, ...feishuDrivers, ariaDriver, ariaAnswerButtonsDriver, searchBoxDriver, workdayPromptDriver]) registerDriver(d);
+  for (const d of [...antdDrivers, ...elementDrivers, ...mokaDrivers, ...feishuDrivers, ...beisenDrivers, ariaDriver, ariaAnswerButtonsDriver, searchBoxDriver, workdayPromptDriver]) registerDriver(d);
 }

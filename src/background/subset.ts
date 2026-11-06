@@ -114,6 +114,9 @@ export function buildResumeSubset(resume: Resume, needs: FrameNeeds): Resume {
     // attachments.* and unknown keys: nothing to copy here
   }
 
+  // An identity or passport number is never filled into any page, whatever the page asks: it stays home.
+  (outBag.basics as Bag).idNumber = '';
+
   // Not a field of its own on any page: it says how the gender field is answered.
   if (requested.has('basics.gender')) {
     (outBag.diversity as Bag).genderAnswer = (srcBag.diversity as Bag).genderAnswer;

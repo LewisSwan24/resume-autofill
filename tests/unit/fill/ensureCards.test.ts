@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureCards, findAddButtons } from '../../../src/fill/ensureCards';
 import { createSampleProfile } from '../../../src/schema';
+import { BEISEN_FORM } from '../../shared/beisenForm';
 
 const zh = createSampleProfile().resumes.find((r) => r.id === 'sample-zh')!;
 
@@ -76,6 +77,29 @@ describe('findAddButtons', () => {
     expect(findAddButtons(document).map((b) => [b.section, b.named])).toEqual([['work', false]]);
   });
 
+  // Beisen draws its add button as a span in two divs, every one of them showing the pointer.
+  const plainAdd = (words: string, pointer = true) => {
+    const cursor = pointer ? ' style="cursor:pointer"' : '';
+    return `<div class="sc-a"${cursor}><div class="sc-b"${cursor}><svg class="icon"></svg><span${cursor}>${words}</span></div></div>`;
+  };
+
+  it('finds an add button that is only words on something shown as clickable, once', () => {
+    document.body.innerHTML = `<h2>项目经历</h2><div><label>项目名称<input></label><label>项目描述<textarea></textarea></label></div>${plainAdd('添加')}`;
+    const found = findAddButtons(document);
+    expect(found.map((b) => [b.text, b.section, b.named])).toEqual([['添加', 'projects', false]]);
+    expect(found[0]!.el.className).toBe('sc-a');
+  });
+
+  it('reads the words of the whole element when React writes them in two pieces', () => {
+    document.body.innerHTML = `<h2>教育经历</h2><div><label>学校<input></label><label>专业<input></label></div>${plainAdd('添加<!-- -->项目经历')}`;
+    expect(findAddButtons(document).map((b) => [b.text, b.section, b.named])).toEqual([['添加项目经历', 'projects', true]]);
+  });
+
+  it('leaves alone the same words where nothing shows them as clickable', () => {
+    document.body.innerHTML = `<h2>项目经历</h2><div><label>项目名称<input></label><label>项目描述<textarea></textarea></label></div>${plainAdd('添加', false)}<p style="cursor:pointer">添加的内容请写在下面</p>`;
+    expect(findAddButtons(document)).toEqual([]);
+  });
+
   it('ignores hidden and disabled add buttons', () => {
     document.body.innerHTML = `<h2>教育经历</h2><button type="button" disabled>添加教育经历</button>
       <button type="button" style="display:none">添加教育经历</button><button type="button" aria-disabled="true">添加教育经历</button>`;
@@ -93,6 +117,28 @@ describe('ensureCards', () => {
     expect(page.clicks.filter((c) => c === 'add-intern')).toHaveLength(2);
     expect(results.find((r) => r.section === 'education')).toMatchObject({ added: 1, status: 'ok', have: 2, need: 2 });
     expect(results.find((r) => r.section === 'internship')).toMatchObject({ added: 2, status: 'ok', need: 2 });
+  });
+
+  it('grows a Beisen section through its plain add button: one project on the page, two on the resume', async () => {
+    const doc = new DOMParser().parseFromString(`<body>${BEISEN_FORM}</body>`, 'text/html');
+    document.body.replaceChildren(...Array.from(doc.body.childNodes).map((n) => document.adoptNode(n)));
+    // Only the projects section: scanning the whole form again after every click is slow in jsdom.
+    for (const s of Array.from(document.querySelectorAll('.sc-sect'))) if (s.querySelector('.sc-title')!.textContent !== '项目经历') s.remove();
+    const projects = document.querySelector('.sc-sect')!;
+    const body = projects.querySelector('.sc-body')!;
+    // Leave the section with one project, as a fresh form has it.
+    body.querySelectorAll('.sc-entry')[1]!.remove();
+    const entry = body.querySelector('.sc-entry')!.outerHTML;
+    const add = body.querySelector('.sc-add')!;
+    let clicks = 0;
+    add.addEventListener('click', () => {
+      clicks++;
+      add.insertAdjacentHTML('beforebegin', entry);
+    });
+    const results = await ensureCards(document, zh, { timeoutMs: 500 });
+    expect(body.querySelectorAll('.sc-entry')).toHaveLength(2);
+    expect(clicks).toBe(1);
+    expect(results.find((r) => r.section === 'projects')).toMatchObject({ added: 1, status: 'ok', have: 2, need: 2 });
   });
 
   it('never clicks submit, next or delete buttons and never submits the form', async () => {

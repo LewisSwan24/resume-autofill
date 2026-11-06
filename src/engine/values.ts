@@ -203,6 +203,9 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
   }
 }
 
+/** An identity or passport number. */
+const NEVER_GIVEN: ReadonlySet<string> = new Set(['basics.idNumber']);
+
 /**
  * Value of a field key for card `entryIndex` of a page section. Handles derived keys, the work/internship
  * split, and treats empty strings / null as missing. A current entry has no end date.
@@ -216,6 +219,8 @@ export function resolveValue(
 ): ResolvedValue | null {
   const dot = fieldKey.indexOf('.');
   if (dot < 0) return null;
+  // Never filled, wherever it is asked for and whatever the resume holds.
+  if (NEVER_GIVEN.has(fieldKey)) return null;
   const module = fieldKey.slice(0, dot);
   const field = fieldKey.slice(dot + 1);
 

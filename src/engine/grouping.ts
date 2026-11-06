@@ -8,6 +8,7 @@ import {
   cleanEvidenceText,
   containsField,
   textWithoutControls, FORM_ITEM_SELECTOR } from './evidence';
+import { ADD_BUTTON_SELECTOR, plainAddButtons } from './addButtons';
 import type { Control, FieldContext, FieldGroup } from './types';
 
 export interface SectionInfo {
@@ -18,11 +19,13 @@ export interface SectionInfo {
 }
 
 const MAX_CLASS_HEADING = 30;
+/** A title told only by its words: 教育经历, Work experience. */
+const MAX_PLAIN_HEADING = 20;
+const MAX_PLAIN_HEADING_PARTS = 2;
 /** Class-name guess for headings; library internals (form items, selects, tables...) are excluded. */
 const CLASS_HEADING = /title|header|heading/i;
 const CLASS_NOT_HEADING = /(?:^|\s)(?:ant|el)-(?:form|select|input|picker|table|cascader|upload|radio|checkbox|steps|menu)/i;
 const PAGE_ROOT = /^(?:BODY|HTML)$/;
-const ADD_BUTTON_SELECTOR = 'button, a, [role=button], input[type=button], .ant-btn, .el-button';
 const DIGEST_SIMILARITY = 0.6;
 
 // ---- numbering ------------------------------------------------------------------------------------------------
@@ -96,6 +99,11 @@ function headingOf(s: Element, parent: Element): { title: string; heading: Eleme
     const title = headingText(s, MAX_CLASS_HEADING);
     return title ? { title, heading: s } : null;
   }
+  // Classes that are only build hashes say nothing, but a few bare words naming a part of a resume still head it.
+  if (s.querySelectorAll('*').length <= MAX_PLAIN_HEADING_PARTS && fieldCount(parent) >= 2) {
+    const title = headingText(s, MAX_PLAIN_HEADING);
+    if (title && matchSection(title)) return { title, heading: s };
+  }
   return null;
 }
 
@@ -143,11 +151,17 @@ function isStateClass(c: string): boolean {
   );
 }
 
+/** styled-components names the component (`sc-AjmGg`, the same for every instance) and its current styles. */
+const STYLED_COMPONENT = /^sc-/;
+/** The styles' class is a short hash that changes with the props: Beisen's last entry, the one with the add button. */
+const STYLE_HASH = /^(?=[a-zA-Z]*[a-z])(?=[a-zA-Z]*[A-Z])[a-zA-Z]{5,8}$/;
+
 function signature(el: Element): string {
-  const classes = (el.getAttribute('class') ?? '')
+  let classes = (el.getAttribute('class') ?? '')
     .split(/\s+/)
     .filter((c) => c && !isStateClass(c))
     .sort();
+  if (classes.some((c) => STYLED_COMPONENT.test(c))) classes = classes.filter((c) => !STYLE_HASH.test(c));
   return el.tagName.toLowerCase() + (classes.length > 0 ? `.${classes.join('.')}` : '');
 }
 
@@ -194,10 +208,11 @@ function cardMembers(a: Element): Element[] | null {
 }
 
 function findAddButtons(root: Element): Element[] {
-  return Array.from(root.querySelectorAll(ADD_BUTTON_SELECTOR)).filter((b) => {
+  const buttons = Array.from(root.querySelectorAll(ADD_BUTTON_SELECTOR)).filter((b) => {
     const text = b instanceof HTMLInputElement ? b.value : (b.textContent ?? '');
     return isAddButtonText(cleanEvidenceText(text));
   });
+  return [...buttons, ...plainAddButtons(root)];
 }
 
 /**

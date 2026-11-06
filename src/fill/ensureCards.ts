@@ -1,6 +1,7 @@
 // Grow repeated sections (education, internship, ...) until the page has one card per resume entry,
 // by clicking the section's "add" button. Never clicks anything that is not an add button.
 import { isAddButtonText, isDeleteText, matchSection } from '../dictionary';
+import { ADD_BUTTON_SELECTOR, plainAddButtons } from '../engine/addButtons';
 import { cleanEvidenceText } from '../engine/evidence';
 import { findSection } from '../engine/grouping';
 import { planFill } from '../engine/plan';
@@ -39,7 +40,6 @@ export interface EnsureCardsOptions {
   skip?: ReadonlySet<SectionKey>;
 }
 
-const ADD_BUTTON_SELECTOR = 'button, a, [role=button], input[type=button], .ant-btn, .el-button';
 const FIELD_SELECTOR = 'input, select, textarea, [contenteditable=""], [contenteditable="true"]';
 const ADD_WORDS = /^[\s+＋]*(?:继续添加|再添加|再增加|添加更多|添加|新增|增加|add\s+(?:another|more|new)|add)\s*/i;
 const SECTION_FROM_TEXT_MIN = 0.8;
@@ -86,7 +86,8 @@ function isDisabled(el: HTMLElement): boolean {
 /** Add buttons on the page with the section each one belongs to. */
 export function findAddButtons(doc: Document): AddButton[] {
   const out: AddButton[] = [];
-  for (const el of Array.from(doc.querySelectorAll<HTMLElement>(ADD_BUTTON_SELECTOR))) {
+  const plain = new Set(plainAddButtons(doc));
+  for (const el of [...Array.from(doc.querySelectorAll<HTMLElement>(ADD_BUTTON_SELECTOR)), ...plain]) {
     const text = buttonText(el);
     if (!text || !isAddButtonText(text) || isDeleteText(text)) continue;
     if (!isVisible(el) || isDisabled(el)) continue;
@@ -95,7 +96,7 @@ export function findAddButtons(doc: Document): AddButton[] {
     // it is kept and `clickAdd` cancels the submit it would trigger.)
     if (isExplicitSubmit(el) || navigates(el)) continue;
     // A button that is merely the label wrapper of an inner button counts once (the inner one).
-    if (el !== el.closest(ADD_BUTTON_SELECTOR) || el.querySelector(ADD_BUTTON_SELECTOR)) continue;
+    if (!plain.has(el) && (el !== el.closest(ADD_BUTTON_SELECTOR) || el.querySelector(ADD_BUTTON_SELECTOR))) continue;
     const rest = text.replace(ADD_WORDS, '');
     const own = rest ? matchSection(rest) : null;
     if (own && own.confidence >= SECTION_FROM_TEXT_MIN) {

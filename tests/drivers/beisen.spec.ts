@@ -202,7 +202,9 @@ async function mountBeisen(setup: Setup): Promise<void> {
           const name = entry.querySelector('.item-text-label')!.textContent!;
           if (t.closest('svg') && t.closest('.icon-container')) {
             if (limit === 1) picked.splice(0, picked.length, name);
-            else if (!picked.includes(name) && picked.length < limit) picked.push(name);
+            // A second click on a circle takes the answer back again.
+            else if (picked.includes(name)) picked.splice(picked.indexOf(name), 1);
+            else if (picked.length < limit) picked.push(name);
             right.textContent = picked.join(' ');
             // Picking draws the list again.
             data.innerHTML = data.innerHTML;
@@ -255,6 +257,40 @@ test.describe('Beisen lists', () => {
     const r = await execIntent(page, '学历', choice('MBA'));
     expect(r.outcome).toBe('filled');
     await expect(box('学历')).toHaveValue('MBA');
+  });
+
+  // Only the rows in view are drawn: a near fit among them must not stand in for the exact answer further down.
+  test('an exact answer further down wins over a near one in view', async () => {
+    await mountBeisen({ lists: { 学位: ['计算机科学与技术', '软件工程', '电子信息', '数学', '物理', '计算机科学'] } });
+    // The real matcher calls 计算机科学与技术 a near fit (about 0.83) for 计算机科学, and the answer itself a sure one.
+    const r = await page.evaluate(async () => {
+      const found = window.__raf.locate('学位');
+      const control = window.__raf.discover(document).find((c) => c.id === found.id)!;
+      return window.__raf.executeStep(
+        {
+          fieldId: found.id,
+          fieldKey: 'test.field',
+          confidence: 1,
+          label: found.label,
+          intent: {
+            kind: 'choice',
+            display: '计算机科学',
+            query: '计算机科学',
+            match: (options) => {
+              const exact = options.findIndex((o) => o.label === '计算机科学');
+              if (exact >= 0) return { status: 'matched', index: exact, confidence: 1 };
+              const near = options.findIndex((o) => o.label.startsWith('计算机科学'));
+              return near >= 0 ? { status: 'matched', index: near, confidence: 0.83 } : { status: 'none' };
+            },
+          },
+        },
+        control,
+        document,
+      );
+    });
+    expect(r.outcome).toBe('filled');
+    await expect(box('学位')).toHaveValue('计算机科学');
+    await expect(layers()).toHaveCount(0);
   });
 
   test('nothing fitting picks nothing and shuts the list', async () => {
@@ -318,6 +354,14 @@ test.describe('Beisen pickers of constants', () => {
     const r = await execIntent(page, '期望从事行业', { kind: 'multi', display: '', items: [{ query: '互联网/电子商务' }, { query: '银行' }] });
     expect(r.outcome).toBe('filled');
     await expect(tags('期望从事行业')).toHaveText(['互联网/电子商务', '银行']);
+    await expect(layers()).toHaveCount(0);
+  });
+
+  test('two answers that land on one entry leave it picked, not taken back', async () => {
+    await mountBeisen({ constants: { 期望从事行业: { entries: ['银行', '广告', '互联网/电子商务'], limit: 40 } } });
+    const r = await execIntent(page, '期望从事行业', { kind: 'multi', display: '', items: [{ query: '银行' }, { query: '银行' }] });
+    expect(r.outcome).toBe('filled');
+    await expect(tags('期望从事行业')).toHaveText(['银行']);
     await expect(layers()).toHaveCount(0);
   });
 

@@ -71,20 +71,31 @@ const emptied = (input: HTMLInputElement) => {
 
 // ---- a list ------------------------------------------------------------------------------------------------------
 
-async function pickFromList(control: Control, panel: HTMLElement, intent: { query: string; match: OptionMatcher }, ctx: DriverContext): Promise<FillResult> {
+/** A fit this close is the answer itself; anything less among the rows in view may be beaten by one further down. */
+const EXACT = 0.99;
+
+async function pickFromList(
+  control: Control,
+  panel: HTMLElement,
+  intent: { query: string; match: OptionMatcher },
+  ctx: DriverContext,
+  left: Budget,
+): Promise<FillResult> {
   let options = visibleOptions(panel, OPTION);
   let m = intent.match(options.map((o) => o.info));
-  // Only the rows in view are drawn: what is not among them may still be further down, and the search finds it.
+  const exact = () => m.status === 'matched' && m.confidence >= EXACT;
+  // Only the rows in view are drawn: the answer itself may be further down, and the search finds it. A near fit in
+  // view is not taken while the search may still turn up the answer itself.
   const search = panel.querySelector<HTMLInputElement>(LIST_SEARCH);
-  if (m.status === 'none' && search) {
+  if (!exact() && search && left() > 0) {
     typeText(search, intent.query);
     await waitFor(
       () => {
         options = visibleOptions(panel, OPTION);
         m = intent.match(options.map((o) => o.info));
-        return m.status !== 'none' || null;
+        return exact() || null;
       },
-      { timeout: SEARCH_MS, signal: ctx.signal, root: ctx.doc },
+      { timeout: within(SEARCH_MS, left), signal: ctx.signal, root: ctx.doc },
     );
   }
   if (m.status !== 'matched') {
@@ -129,6 +140,8 @@ function among(now: ReturnType<typeof entries>, asked: Asked): Found {
 
 /** Click the circle beside an entry and wait for it to show on the right. */
 async function pickEntry(panel: HTMLElement, entry: Entry, ctx: DriverContext): Promise<boolean> {
+  // On the right already (two answers that land on one entry, or a second try): a click would take it back.
+  if (pickedText(panel).includes(entry.label)) return true;
   const circle = entry.el.querySelector(PICKER_PICK);
   if (!circle) return false;
   simulateClick(circle);
@@ -202,7 +215,8 @@ function cancelPicker(control: Control, panel: HTMLElement, ctx: DriverContext):
 
 async function confirm(control: Control, panel: HTMLElement, wanted: string[], ctx: DriverContext): Promise<boolean> {
   const ok = button(panel, '确定');
-  if (!ok) {
+  // The step ran out of time: what it picked so far is not its answer, so nothing is confirmed.
+  if (!ok || ctx.signal?.aborted) {
     cancelPicker(control, panel, ctx);
     return false;
   }
@@ -219,6 +233,7 @@ async function fillPicker(control: Control, panel: HTMLElement, intent: FillInte
   if (intent.kind === 'multi') {
     const picked: string[] = [];
     for (const asked of intent.items) {
+      if (ctx.signal?.aborted) break;
       const found = await shownOrSearched(panel, asked, ctx, left);
       if (isEntry(found)) picked.push(found.label);
     }
@@ -268,7 +283,7 @@ async function fillSelect(control: Control, intent: FillIntent, ctx: DriverConte
     shut(control, ctx);
     return failed('several answers on a list that takes one', readBox(control));
   }
-  return pickFromList(control, panel, intent, ctx);
+  return pickFromList(control, panel, intent, ctx, left);
 }
 
 // ---- a date ---------------------------------------------------------------------------------------------------------

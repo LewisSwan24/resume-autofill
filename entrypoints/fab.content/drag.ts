@@ -90,8 +90,20 @@ export function makeDraggable(host: HTMLElement, shadow: ShadowRoot, site: strin
     (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
   };
 
+  /** The press is over: a drag ends where the button is, and a release that is a drag's own swallows its click. */
+  const end = (swallow: boolean) => {
+    press = null;
+    if (!dragging) return;
+    dragging = false;
+    host.removeAttribute('data-dragging');
+    swallowClick = swallow;
+    keep();
+  };
+
   const onMove = (e: PointerEvent) => {
     if (!press || e.pointerId !== press.id) return;
+    // Let go somewhere this never heard of (the page took the button away mid-drag): the drag is over.
+    if (e.buttons === 0) return end(false);
     const dx = e.clientX - press.x;
     const dy = e.clientY - press.y;
     if (!dragging) {
@@ -106,13 +118,14 @@ export function makeDraggable(host: HTMLElement, shadow: ShadowRoot, site: strin
 
   const onUp = (e: PointerEvent) => {
     if (!press || e.pointerId !== press.id) return;
-    press = null;
-    if (!dragging) return;
-    dragging = false;
-    host.removeAttribute('data-dragging');
-    // The click that follows this release belongs to the drag.
-    swallowClick = e.type === 'pointerup';
-    keep();
+    // The click that follows a mouse or pen release belongs to the drag. A finger lifted after a drag gets no click,
+    // so there is nothing of its own to swallow.
+    end(e.type === 'pointerup' && e.pointerType !== 'touch');
+  };
+
+  /** The capture went away under the drag (the page moved the button): the release may never reach us. */
+  const onLost = (e: PointerEvent) => {
+    if (press && e.pointerId === press.id) end(false);
   };
 
   const onClick = (e: MouseEvent) => {
@@ -123,6 +136,8 @@ export function makeDraggable(host: HTMLElement, shadow: ShadowRoot, site: strin
   };
 
   const onKey = (e: KeyboardEvent) => {
+    // A key press is never the click a drag left behind.
+    swallowClick = false;
     const step = ARROWS[e.key];
     if (!step || !e.altKey || e.ctrlKey || e.metaKey || !fromButton(e)) return;
     e.preventDefault();
@@ -146,8 +161,10 @@ export function makeDraggable(host: HTMLElement, shadow: ShadowRoot, site: strin
   shadow.addEventListener('pointerdown', onDownReset, true);
   shadow.addEventListener('pointerdown', onDown as EventListener);
   shadow.addEventListener('pointermove', onMove as EventListener);
-  shadow.addEventListener('pointerup', onUp as EventListener);
-  shadow.addEventListener('pointercancel', onUp as EventListener);
+  // The release and the loss of capture are heard on the window: they can happen over the page, not the button.
+  win.addEventListener('pointerup', onUp, true);
+  win.addEventListener('pointercancel', onUp, true);
+  win.addEventListener('lostpointercapture', onLost, true);
   // Capture on the shadow root runs before React's own listeners on its container inside it.
   shadow.addEventListener('click', onClick as EventListener, true);
   shadow.addEventListener('keydown', onKey as EventListener, true);
@@ -176,8 +193,9 @@ export function makeDraggable(host: HTMLElement, shadow: ShadowRoot, site: strin
     shadow.removeEventListener('pointerdown', onDownReset, true);
     shadow.removeEventListener('pointerdown', onDown as EventListener);
     shadow.removeEventListener('pointermove', onMove as EventListener);
-    shadow.removeEventListener('pointerup', onUp as EventListener);
-    shadow.removeEventListener('pointercancel', onUp as EventListener);
+    win.removeEventListener('pointerup', onUp, true);
+    win.removeEventListener('pointercancel', onUp, true);
+    win.removeEventListener('lostpointercapture', onLost, true);
     shadow.removeEventListener('click', onClick as EventListener, true);
     shadow.removeEventListener('keydown', onKey as EventListener, true);
     win.removeEventListener('resize', reapply);

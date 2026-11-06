@@ -211,6 +211,57 @@ test('a dragged FAB stays where it was put, even over a pinned button', async ({
   await page.close();
 });
 
+test('a drag cut short when the page takes the button away does not stick to the pointer', async ({ context }) => {
+  await serveSites(context);
+  const page = await context.newPage();
+  await page.goto('http://site-a.test/');
+  const from = centre(await fabBox(page));
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x - 60, from.y - 40, { steps: 6 });
+  // A page that rebuilds its body takes the button with it; it is put straight back.
+  await page.evaluate(() => {
+    const host = document.querySelector('raf-fab')!;
+    host.remove();
+    document.body.append(host);
+  });
+  await page.mouse.move(200, 200, { steps: 4 });
+  await page.mouse.up();
+  const let_go = await fabBox(page);
+  // No button held: passing over the FAB and away again must not carry it along.
+  const over = centre(let_go);
+  await page.mouse.move(over.x, over.y, { steps: 4 });
+  await page.mouse.move(over.x - 300, over.y - 200, { steps: 8 });
+  expect(await fabBox(page)).toEqual(let_go);
+  await page.close();
+});
+
+test('after a drag by touch, Enter on the focused FAB still fills', async ({ context, serviceWorker }) => {
+  await waitForSeed(serviceWorker);
+  const page = await context.newPage();
+  const url = fixtureUrl('native');
+  await page.goto(url);
+  const tabId = await tabIdOf(serviceWorker, url);
+  await expect.poll(() => scanTotal(serviceWorker, tabId)).toBeGreaterThan(0);
+  const from = centre(await fabBox(page));
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x: number, y: number) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  await touch('touchStart', from.x, from.y);
+  for (let i = 1; i <= 8; i++) await touch('touchMove', from.x - i * 30, from.y - i * 20);
+  await touch('touchEnd', from.x - 240, from.y - 160);
+  await cdp.detach();
+  const moved = await fabBox(page);
+  expect(moved.x).toBeLessThan(from.x - 150);
+  expect(await storedReport(serviceWorker, tabId)).toBeNull();
+
+  await inShadow(page, 'raf-fab', (c, nodeId) => c.send('DOM.focus', { nodeId }));
+  await page.keyboard.press('Enter');
+  await expect.poll(() => storedReport(serviceWorker, tabId), { timeout: 60_000 }).not.toBeNull();
+  await page.close();
+});
+
 test('Alt and the arrow keys move a focused FAB', async ({ context }) => {
   await serveSites(context);
   const page = await context.newPage();

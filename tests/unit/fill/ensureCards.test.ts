@@ -87,7 +87,20 @@ describe('findAddButtons', () => {
     document.body.innerHTML = `<h2>项目经历</h2><div><label>项目名称<input></label><label>项目描述<textarea></textarea></label></div>${plainAdd('添加')}`;
     const found = findAddButtons(document);
     expect(found.map((b) => [b.text, b.section, b.named])).toEqual([['添加', 'projects', false]]);
-    expect(found[0]!.el.className).toBe('sc-a');
+  });
+
+  // The pointer is inherited, so it does not say which wrapper listens. A click only travels up: it has to start
+  // at the words, so that a handler on any of the wrappers hears it.
+  it('a click on the add button it found reaches a handler on any wrapper of the words', () => {
+    document.body.innerHTML = `<h2>项目经历</h2><div><label>项目名称<input></label><label>项目描述<textarea></textarea></label></div>${plainAdd('添加')}`;
+    const heard: string[] = [];
+    for (const el of Array.from(document.querySelectorAll('.sc-a, .sc-b, .sc-a span'))) {
+      el.addEventListener('click', () => heard.push(el.tagName.toLowerCase() + (el.className ? `.${el.className}` : '')));
+    }
+    const found = findAddButtons(document);
+    expect(found).toHaveLength(1);
+    (found[0]!.el as HTMLElement).click();
+    expect(heard.sort()).toEqual(['div.sc-a', 'div.sc-b', 'span']);
   });
 
   it('reads the words of the whole element when React writes them in two pieces', () => {

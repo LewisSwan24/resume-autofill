@@ -24,7 +24,8 @@ const SECTION_NAMED = 0.8;
 
 /**
  * Add buttons that are not buttons: words that add an entry, on an element the pointer shows as clickable and that
- * holds nothing but those words (and an icon). The outermost such wrapper is the one returned, once per button.
+ * holds nothing but those words (and an icon). The element holding the words is the one returned, once per button:
+ * the pointer is inherited and does not say which wrapper listens, and a click only travels up, so it starts there.
  */
 export function plainAddButtons(root: Node): HTMLElement[] {
   const doc = root.ownerDocument ?? (root as Document);
@@ -40,13 +41,13 @@ export function plainAddButtons(root: Node): HTMLElement[] {
     // React may write 添加 and 教育经历 as two pieces of text in one element: the element's words are the button's.
     const words = cleanEvidenceText(start.textContent ?? '');
     if (!words || words.length > MAX_WORDS || !isAddButtonText(words) || !saysOnlyAdd(words)) continue;
-    let outermost: HTMLElement | null = null;
+    let clickable = false;
     let e: HTMLElement | null = start;
-    for (let i = 0; e && i < MAX_WRAPPERS; e = e.parentElement, i++) {
+    for (let i = 0; e && i < MAX_WRAPPERS && !clickable; e = e.parentElement, i++) {
       if (cleanEvidenceText(e.textContent ?? '') !== words || e.querySelector('input, select, textarea')) break;
-      if (win.getComputedStyle(e).cursor === 'pointer') outermost = e;
+      clickable = win.getComputedStyle(e).cursor === 'pointer';
     }
-    if (outermost) found.add(outermost);
+    if (clickable) found.add(start);
   }
   return [...found];
 }

@@ -79,7 +79,7 @@ describe('a Word file built to be heavy', () => {
   });
 });
 
-const TEXT = 'Mia Harper builds fictional software at a fictional studio in Brisbane';
+const TEXT = 'Mia Harper builds fictional software at a fictional studio in Canberra';
 const piece = { str: TEXT, transform: [1, 0, 0, 12, 10, 700], width: 300, height: 12 };
 
 function pdf(page: Record<string, unknown>): PdfLoader {

@@ -182,7 +182,7 @@ function regionTag(panel: Element, name: string): Element | null {
   const tags = Array.from(panel.querySelectorAll(REGION_TAG));
   const hits = tags.filter((t) => placeName(t.textContent ?? '') === want);
   if (hits.length > 0) return hits[hits.length - 1]!;
-  // 船营 on the resume is 船营区 on the panel, as long as only one place on it reads that way.
+  // 武侯 on the resume is 武侯区 on the panel, as long as only one place on it reads that way.
   const short = tags.filter((t) => placeName(t.textContent ?? '').replace(/[区县]$/, '') === want);
   return short.length === 1 ? short[0]! : null;
 }

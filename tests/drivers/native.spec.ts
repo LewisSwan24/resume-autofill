@@ -44,9 +44,9 @@ test.describe('native driver on the native fixture', () => {
   });
 
   test('select (exact label match)', async () => {
-    const report = await execIntent(page, 'State', { kind: 'choice', display: 'QLD', query: 'QLD' });
-    expect(report).toMatchObject({ outcome: 'filled', observed: 'QLD' });
-    expect((await fixtureState(page)).state).toBe('QLD');
+    const report = await execIntent(page, 'State', { kind: 'choice', display: 'ACT', query: 'ACT' });
+    expect(report).toMatchObject({ outcome: 'filled', observed: 'ACT' });
+    expect((await fixtureState(page)).state).toBe('ACT');
   });
 
   test('select with matchLabel different from the query', async () => {
@@ -112,7 +112,7 @@ test.describe('native driver on the native fixture', () => {
   });
 
   test('contenteditable editor', async () => {
-    const text = 'I am a Master of Computer Science student looking for a graduate role in Brisbane.';
+    const text = 'I am a Master of Computer Science student looking for a graduate role in Canberra.';
     const report = await execIntent(page, 'Tell us about yourself', { kind: 'text', text });
     expect(report).toMatchObject({ outcome: 'filled', observed: text });
     expect((await fixtureState(page)).aboutYou).toBe(text);

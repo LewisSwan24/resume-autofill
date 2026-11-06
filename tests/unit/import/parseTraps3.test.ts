@@ -199,7 +199,7 @@ describe('what the words about identity no longer take with them', () => {
   });
 
   it('keeps the rest of a list when one part of it names a document', () => {
-    expect(read([line('Brisbane QLD | Passport: E12345678 | Open to travel')])).toMatch(/Brisbane QLD.*Open to travel/);
+    expect(read([line('Canberra ACT | Passport: E12345678 | Open to travel')])).toMatch(/Canberra ACT.*Open to travel/);
   });
 });
 
@@ -244,7 +244,7 @@ describe('what the file does not prove stays to be checked', () => {
   });
 
   it('a town right after the name is no person', () => {
-    const lines = [line('Mia Harper'), line('Brisbane QLD | 0412 345 678 | mia@example.com')];
+    const lines = [line('Mia Harper'), line('Canberra ACT | 0412 345 678 | mia@example.com')];
     expect(certainty(lines, 'contact.phone')).toBe('high');
     expect(certainty(lines, 'contact.email')).toBe('high');
   });
@@ -262,7 +262,7 @@ describe('what the file does not prove stays to be checked', () => {
   });
 
   it.each([
-    'Mia Harper | 0412 345 678 | mia@example.com | Brisbane, QLD 4000',
+    'Mia Harper | 0412 345 678 | mia@example.com | Canberra, ACT 2600',
     '林知远  电话：13800138000  邮箱：mia@example.com  现居城市：上海',
     '林知遠 | 男 | 28歲 | 13800138000 | mia@example.com',
     '性别：女  年龄：28  微信：lin_zy  手机：13800138000  邮箱：mia@example.com',
@@ -278,7 +278,7 @@ describe('what the file does not prove stays to be checked', () => {
   });
 
   it('still trusts a contact line of nothing but contact details', () => {
-    const lines = [line('Mia Harper | 0412 345 678 | mia@example.com | Brisbane QLD')];
+    const lines = [line('Mia Harper | 0412 345 678 | mia@example.com | Canberra ACT')];
     expect(certainty(lines, 'contact.email')).toBe('high');
     expect(certainty(lines, 'contact.phone')).toBe('high');
   });

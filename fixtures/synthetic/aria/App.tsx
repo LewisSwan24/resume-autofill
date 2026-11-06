@@ -24,13 +24,13 @@ const COUNTRIES: Option[] = [
 ];
 const DEGREES = opts('High school', 'Bachelor', 'Master', 'Doctorate');
 const YES_NO = opts('Yes', 'No');
-const CITIES = opts('Brisbane', 'Melbourne', 'Sydney');
-const UNIVERSITIES = opts('Griffith University', 'The University of Queensland', 'The University of Sydney');
+const CITIES = opts('Canberra', 'Melbourne', 'Sydney');
+const UNIVERSITIES = opts('Monash University', 'The Australian National University', 'The University of Sydney');
 const VISAS = opts('Citizen', 'Permanent resident', 'Student visa');
 const EMPLOYMENT = opts('Full time', 'Part time', 'Contract', 'Graduate program');
 const HEARD = opts('Indeed', 'LinkedIn', 'Seek', 'Other');
-const LOCATIONS = ['Brisbane QLD, Australia', 'Melbourne VIC, Australia', 'Sydney NSW, Australia'];
-const PLACES = ['Brisbane, QLD, Australia', 'Brisbane, QLD 4000, Australia', 'Sydney Olympic Park, NSW, Australia'];
+const LOCATIONS = ['Canberra ACT, Australia', 'Melbourne VIC, Australia', 'Sydney NSW, Australia'];
+const PLACES = ['Canberra, ACT, Australia', 'Canberra, ACT 2600, Australia', 'Sydney Olympic Park, NSW, Australia'];
 
 const later = <T,>(value: T, ms = 120): Promise<T> => new Promise((resolve) => setTimeout(() => resolve(value), ms));
 const search = (list: string[], query: string): string[] => {

@@ -372,7 +372,7 @@ const WORD_OF_LEVEL: Record<PlaceLevel, RegExp> = {
 };
 
 /**
- * 吉林省 and 吉林市 on a resume can both be written 吉林, and 船营 can be 船营区. But 吉林省 is not 吉林市, 朝阳区 is not
+ * 吉林省 and 吉林市 on a resume can both be written 吉林, and 武侯 can be 武侯区. But 吉林省 is not 吉林市, 朝阳区 is not
  * 朝阳市, and a bare 河北 on a list is the province, not 天津's 河北区.
  */
 function isSamePlace(name: string, label: string, level: PlaceLevel): boolean {
@@ -385,7 +385,7 @@ function isSamePlace(name: string, label: string, level: PlaceLevel): boolean {
   return n === bare && WORD_OF_LEVEL[level].test(l);
 }
 
-/** On a list, the place itself comes first. A longer label has to end in it: 吉林市第一中学 is a school. */
+/** On a list, the place itself comes first. A longer label has to end in it: 成都市第一中学 is a school. */
 function matchPlaceName(name: string, level: PlaceLevel, region: Region, options: OptionInfo[]): OptionMatch {
   const usable = options.flatMap((o, i) => (o.disabled || isPlaceholderOption(o) ? [] : [i]));
   const only = (hits: number[], confidence: number): OptionMatch | null =>

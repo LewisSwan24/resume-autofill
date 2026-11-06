@@ -45,7 +45,7 @@ describe('runFill', () => {
     expect(value('nm')).toBe('林知远');
     expect(value('em')).toBe('zhiyuan.lin@example.com');
     expect(value('s1')).toBe('浙江大学');
-    expect(value('s2')).toBe('昆士兰大学');
+    expect(value('s2')).toBe('澳大利亚国立大学');
     expect(value('m2')).toBe('计算机科学');
     expect(value('g1')).toBe('3.8');
     expect(value('g2')).toBe(''); // no data for entry 2

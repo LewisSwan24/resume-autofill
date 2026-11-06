@@ -252,7 +252,7 @@ describe('data minimisation (frame:needs → frame:fill)', () => {
     const sent = stubFrames({ 0: needs({ fieldKeys: ['education.school'], repeatSections: ['education'] }) });
     await runFillRequest(9, { listFrameIds: async () => [0] });
     const resume = fills(sent)[0]!.msg.resume as ReturnType<typeof buildResumeSubset>;
-    expect(resume.education.map((e) => e.school)).toEqual(['浙江大学', '昆士兰大学']);
+    expect(resume.education.map((e) => e.school)).toEqual(['浙江大学', '澳大利亚国立大学']);
     expect(resume.work).toEqual([]);
     expect(resume.family).toEqual([]);
     expect(resume.basics.givenName).toBe('');

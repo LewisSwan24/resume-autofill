@@ -101,7 +101,7 @@ test('frames receive only the resume data they need (third-party iframe gets not
   expect(frameFill.msg.files).toEqual({});
   expect(frameFill.msg.resume!.jobIntention.noticePeriod).toBe('2 weeks');
   const frameJson = JSON.stringify(frameFill.msg);
-  for (const secret of ['zhiyuan.lin@example.com', 'Zhiyuan', 'University of Queensland', 'Brisbane', 'ByteDance', '0412345678']) {
+  for (const secret of ['zhiyuan.lin@example.com', 'Zhiyuan', 'Australian National University', 'Canberra', 'ByteDance', '0412345678']) {
     expect(frameJson, secret).not.toContain(secret);
   }
 

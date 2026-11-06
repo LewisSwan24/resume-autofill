@@ -169,7 +169,7 @@ describe('cardDemand', () => {
     const schools = p.plan.steps.filter((s) => s.fieldKey === 'education.school').map((s) => [s.source, s.intent]);
     expect(schools).toEqual([
       ['education[0].school', { kind: 'text', text: '浙江大学' }],
-      ['education[1].school', { kind: 'text', text: '昆士兰大学' }],
+      ['education[1].school', { kind: 'text', text: '澳大利亚国立大学' }],
     ]);
   });
 

@@ -22,7 +22,7 @@ const date = (year: number, month: number, day?: number) =>
 const TREE: Record<string, Record<string, string[]>> = {
   北京市: { 北京市: ['东城区'] },
   浙江省: { 杭州市: ['上城区', '西湖区', '滨江区'], 宁波市: ['海曙区'] },
-  吉林省: { 吉林市: ['昌邑区', '船营区'] },
+  四川省: { 成都市: ['锦江区', '武侯区'] },
 };
 
 interface Setup {
@@ -303,7 +303,7 @@ test.describe('Beisen places', () => {
 
   test('a place abroad picks nothing and cancels', async () => {
     await mountBeisen({ places: ['现居住地'] });
-    const r = await execIntent(page, '现居住地', choice('布里斯班', '昆士兰州'));
+    const r = await execIntent(page, '现居住地', choice('堪培拉', '澳大利亚首都领地'));
     expect(r.outcome).toBe('no_option');
     await expect(box('现居住地')).toHaveValue('');
     await expect(layers()).toHaveCount(0);

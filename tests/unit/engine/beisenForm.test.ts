@@ -1,5 +1,5 @@
 // A real Beisen (北森) resume form: what each control is, and what it would be given.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { planFill } from '../../../src/engine/plan';
 import { scanDocument } from '../../../src/engine/scan';
 import { createSampleProfile } from '../../../src/schema/samples';
@@ -15,7 +15,21 @@ function show(html: string): void {
   document.body.replaceChildren(...Array.from(doc.body.childNodes).map((n) => document.adoptNode(n)));
 }
 
-function scan(change: (r: Resume) => void = () => undefined) {
+type Scanned = ReturnType<typeof scanWith>;
+let plain: Scanned | undefined;
+
+/** A scan of this form takes seconds in jsdom (more with the whole suite running) and never changes: do it once. */
+const SCAN_MS = 120_000;
+beforeAll(() => {
+  plain = scanWith(() => undefined);
+}, SCAN_MS);
+
+function scan(): Scanned {
+  if (!plain) throw new Error('the form was not scanned');
+  return plain;
+}
+
+function scanWith(change: (r: Resume) => void) {
   show(BEISEN_FORM);
   const { contexts, classifications } = scanDocument(document);
   const resume = structuredClone(createSampleProfile().resumes.find((x) => x.id === 'sample-zh')!);

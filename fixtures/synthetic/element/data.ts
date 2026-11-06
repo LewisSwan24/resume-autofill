@@ -6,7 +6,7 @@ export const MARITAL = ['未婚', '已婚', '离异'];
 export const DEGREES = ['本科', '硕士研究生', '博士研究生'];
 export const ACADEMIC_DEGREES = ['学士', '硕士', '博士'];
 // Remote school list: the select starts with no options and only shows matches after a search.
-export const SCHOOLS = ['浙江大学', '昆士兰大学', '清华大学', '北京大学', '浙江工业大学'];
+export const SCHOOLS = ['浙江大学', '澳大利亚国立大学', '清华大学', '北京大学', '浙江工业大学'];
 
 export interface Region {
   value: string;

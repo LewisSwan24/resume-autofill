@@ -58,7 +58,7 @@ describe('createSampleProfile', () => {
       startDate: '2020-09', endDate: '2024-06', current: false, gpa: '3.8', gpaScale: '4.0', ranking: '5/120',
     });
     expect(zh.education[1]).toMatchObject({
-      school: '昆士兰大学', schoolEn: 'The University of Queensland', degree: 'master', major: '计算机科学',
+      school: '澳大利亚国立大学', schoolEn: 'The Australian National University', degree: 'master', major: '计算机科学',
       startDate: '2024-07', endDate: '2026-06',
     });
     expect(zh.work).toHaveLength(2);
@@ -107,7 +107,7 @@ describe('createSampleProfile', () => {
       linkedin: 'https://www.linkedin.com/in/zhiyuan-lin-example',
       github: 'https://github.com/zhiyuan-lin-example',
     });
-    expect(en.contact.address).toMatchObject({ street: '1 Example St', province: 'QLD', city: 'Brisbane', postcode: '4000' });
+    expect(en.contact.address).toMatchObject({ street: '1 Example St', province: 'ACT', city: 'Canberra', postcode: '2600' });
     expect(en.workRights).toMatchObject({
       status: 'graduate_visa', visaType: 'Subclass 485', visaExpiry: '2028-08-31',
       requiresSponsorship: false, hasFullWorkRights: true,
@@ -115,7 +115,7 @@ describe('createSampleProfile', () => {
   });
 
   it('en sample: education/work ordered most recent first, referees, intention', () => {
-    expect(en.education.map((e) => e.school)).toEqual(['The University of Queensland', 'Zhejiang University']);
+    expect(en.education.map((e) => e.school)).toEqual(['The Australian National University', 'Zhejiang University']);
     expect(en.education[0]).toMatchObject({
       degree: 'master', major: 'Master of Computer Science', startDate: '2024-07', endDate: '2026-06',
     });
@@ -135,7 +135,7 @@ describe('createSampleProfile', () => {
       expect(ref.email).toMatch(/@example\.com$/);
     }
     expect(en.jobIntention).toMatchObject({
-      cities: ['Brisbane'], positions: ['Graduate Software Engineer'], employmentType: 'graduate_program',
+      cities: ['Canberra'], positions: ['Graduate Software Engineer'], employmentType: 'graduate_program',
       availableFrom: '2026-07', noticePeriod: '2 weeks', howDidYouHear: 'LinkedIn',
     });
     expect(en.diversity).toEqual({

@@ -75,28 +75,28 @@ test('react-select: filling the same value twice changes nothing', async () => {
 test('react-select: multi adds every value', async () => {
   const r = await execIntent(page, 'Preferred cities', {
     kind: 'multi',
-    display: 'Brisbane, Sydney',
-    items: [{ query: 'Brisbane' }, { query: 'Sydney' }],
+    display: 'Canberra, Sydney',
+    items: [{ query: 'Canberra' }, { query: 'Sydney' }],
   });
   expect(r.outcome).toBe('filled');
-  expect((await fixtureState(page)).cities).toEqual(['Brisbane', 'Sydney']);
+  expect((await fixtureState(page)).cities).toEqual(['Canberra', 'Sydney']);
   expect(await openLists(page)).toBe(0);
 });
 
 test('react-select: multi with one missing value selects nothing', async () => {
   const r = await execIntent(page, 'Preferred cities', {
     kind: 'multi',
-    display: 'Brisbane, Atlantis',
-    items: [{ query: 'Brisbane' }, { query: 'Atlantis' }],
+    display: 'Canberra, Atlantis',
+    items: [{ query: 'Canberra' }, { query: 'Atlantis' }],
   });
   expect(r.outcome).toBe('no_option');
   expect((await fixtureState(page)).cities).toEqual([]);
 });
 
 test('react-select: options that only load after typing', async () => {
-  const r = await execIntent(page, 'University', choice('Queensland', 'The University of Queensland'));
+  const r = await execIntent(page, 'University', choice('Australian National', 'The Australian National University'));
   expect(r.outcome).toBe('filled');
-  expect((await fixtureState(page)).university).toBe('The University of Queensland');
+  expect((await fixtureState(page)).university).toBe('The Australian National University');
 });
 
 test('react-select: no match leaves the field untouched', async () => {
@@ -187,30 +187,30 @@ test('typed text that equals the option is not a fill while the click did nothin
     <ul id="t-list" role="listbox" style="margin:0;padding:0"></ul>`);
   await page.evaluate(() => {
     document.getElementById('t')!.addEventListener('input', () => {
-      document.getElementById('t-list')!.innerHTML = '<li role="option">Brisbane</li>';
+      document.getElementById('t-list')!.innerHTML = '<li role="option">Canberra</li>';
     });
   });
-  const r = await execIntent(page, 'Town', choice('Brisbane'));
+  const r = await execIntent(page, 'Town', choice('Canberra'));
   expect(r.outcome).toBe('action_failed');
   await expect(page.locator('#t')).toHaveValue('');
 });
 
 test('a value the widget takes back on leaving the field is not a fill', async () => {
   await add(`<label for="r">Hometown</label><input id="r" role="combobox" aria-controls="r-list" value="Sydney">
-    <ul id="r-list" role="listbox" hidden><li role="option">Brisbane</li></ul>`);
+    <ul id="r-list" role="listbox" hidden><li role="option">Canberra</li></ul>`);
   await page.evaluate(() => {
     const input = document.getElementById('r') as HTMLInputElement;
     const list = document.getElementById('r-list')!;
     input.addEventListener('mousedown', () => list.removeAttribute('hidden'));
     list.addEventListener('click', () => {
-      input.value = 'Brisbane';
+      input.value = 'Canberra';
       list.setAttribute('hidden', '');
     });
     input.addEventListener('blur', () => {
       input.value = 'Sydney';
     });
   });
-  const r = await execIntent(page, 'Hometown', choice('Brisbane'));
+  const r = await execIntent(page, 'Hometown', choice('Canberra'));
   expect(r.outcome).not.toBe('filled');
   await expect(page.locator('#r')).toHaveValue('Sydney');
 });

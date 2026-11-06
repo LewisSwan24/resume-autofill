@@ -37,11 +37,11 @@ describe('resolveValue', () => {
 
   it('reads plain, address and phone values with their resume path', () => {
     expect(resolveValue('contact.email', zh, 0, 'contact')).toEqual({ raw: 'zhiyuan.lin@example.com', source: 'contact.email' });
-    expect(resolveValue('contact.addressCity', en, 0, 'contact')).toEqual({ raw: 'Brisbane', source: 'contact.address.city' });
-    expect(resolveValue('contact.postcode', en, 0, 'contact')?.raw).toBe('4000');
+    expect(resolveValue('contact.addressCity', en, 0, 'contact')).toEqual({ raw: 'Canberra', source: 'contact.address.city' });
+    expect(resolveValue('contact.postcode', en, 0, 'contact')?.raw).toBe('2600');
     expect(resolveValue('contact.phoneFull', en, 0, 'contact')?.raw).toBe('+61 412345678');
     expect(resolveValue('contact.phoneFull', zh, 0, 'contact')?.raw).toBe('+86 13800138000');
-    expect(resolveValue('contact.addressFull', en, 0, 'contact')?.raw).toBe('1 Example St, Brisbane, QLD 4000, Australia');
+    expect(resolveValue('contact.addressFull', en, 0, 'contact')?.raw).toBe('1 Example St, Canberra, ACT 2600, Australia');
   });
 
   it('treats empty strings and null as no data', () => {
@@ -54,7 +54,7 @@ describe('resolveValue', () => {
   it('answers where you are based from the address when no location is given, down to the city', () => {
     const value = resolveValue('basics.currentLocation', en, 0, 'basics');
     expect(value?.source).toBe('contact.address');
-    expect(value?.raw).toEqual({ country: 'Australia', province: 'QLD', city: 'Brisbane' });
+    expect(value?.raw).toEqual({ country: 'Australia', province: 'ACT', city: 'Canberra' });
     const asked = zh.basics.currentLocation;
     expect(resolveValue('basics.currentLocation', zh, 0, 'basics')?.raw).toEqual(asked);
   });
@@ -68,7 +68,7 @@ describe('resolveValue', () => {
   });
 
   it('maps card i to entry i of the section', () => {
-    expect(resolveValue('education.school', zh, 1, 'education')).toEqual({ raw: '昆士兰大学', source: 'education[1].school' });
+    expect(resolveValue('education.school', zh, 1, 'education')).toEqual({ raw: '澳大利亚国立大学', source: 'education[1].school' });
   });
 
   it('splits work and internship sections (plan 0.7)', () => {
@@ -369,25 +369,32 @@ describe('toIntent', () => {
   });
 
   it('region on a list: the wider levels of the address go with it, narrowest first', () => {
-    const region = { province: '吉林省', city: '吉林市', district: '船营区' };
+    const region = { province: '四川省', city: '成都市', district: '武侯区' };
     const asked = intent('basics.nativePlace', region, control('select'));
     if (asked?.kind !== 'choice') throw new Error('expected a choice');
-    expect(asked.query).toBe('船营区');
-    expect(asked.wider?.map((w) => w.query)).toEqual(['吉林市', '吉林省']);
-    expect(intent('basics.nativePlace', { city: '吉林市' }, control('select'))).not.toHaveProperty('wider');
+    expect(asked.query).toBe('武侯区');
+    expect(asked.wider?.map((w) => w.query)).toEqual(['成都市', '四川省']);
+    expect(intent('basics.nativePlace', { city: '成都市' }, control('select'))).not.toHaveProperty('wider');
   });
 
   it('region on a list: what the page already shows counts when it is one of the levels and nothing else', () => {
-    const region = { province: '吉林省', city: '吉林市', district: '船营区' };
-    const asked = intent('basics.nativePlace', region, control('select'));
-    if (asked?.kind !== 'choice') throw new Error('expected a choice');
-    const holds = (label: string) =>
-      [asked, ...(asked.wider ?? [])].some((level) => {
-        const m = level.match([{ label }]);
-        return m.status === 'matched' && m.confidence >= 0.9;
-      });
-    for (const same of ['吉林', '吉林省', '吉林市', '船营区']) expect(holds(same), same).toBe(true);
-    for (const other of ['长春市', '辽宁', '布里斯班', '吉林大学', '吉林市第一中学', '船营']) expect(holds(other), other).toBe(false);
+    const holdsFor = (region: Record<string, string>) => {
+      const asked = intent('basics.nativePlace', region, control('select'));
+      if (asked?.kind !== 'choice') throw new Error('expected a choice');
+      return (label: string) =>
+        [asked, ...(asked.wider ?? [])].some((level) => {
+          const m = level.match([{ label }]);
+          return m.status === 'matched' && m.confidence >= 0.9;
+        });
+    };
+    // A province and a city of the same name: 吉林 is either.
+    const holds = holdsFor({ province: '吉林省', city: '吉林市' });
+    for (const same of ['吉林', '吉林省', '吉林市']) expect(holds(same), same).toBe(true);
+    for (const other of ['长春市', '辽宁', '堪培拉', '吉林大学', '吉林市第一中学']) expect(holds(other), other).toBe(false);
+    // A district is itself with its 区, not a bare word.
+    const district = holdsFor({ province: '四川省', city: '成都市', district: '武侯区' });
+    for (const same of ['四川', '四川省', '成都市', '武侯区']) expect(district(same), same).toBe(true);
+    for (const other of ['绵阳市', '辽宁', '四川大学', '成都市第一中学', '武侯']) expect(district(other), other).toBe(false);
   });
 
   describe('region on a list: a place is not another place of the same first words', () => {
@@ -421,7 +428,7 @@ describe('toIntent', () => {
       [{ province: '吉林省', city: '通化市' }, ['吉林', '辽宁'], '吉林'],
       [{ province: '吉林省', city: '通化市' }, ['吉林省', '辽宁省'], '吉林省'],
       [{ province: '吉林', city: '吉林' }, ['吉林省', '吉林市'], '吉林市'],
-      [{ province: '吉林省', city: '吉林市', district: '船营' }, ['昌邑区', '船营区'], '船营区'],
+      [{ province: '四川省', city: '成都市', district: '武侯' }, ['锦江区', '武侯区'], '武侯区'],
       [{ province: '北京', city: '北京' }, ['北京市', '上海市'], '北京市'],
       [{ province: '广西壮族自治区', city: '南宁市' }, ['广西', '广东'], '广西'],
       [{ province: '吉林省', city: '长春市' }, ['吉林省长春市'], '吉林省长春市'],

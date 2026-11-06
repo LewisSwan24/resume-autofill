@@ -40,7 +40,7 @@ const ZH_SINGLE = `${PAGE}
 
 const EN_SINGLE = `${PAGE}
 <h1>Zhiyuan (Leo) Lin</h1>
-<p>Brisbane QLD | 0412 345 678 | zhiyuan.lin@example.com | linkedin.com/in/zhiyuan-lin-example</p>
+<p>Canberra ACT | 0412 345 678 | zhiyuan.lin@example.com | linkedin.com/in/zhiyuan-lin-example</p>
 <h2>Experience</h2>
 <div class="row"><span>Example Software Pty Ltd</span><span>Mar 2021 - Present</span></div>
 <p>Senior Frontend Engineer</p>

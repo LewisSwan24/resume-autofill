@@ -9,6 +9,8 @@ export interface Box {
   bottom: number;
 }
 
+/** Set by drag.ts once the button has been moved by hand. */
+const PLACED = 'data-placed';
 const GAP = 8;
 const RECHECK_MS = 1000;
 const BOTTOM = '--resume-autofill-fab-bottom';
@@ -54,6 +56,12 @@ export function keepClear(host: HTMLElement, win: Window = window): () => void {
   const check = () => {
     queued = false;
     if (!host.isConnected) return;
+    // Someone put the button where they want it: it stays there.
+    if (host.hasAttribute(PLACED)) {
+      if (lift !== 0) host.style.removeProperty(BOTTOM);
+      lift = 0;
+      return;
+    }
     const now = host.getBoundingClientRect();
     if (now.width === 0 || now.height === 0) return;
     const fab: Box = { left: now.left, right: now.right, top: now.top + lift, bottom: now.bottom + lift };

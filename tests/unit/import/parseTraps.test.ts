@@ -179,9 +179,9 @@ describe('identity numbers', () => {
 
 describe('a Word file', () => {
   it('keeps lines apart that a table cell or a break holds together', () => {
-    const got = linesOfHtml('<p>Contact</p><table><tr><td><p>jane@example.com</p><p>Brisbane</p></td><td>678<br />jane2@example.com</td></tr></table><p>LinkedIn<br />Second line</p>');
-    expect(got.flatMap((l) => l.cells)).toEqual(['Contact', 'jane@example.com Brisbane', '678 jane2@example.com', 'LinkedIn', 'Second line']);
-    expect(value(parseResume(linesOfHtml('<table><tr><td><p>jane@example.com</p><p>Brisbane</p></td></tr></table>')), 'contact.email')).toBe('jane@example.com');
+    const got = linesOfHtml('<p>Contact</p><table><tr><td><p>jane@example.com</p><p>Canberra</p></td><td>678<br />jane2@example.com</td></tr></table><p>LinkedIn<br />Second line</p>');
+    expect(got.flatMap((l) => l.cells)).toEqual(['Contact', 'jane@example.com Canberra', '678 jane2@example.com', 'LinkedIn', 'Second line']);
+    expect(value(parseResume(linesOfHtml('<table><tr><td><p>jane@example.com</p><p>Canberra</p></td></tr></table>')), 'contact.email')).toBe('jane@example.com');
   });
 });
 

@@ -52,7 +52,7 @@ describe('resolveCode', () => {
     expect(resolveCode('languageCert', 'cet 6')).toBe('cet6');
   });
   it('returns undefined for unknown text or unknown domain', () => {
-    expect(resolveCode('degree', '昆士兰大学')).toBeUndefined();
+    expect(resolveCode('degree', '悉尼大学')).toBeUndefined();
     expect(resolveCode('nope', 'master')).toBeUndefined();
     expect(resolveCode(null, 'master')).toBeUndefined();
   });
@@ -211,11 +211,11 @@ describe('matchOption: booleans and yes/no', () => {
 });
 
 describe('matchOption: free text values', () => {
-  it('exact (normalized) match: 昆士兰大学', () => {
-    expect(pick(null, '昆士兰大学', opts('悉尼大学', '昆士兰大学', '昆士兰科技大学'))).toBe('昆士兰大学');
+  it('exact (normalized) match: 悉尼大学', () => {
+    expect(pick(null, '悉尼大学', opts('墨尔本大学', '悉尼大学', '悉尼科技大学'))).toBe('悉尼大学');
   });
-  it('unique containment: 昆士兰大学 in "昆士兰大学 (UQ)"', () => {
-    expect(pick(null, '昆士兰大学', opts('悉尼大学', '昆士兰大学（UQ）'))).toBe('昆士兰大学（UQ）');
+  it('unique containment: 悉尼大学 in "悉尼大学 (悉大)"', () => {
+    expect(pick(null, '悉尼大学', opts('墨尔本大学', '悉尼大学（悉大）'))).toBe('悉尼大学（悉大）');
   });
   it('QLD matches the exact state code', () => {
     expect(pick(null, 'QLD', opts('NSW', 'VIC', 'QLD', 'WA'))).toBe('QLD');
@@ -273,7 +273,7 @@ describe('matchOption: ambiguity, none, placeholders', () => {
     expect(pick(null, '计算机', opts('计算机科学与技术专业', '软件工程'))).toBe('none');
   });
   it('containment works in the other direction (option inside value)', () => {
-    expect(pick(null, '昆士兰大学计算机学院', opts('悉尼大学', '昆士兰大学计算机'))).toBe('昆士兰大学计算机');
+    expect(pick(null, '悉尼大学计算机学院', opts('墨尔本大学', '悉尼大学计算机'))).toBe('悉尼大学计算机');
   });
   it('duplicate exact labels are ambiguous', () => {
     expect(matchOption(null, 'Other', opts('Other', 'Other')).status).toBe('ambiguous');
@@ -296,17 +296,17 @@ describe('matchOption: ambiguity, none, placeholders', () => {
     expect(matchOption('degree', 'master', [{ label: '硕士', disabled: true }, { label: '本科' }])).toEqual({ status: 'none' });
   });
   it('fuzzy tier: close typo beats a distant runner-up', () => {
-    const r = matchOption(null, 'Univeristy of Queensland', opts('University of Queensland', 'Griffith University'));
+    const r = matchOption(null, 'Univeristy of Sydney', opts('University of Sydney', 'Macquarie University'));
     expect(r).toMatchObject({ status: 'matched', index: 0 });
     if (r.status === 'matched') expect(r.confidence).toBeGreaterThanOrEqual(0.85);
   });
   it('fuzzy tier: two near-identical candidates are ambiguous', () => {
-    const r = matchOption(null, 'Univeristy of Queensland', opts('University of Queensland', 'Universty of Queensland'));
+    const r = matchOption(null, 'Univeristy of Sydney', opts('University of Sydney', 'Universty of Sydney'));
     expect(r.status).toBe('ambiguous');
     if (r.status === 'ambiguous') expect(r.candidates).toEqual([0, 1]);
   });
   it('identical normalized labels are never silently disambiguated', () => {
-    expect(matchOption(null, 'University of Queensland', opts('University of Queensland', 'university of queensland')).status).toBe('ambiguous');
+    expect(matchOption(null, 'University of Sydney', opts('University of Sydney', 'university of sydney')).status).toBe('ambiguous');
   });
   it('a negated option is not accepted for a positive code through containment', () => {
     expect(matchOption('yesNo', 'yes', opts('不太愿意')).status).toBe('none');
@@ -370,9 +370,9 @@ describe('matchOption: a school and a part of it are two schools', () => {
   });
 
   it.each([
-    ['昆士兰大学', '昆士兰大学（UQ）'],
-    ['University of Queensland', 'The University of Queensland'],
-    ['昆士兰', '昆士兰大学'],
+    ['悉尼大学', '悉尼大学（悉大）'],
+    ['University of Sydney', 'The University of Sydney'],
+    ['悉尼', '悉尼大学'],
   ])('%s is %s', (value, label) => {
     expect(pick(value, label).status).toBe('matched');
   });

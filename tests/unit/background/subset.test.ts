@@ -189,9 +189,16 @@ describe('buildResumeSubset: single modules (per leaf)', () => {
     expect(s.attachments).toEqual({});
   });
 
+  it('never carries an identity number, not even to a page that asks for one', () => {
+    const s = buildResumeSubset(zh, needs({ fieldKeys: ['basics.idNumber', 'basics.idType', 'basics.fullName'] }));
+    expect(s.basics.idNumber).toBe('');
+    expect(JSON.stringify(s)).not.toContain(zh.basics.idNumber);
+    expect(s.basics.familyName).toBe(zh.basics.familyName);
+  });
+
   it('copies address parts by key and misc strings', () => {
     const s = buildResumeSubset(en, needs({ fieldKeys: ['contact.addressCity', 'contact.postcode', 'misc.selfIntroduction'] }));
-    expect(s.contact.address).toEqual({ country: 'Australia', province: 'QLD', city: 'Brisbane', district: '', street: '', postcode: '4000' });
+    expect(s.contact.address).toEqual({ country: 'Australia', province: 'ACT', city: 'Canberra', district: '', street: '', postcode: '2600' });
     expect(s.selfIntroduction).toBe(en.selfIntroduction);
     expect(s.hobbies).toBe('');
   });

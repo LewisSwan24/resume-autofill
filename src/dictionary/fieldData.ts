@@ -279,7 +279,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Notice period|Notice required|Current notice period|Length of notice|Period of notice|How much notice|How much notice do you need to give|Notice',
   ),
   'jobIntention.acceptAdjustment': s(
-    '是否服从调剂|是否接受调剂|是否同意调剂|是否服从分配|服从调剂|接受调剂|是否服从岗位调剂|是否服从调配|是否愿意调剂',
+    '是否服从调剂|是否接受调剂|是否同意调剂|是否服从分配|服从调剂|接受调剂|是否服从岗位调剂|是否服从调配|是否愿意调剂|是否愿意服从公司分配|是否服从公司分配|服从公司分配|是否愿意服从分配',
     'Accept adjustment|Willing to be reassigned|Open to other roles|Open to alternative positions|Consider other roles|Would you consider other positions|Open to similar roles|Willing to accept alternative positions',
   ),
   'jobIntention.acceptRelocation': s(

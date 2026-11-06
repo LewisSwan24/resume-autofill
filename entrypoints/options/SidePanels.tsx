@@ -1,5 +1,6 @@
 // Global (not per-resume) tab panels: UI settings and JSON import/export.
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { forgetAllPlaces } from '../fab.content/placement';
 import { exportProfile, parseProfileJson } from '../../src/editor';
 import { useT, type LanguageSetting } from '../../src/i18n';
 import type { Profile, Settings } from '../../src/schema';
@@ -35,6 +36,33 @@ export function SettingsPanel({ settings, onChange }: SettingsProps) {
         checked={settings.previewBeforeFill}
         onChange={(previewBeforeFill) => onChange({ ...settings, previewBeforeFill })}
       />
+      <FabPlace />
+    </div>
+  );
+}
+
+/** Where the autofill button sits is kept per site, outside the profile; this puts every site's button back. */
+function FabPlace() {
+  const t = useT();
+  const toast = useToast();
+  const hintId = useId();
+  const reset = () =>
+    void forgetAllPlaces()
+      .then(() => toast.push({ text: t('options.settings.fabPlaceDone') }))
+      .catch(() => {
+        /* storage is local; a failure here leaves the places as they were */
+      });
+  return (
+    <div className="raf-field">
+      <span className="raf-field__label">{t('options.settings.fabPlace')}</span>
+      <div>
+        <Button icon="arrow-counterclockwise" aria-describedby={hintId} onClick={reset}>
+          {t('options.settings.fabPlaceReset')}
+        </Button>
+      </div>
+      <p id={hintId} className="raf-field__help">
+        {t('options.settings.fabPlaceHint')}
+      </p>
     </div>
   );
 }

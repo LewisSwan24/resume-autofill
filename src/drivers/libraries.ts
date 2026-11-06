@@ -19,12 +19,16 @@ export interface LibraryWidget {
   option?: string;
   /** Element showing the current selection inside the root. */
   selected?: string;
+  /** One answer of a radio group that has no inputs behind it, and the part of it that says the answer. */
+  answer?: { option: string; label: string };
   /** Attribute (on root or inner input) that overrides date granularity: day | month | year. */
   granularityAttr?: string;
   /** Selector matched against the root or any descendant; a hit means the widget is disabled. */
   disabled?: string;
   /** Selector matched against the root or any descendant; a hit means multi-select. */
   multiple?: string;
+  /** What the root alone cannot say: a further test of the element it matched. */
+  when?: (root: Element) => boolean;
 }
 
 /** Widgets that exist but are not supported in M1: their inner inputs are consumed and nothing is reported. */
@@ -44,6 +48,11 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'moka', kind: 'date', root: 'label[class*="sd-Input-container"].day_info' },
   { lib: 'moka', kind: 'cascader', root: '[class*="sd-Input-tag-container"]' },
   { lib: 'moka', kind: 'select', root: 'label[class*="sd-Select-container"]' },
+
+  // ---- Beisen (北森, zhiye.com): one box for lists, dates and places alike; a date says so by its icon ----
+  { lib: 'beisen', kind: 'date', root: '.phoenix-select', when: (el) => el.querySelector('.phoenix-select__switchArrow [id*="field_date"]') !== null },
+  { lib: 'beisen', kind: 'select', root: '.phoenix-select', multiple: '.phoenix-select--multi' },
+  { lib: 'beisen', kind: 'radio', root: '.phoenix-radio-group', answer: { option: '.phoenix-radio', label: '[class*="radio__radio-text"]' } },
 
   // ---- Feishu recruiting ----
   { lib: 'feishu', kind: 'date', root: '.throne-biz-date-range-picker-wrapper' },
@@ -152,6 +161,7 @@ export const LIBRARY_OVERLAY_SELECTOR = [
   '.el-cascader__dropdown',
   '[class*="sd-Dropdown-dropdown"]',
   '.ud__select__dropdown',
+  '.common-unmodeled-layer__layerContent',
 ].join(', ');
 
 /** Selector matching every library root (widgets + unsupported), for one querySelectorAll. */
@@ -223,7 +233,7 @@ export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undef
 
 /** First table entry whose root matches (table order matters, e.g. cascader before select). */
 export function matchLibraryWidget(el: Element): LibraryWidget | undefined {
-  return LIBRARY_WIDGETS.find((w) => el.matches(w.root));
+  return LIBRARY_WIDGETS.find((w) => el.matches(w.root) && (!w.when || w.when(el)));
 }
 
 type Granularity = 'day' | 'month' | 'year';
@@ -254,6 +264,8 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
   // Year and month is all either of Moka's date widgets asks.
   if (widget.lib === 'moka') return 'month';
   if (root.matches('.throne-biz-date-range-picker-wrapper')) return 'month';
+  // Beisen's box opens a day calendar or a month panel, and only opening it tells which: ask for the day.
+  if (widget.lib === 'beisen') return 'day';
   if (widget.lib === 'element') {
     if (root.classList.contains('el-date-editor--month') || root.classList.contains('el-date-editor--monthrange')) return 'month';
     if (root.classList.contains('el-date-editor--year') || root.classList.contains('el-date-editor--yearrange')) return 'year';

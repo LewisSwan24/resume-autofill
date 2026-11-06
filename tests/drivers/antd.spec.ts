@@ -105,13 +105,13 @@ test.describe('antd drivers on the antd fixture', () => {
           label: found.label,
           intent: {
             kind: 'choice',
-            display: '昆士兰大学',
-            query: '昆士兰',
+            display: '澳大利亚国立大学',
+            query: '国立',
             match: (options) => {
               calls++;
               // First call sees the whole list; pretend nothing matches until the list is filtered by the query.
               if (options.length > 1) return { status: 'none' };
-              const i = options.findIndex((o) => o.label === '昆士兰大学');
+              const i = options.findIndex((o) => o.label === '澳大利亚国立大学');
               return i >= 0 ? { status: 'matched', index: i, confidence: 1 } : { status: 'none' };
             },
           },
@@ -120,9 +120,9 @@ test.describe('antd drivers on the antd fixture', () => {
         document,
       ).then((r) => ({ ...r, calls }));
     });
-    expect(report).toMatchObject({ outcome: 'filled', observed: '昆士兰大学' });
+    expect(report).toMatchObject({ outcome: 'filled', observed: '澳大利亚国立大学' });
     expect(report.calls).toBeGreaterThan(1);
-    expect((await fixtureState(page))['education[0].school']).toBe('昆士兰大学');
+    expect((await fixtureState(page))['education[0].school']).toBe('澳大利亚国立大学');
     await expectPopupsClosed();
   });
 
@@ -415,7 +415,7 @@ test.describe('antd drivers on the antd fixture', () => {
     // Once the country code is set its placeholder is gone, but the dial code it shows keeps it labelled 区号.
     await text('手机号码', s('phone'));
     await text('电子邮箱', s('email'));
-    await text('身份证号', s('idNumber'));
+    // 身份证号 is never filled: the box stays empty, and the state check at the end holds it to that.
     await text('微信号', s('wechat'));
     await run('籍贯', { kind: 'cascade', display: list('nativePlace').join('/'), path: list('nativePlace') });
     await run('现居住地', { kind: 'cascade', display: list('currentLocation').join('/'), path: list('currentLocation') });

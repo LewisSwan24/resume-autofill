@@ -230,24 +230,24 @@ test.describe('Feishu', () => {
     }, text);
 
   test('a place already there at a wider level of the resume is left alone, with no list opened', async () => {
-    await mountFeishu(['吉林', '辽宁']);
-    await alreadyThere('吉林');
-    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    await mountFeishu(['四川', '辽宁']);
+    await alreadyThere('四川');
+    const r = await execIntent(page, '学历', place('武侯区', '成都市', '四川'), { nth: 0 });
     expect(r.outcome).toBe('filled');
-    await expect(degreeShown()).toHaveText('吉林');
+    await expect(degreeShown()).toHaveText('四川');
     expect(await opened()).toBe(0);
   });
 
   test('an empty box takes the narrowest level on the list', async () => {
-    await mountFeishu(['长春市', '吉林市', '吉林', '辽宁']);
-    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    await mountFeishu(['绵阳市', '成都市', '四川', '辽宁']);
+    const r = await execIntent(page, '学历', place('武侯区', '成都市', '四川'), { nth: 0 });
     expect(r.outcome).toBe('filled');
-    await expect(degreeShown()).toHaveText('吉林市');
+    await expect(degreeShown()).toHaveText('成都市');
     await expect(page.locator('.ud__select__dropdown')).toHaveCount(0);
   });
 
   test('an empty search box walks up within the time a step has, and no words stay behind', async () => {
-    await mountFeishu(['吉林', '辽宁']);
+    await mountFeishu(['四川', '辽宁']);
     // A real search list: nothing until something is typed, and only what fits, a moment later.
     await feishuItem('degree').locator('input').evaluate((input: HTMLInputElement) => {
       input.removeAttribute('readonly');
@@ -264,29 +264,29 @@ test.describe('Feishu', () => {
         setTimeout(sync, 100);
       });
     });
-    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    const r = await execIntent(page, '学历', place('武侯区', '成都市', '四川'), { nth: 0 });
     expect(r.outcome).toBe('filled');
-    await expect(degreeShown()).toHaveText('吉林');
+    await expect(degreeShown()).toHaveText('四川');
     // Each level that found nothing took its words back out before the next one was typed.
     const typed = await page.evaluate(() => (window as unknown as { typed: string[] }).typed);
     // Typing arrives a letter at a time: keep where each word ended.
     const words = typed.filter((v, i) => v === '' || !typed[i + 1]?.startsWith(v));
-    expect(words).toEqual(['船营区', '', '吉林市', '', '吉林']);
+    expect(words).toEqual(['武侯区', '', '成都市', '', '四川']);
   });
 
   test('an empty box with no level on the list stays empty', async () => {
     await mountFeishu(['辽宁']);
-    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    const r = await execIntent(page, '学历', place('武侯区', '成都市', '四川'), { nth: 0 });
     expect(r.outcome).toBe('no_option');
     await expect(degreeShown()).toHaveCount(0);
   });
 
   test('another answer already there is kept and left to check, not swapped for a wider level', async () => {
-    await mountFeishu(['吉林', '辽宁']);
-    await alreadyThere('布里斯班');
-    const r = await execIntent(page, '学历', place('船营区', '吉林市', '吉林'), { nth: 0 });
+    await mountFeishu(['四川', '辽宁']);
+    await alreadyThere('堪培拉');
+    const r = await execIntent(page, '学历', place('武侯区', '成都市', '四川'), { nth: 0 });
     expect(r.outcome).toBe('needs_review');
-    await expect(degreeShown()).toHaveText('布里斯班');
+    await expect(degreeShown()).toHaveText('堪培拉');
     await expect(page.locator('.ud__select__dropdown')).toHaveCount(0);
   });
 
@@ -311,12 +311,12 @@ test.describe('Feishu', () => {
 
 // Moka's place panel as read off a live form: tabs for 省份, 城市 and 县区, a word for each place, and every click
 // written straight into the box. 确认 only closes it.
-const JILIN = {
+const SICHUAN = {
   北京市: { 北京市: ['东城区'] },
-  吉林: {
-    长春市: ['南关区'],
-    吉林市: ['昌邑区', '龙潭区', '船营区', '丰满区', '永吉县', '吉林高新技术产业开发区', '蛟河市'],
-    延边朝鲜族自治州: ['延吉市'],
+  四川: {
+    绵阳市: ['涪城区'],
+    成都市: ['锦江区', '青羊区', '武侯区', '金牛区', '成华区', '成都高新技术产业开发区', '简阳市'],
+    凉山彝族自治州: ['西昌市'],
   },
 };
 
@@ -353,7 +353,7 @@ async function mountPlace(): Promise<void> {
       });
       owner.append(panel);
     });
-  }, JILIN);
+  }, SICHUAN);
 }
 
 const cascade = (...path: string[]) => ({ kind: 'cascade', display: path.join(' '), path }) as const;
@@ -362,37 +362,37 @@ const placeBox = () => mokaField('籍贯').locator('input');
 test.describe('Moka places', () => {
   test('down to the city, with 省 and 市 written or not', async () => {
     await mountPlace();
-    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市'));
+    const r = await execIntent(page, '籍贯', cascade('四川省', '成都市'));
     expect(r.outcome).toBe('filled');
-    await expect(placeBox()).toHaveValue('吉林 吉林市');
+    await expect(placeBox()).toHaveValue('四川 成都市');
     await expect(page.locator('[class*="sd-Dropdown-dropdown"]')).toHaveCount(0);
   });
 
   test('down to a district on the list', async () => {
     await mountPlace();
-    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市', '船营区'));
+    const r = await execIntent(page, '籍贯', cascade('四川省', '成都市', '武侯区'));
     expect(r.outcome).toBe('filled');
-    await expect(placeBox()).toHaveValue('吉林 吉林市 船营区');
+    await expect(placeBox()).toHaveValue('四川 成都市 武侯区');
   });
 
   test('a district written without its 区 or 县 is still that district', async () => {
     await mountPlace();
-    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市', '船营'));
+    const r = await execIntent(page, '籍贯', cascade('四川省', '成都市', '武侯'));
     expect(r.outcome).toBe('filled');
-    await expect(placeBox()).toHaveValue('吉林 吉林市 船营区');
+    await expect(placeBox()).toHaveValue('四川 成都市 武侯区');
   });
 
   test('a district that is not on the list stops at the city and leaves that to check', async () => {
     await mountPlace();
-    const r = await execIntent(page, '籍贯', cascade('吉林省', '吉林市', '高新区'));
+    const r = await execIntent(page, '籍贯', cascade('四川省', '成都市', '高新区'));
     expect(r.outcome).toBe('needs_review');
-    await expect(placeBox()).toHaveValue('吉林 吉林市');
+    await expect(placeBox()).toHaveValue('四川 成都市');
     await expect(page.locator('[class*="sd-Dropdown-dropdown"]')).toHaveCount(0);
   });
 
   test('a province that is not there picks nothing', async () => {
     await mountPlace();
-    const r = await execIntent(page, '籍贯', cascade('昆士兰州', '布里斯班'));
+    const r = await execIntent(page, '籍贯', cascade('澳大利亚首都领地', '堪培拉'));
     expect(r.outcome).toBe('no_option');
     await expect(placeBox()).toHaveValue('');
     await expect(page.locator('[class*="sd-Dropdown-dropdown"]')).toHaveCount(0);

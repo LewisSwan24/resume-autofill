@@ -114,13 +114,13 @@ test.describe('Element Plus drivers on the Element fixture', () => {
       expect(state['education[0].degree']).toBe('');
     });
 
-    test('remote filterable select: 学校 in education card 2 (昆士兰大学)', async () => {
+    test('remote filterable select: 学校 in education card 2 (澳大利亚国立大学)', async () => {
       const before = await fixtureState(page);
       expect(before['education[1].school']).toBe('');
-      const report = await execIntent(page, '学校', choice('昆士兰大学'), { nth: 1 });
-      expect(report).toMatchObject({ outcome: 'filled', observed: '昆士兰大学' });
+      const report = await execIntent(page, '学校', choice('澳大利亚国立大学'), { nth: 1 });
+      expect(report).toMatchObject({ outcome: 'filled', observed: '澳大利亚国立大学' });
       const state = await fixtureState(page);
-      expect(state['education[1].school']).toBe('昆士兰大学');
+      expect(state['education[1].school']).toBe('澳大利亚国立大学');
       expect(state['education[0].school']).toBe('');
       await noPopperOpen();
     });
@@ -309,7 +309,7 @@ test.describe('Element Plus drivers on the Element fixture', () => {
       ['婚姻状况', choice('未婚')],
       ['户口所在地', { kind: 'cascade', display: '浙江省/杭州市/西湖区', path: ['浙江省', '杭州市', '西湖区'] }],
       ['学校', choice('浙江大学'), { nth: 0 }],
-      ['学校', choice('昆士兰大学'), { nth: 1 }],
+      ['学校', choice('澳大利亚国立大学'), { nth: 1 }],
       ['学历', choice('本科'), { nth: 0 }],
       ['学历', choice('硕士研究生'), { nth: 1 }],
       ['学位', choice('硕士'), { nth: 1 }],
@@ -328,7 +328,7 @@ test.describe('Element Plus drivers on the Element fixture', () => {
       maritalStatus: '未婚',
       household: ['浙江省', '杭州市', '西湖区'],
       'education[0].school': '浙江大学',
-      'education[1].school': '昆士兰大学',
+      'education[1].school': '澳大利亚国立大学',
       'education[0].degree': '本科',
       'education[1].degree': '硕士研究生',
       'education[1].academicDegree': '硕士',

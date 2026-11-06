@@ -245,6 +245,10 @@ export const zh = {
   'options.settings.langAuto': '自动',
   'options.settings.previewBeforeFill': '填写前预览',
   'options.settings.previewHint': '目前只保存这个选择，预览功能会在之后的版本提供。',
+  'options.settings.fabPlace': '一键填写按钮的位置',
+  'options.settings.fabPlaceHint': '按住按钮可以拖到任何位置，每个网站分别记住。按钮有焦点时也可以用 Alt 加方向键移动。',
+  'options.settings.fabPlaceReset': '按钮位置复位',
+  'options.settings.fabPlaceDone': '所有网站的按钮都回到了右下角。',
   // ---------------------------------------------------------------- options.data.*
   'options.data.title': '导入 / 导出',
   'options.data.export': '导出 JSON',

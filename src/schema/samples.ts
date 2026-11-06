@@ -46,7 +46,7 @@ const zhInput: ResumeInput = {
       startDate: '2020-09', endDate: '2024-06', current: false, gpa: '3.8', gpaScale: '4.0', ranking: '5/120',
     },
     {
-      school: '昆士兰大学', schoolEn: 'The University of Queensland', degree: 'master', major: '计算机科学',
+      school: '澳大利亚国立大学', schoolEn: 'The Australian National University', degree: 'master', major: '计算机科学',
       startDate: '2024-07', endDate: '2026-06', current: false,
     },
   ],
@@ -109,8 +109,8 @@ const enInput: ResumeInput = {
     phone: '0412345678',
     email: 'zhiyuan.lin@example.com',
     address: {
-      country: 'Australia', province: 'QLD', city: 'Brisbane', district: 'Brisbane City',
-      street: '1 Example St', postcode: '4000',
+      country: 'Australia', province: 'ACT', city: 'Canberra', district: 'Canberra City',
+      street: '1 Example St', postcode: '2600',
     },
     linkedin: 'https://www.linkedin.com/in/zhiyuan-lin-example',
     github: 'https://github.com/zhiyuan-lin-example',
@@ -124,7 +124,7 @@ const enInput: ResumeInput = {
   },
   jobIntention: {
     positions: ['Graduate Software Engineer'],
-    cities: ['Brisbane'],
+    cities: ['Canberra'],
     employmentType: 'graduate_program',
     availableFrom: '2026-07',
     noticePeriod: '2 weeks',
@@ -132,7 +132,7 @@ const enInput: ResumeInput = {
   },
   education: [
     {
-      school: 'The University of Queensland', degree: 'master', major: 'Master of Computer Science',
+      school: 'The Australian National University', degree: 'master', major: 'Master of Computer Science',
       startDate: '2024-07', endDate: '2026-06',
     },
     {
@@ -154,7 +154,7 @@ const enInput: ResumeInput = {
   ],
   referees: [
     {
-      name: 'Dr Emily Carter', title: 'Senior Lecturer', company: 'The University of Queensland',
+      name: 'Dr Emily Carter', title: 'Senior Lecturer', company: 'The Australian National University',
       email: 'emily.carter@example.com', phone: '+61 7 5550 0101', relationship: 'Academic supervisor',
     },
     {
@@ -164,7 +164,7 @@ const enInput: ResumeInput = {
   ],
   selfIntroduction:
     'I am a Master of Computer Science student with internship experience in backend development and data analysis. ' +
-    'I enjoy turning messy problems into reliable software and I am looking for a graduate software engineering role in Brisbane.',
+    'I enjoy turning messy problems into reliable software and I am looking for a graduate software engineering role in Canberra.',
   attachments: { resumeFileId: 'sample-resume-en' },
 };
 

@@ -5,6 +5,7 @@ import '../../src/ui/theme.css';
 import './style.css';
 import ReactDOM from 'react-dom/client';
 import { createShadowRootUi } from 'wxt/utils/content-script-ui/shadow-root';
+import { makeDraggable } from './drag';
 import { Fab } from './Fab';
 import { keepAttached } from './keepAttached';
 import { keepClear } from './keepClear';
@@ -48,5 +49,7 @@ export default defineContentScript({
     ui.mount();
     ctx.onInvalidated(keepAttached(ui.shadowHost, document));
     ctx.onInvalidated(keepClear(ui.shadowHost));
+    // Each site keeps its own place for the button (a file page has no host name: its scheme stands in).
+    ctx.onInvalidated(makeDraggable(ui.shadowHost, ui.shadow, location.hostname || location.protocol));
   },
 });

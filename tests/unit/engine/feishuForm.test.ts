@@ -92,7 +92,7 @@ describe('what the form is given', () => {
     const { of } = scan();
     const schools = of('学校名称').map((f) => f.step?.intent);
     expect(schools[0]).toMatchObject({ kind: 'choice', query: '浙江大学' });
-    expect(schools[1]).toMatchObject({ kind: 'choice', query: '昆士兰大学' });
+    expect(schools[1]).toMatchObject({ kind: 'choice', query: '澳大利亚国立大学' });
     const spans = of('起止时间');
     expect(spans[0]!.control.dateRange).toBe(true);
     expect(spans[0]!.step?.intent).toMatchObject({ kind: 'dateRange', start: { year: 2020, month: 9 }, end: { year: 2024, month: 6 } });

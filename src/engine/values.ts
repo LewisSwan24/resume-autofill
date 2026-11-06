@@ -203,6 +203,9 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
   }
 }
 
+/** An identity or passport number. */
+const NEVER_GIVEN: ReadonlySet<string> = new Set(['basics.idNumber']);
+
 /**
  * Value of a field key for card `entryIndex` of a page section. Handles derived keys, the work/internship
  * split, and treats empty strings / null as missing. A current entry has no end date.
@@ -216,6 +219,8 @@ export function resolveValue(
 ): ResolvedValue | null {
   const dot = fieldKey.indexOf('.');
   if (dot < 0) return null;
+  // Never filled, wherever it is asked for and whatever the resume holds.
+  if (NEVER_GIVEN.has(fieldKey)) return null;
   const module = fieldKey.slice(0, dot);
   const field = fieldKey.slice(dot + 1);
 
@@ -367,7 +372,7 @@ const WORD_OF_LEVEL: Record<PlaceLevel, RegExp> = {
 };
 
 /**
- * 吉林省 and 吉林市 on a resume can both be written 吉林, and 船营 can be 船营区. But 吉林省 is not 吉林市, 朝阳区 is not
+ * 吉林省 and 吉林市 on a resume can both be written 吉林, and 武侯 can be 武侯区. But 吉林省 is not 吉林市, 朝阳区 is not
  * 朝阳市, and a bare 河北 on a list is the province, not 天津's 河北区.
  */
 function isSamePlace(name: string, label: string, level: PlaceLevel): boolean {
@@ -380,7 +385,7 @@ function isSamePlace(name: string, label: string, level: PlaceLevel): boolean {
   return n === bare && WORD_OF_LEVEL[level].test(l);
 }
 
-/** On a list, the place itself comes first. A longer label has to end in it: 吉林市第一中学 is a school. */
+/** On a list, the place itself comes first. A longer label has to end in it: 成都市第一中学 is a school. */
 function matchPlaceName(name: string, level: PlaceLevel, region: Region, options: OptionInfo[]): OptionMatch {
   const usable = options.flatMap((o, i) => (o.disabled || isPlaceholderOption(o) ? [] : [i]));
   const only = (hits: number[], confidence: number): OptionMatch | null =>

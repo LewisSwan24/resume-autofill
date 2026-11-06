@@ -108,8 +108,8 @@ describe('what stays for the applicant to check', () => {
     expect(value(d, 'basics.givenName')).toBe('Zhiyuan');
     expect(value(d, 'basics.familyName')).toBe('Lin');
     expect(value(d, 'basics.preferredName')).toBe('Leo');
-    expect(value(d, 'contact.address.city')).toBe('Brisbane');
-    expect(value(d, 'contact.address.province')).toBe('QLD');
+    expect(value(d, 'contact.address.city')).toBe('Canberra');
+    expect(value(d, 'contact.address.province')).toBe('ACT');
     expect(value(d, 'work.0.company')).toBe('Example Software Pty Ltd');
     expect(value(d, 'work.0.position')).toBe('Senior Frontend Engineer');
     expect(value(d, 'education.0.school')).toBe('University of Example');

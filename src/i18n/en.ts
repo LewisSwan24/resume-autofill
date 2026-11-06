@@ -246,6 +246,10 @@ export const en: Record<MessageKey, string> = {
   'options.settings.langAuto': 'Auto',
   'options.settings.previewBeforeFill': 'Preview before fill',
   'options.settings.previewHint': 'For now this only saves your choice. The preview itself arrives in a later release.',
+  'options.settings.fabPlace': 'Autofill button position',
+  'options.settings.fabPlaceHint': 'Drag the button anywhere; each site keeps its own place. With the button focused, Alt and the arrow keys move it too.',
+  'options.settings.fabPlaceReset': 'Reset button position',
+  'options.settings.fabPlaceDone': 'The button is back in the bottom-right corner on every site.',
   // ---------------------------------------------------------------- options.data.*
   'options.data.title': 'Import / Export',
   'options.data.export': 'Export JSON',

@@ -1,0 +1,45 @@
+/* LanguageToggle: two pressed/unpressed buttons in one pill. Tokens come from theme.css. */
+.raf-lang-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-surface);
+}
+.raf-lang-toggle__item {
+  min-width: 32px;
+  min-height: 28px;
+  padding: 0 var(--raf-space-2);
+  border: 0;
+  border-radius: var(--raf-radius-pill);
+  background: transparent;
+  color: var(--raf-color-text-muted);
+  font: inherit;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--raf-motion-duration) var(--raf-motion-easing),
+    color var(--raf-motion-duration) var(--raf-motion-easing);
+}
+.raf-lang-toggle__item:hover {
+  color: var(--raf-color-text);
+  background: var(--raf-color-surface-hover);
+}
+.raf-lang-toggle__item[aria-pressed='true'] {
+  background: var(--raf-color-selected);
+  color: var(--raf-color-on-selected);
+  cursor: default;
+}
+.raf-lang-toggle__item:focus-visible {
+  outline: 2px solid var(--raf-color-focus);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .raf-lang-toggle__item {
+    transition: none;
+  }
+}

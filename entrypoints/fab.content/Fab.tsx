@@ -9,11 +9,13 @@
 //   click a list item     → field:focus {frameId,fieldId}
 //   "View details"        → ui:openSidePanel          (needs the click's user gesture)
 //   "Open settings"       → ui:openOptions
+//   resume chip           → storage (switchResumeLanguage), not a message
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { useT } from '../../src/i18n';
 import { isFromExtension, isValidMessage, sendToBackground, type Sender } from '../../src/messaging';
 import { Icon } from '../../src/ui/Icon';
+import { ResumeChip } from './ResumeChip';
 import { SummaryCard } from './SummaryCard';
 import { countBoxes, looksUnderRead, summarize, type FillSummary } from './summarize';
 
@@ -204,6 +206,8 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
           <span className="raf-fab__sub">{caption}</span>
         </span>
       </button>
+      {/* Off while a fill runs; out of the way while the card is up (it would sit in the card's gap). */}
+      {shown ? null : <ResumeChip disabled={filling} />}
     </div>
   );
 }

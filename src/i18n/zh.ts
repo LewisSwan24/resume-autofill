@@ -10,6 +10,9 @@ export const zh = {
   'common.lang.auto': '跟随浏览器',
   'common.lang.zh': '中文',
   'common.lang.en': 'English',
+  'common.uiLanguage': '界面语言',
+  'common.resumeLang.zh': '中文版',
+  'common.resumeLang.en': '英文版',
 
   // ---------------------------------------------------------------- options.* (page chrome)
   'options.title': '简历库',
@@ -288,12 +291,16 @@ export const zh = {
   'fab.result.failed': '{n} 项未填写',
   'fab.item.unnamed': '未命名字段',
   'fab.item.locate': '定位到该字段',
+  'fab.resumeChip': '填写用简历：{current}，点一下换成{target}',
 
   // ---------------------------------------------------------------- panel.* (Task 20 appends below)
   'panel.title': '填写报告',
   'panel.resume': '当前简历',
   'panel.noResume': '还没有简历。去设置页建一份，这里就能用了。',
   'panel.switchError': '没能切换简历。数据没有变，再试一次吧。',
+  'panel.switchResume': '换成{target}',
+  'panel.switchResumeHint': '用{target}简历填写',
+  'panel.switchResumeNone': '还没有另一种语言的简历。先到设置页添加一份，或把现有的两份关联起来。',
   'panel.loading': '稍等一下',
   'panel.emptyTitle': '这里还空着',
   'panel.empty': '点一下页面上的“一键填写”按钮，结果会出现在这里。',

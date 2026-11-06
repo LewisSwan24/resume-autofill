@@ -99,6 +99,45 @@ export function setActiveResume(id: string): Promise<void> {
   });
 }
 
+// ------------------------------------------------------------------ one-click switches
+
+/** The interface language a resume reads in: any `zh*` locale is Chinese, everything else English. */
+export function resumeLanguage(locale: Resume['locale']): 'zh' | 'en' {
+  return locale.startsWith('zh') ? 'zh' : 'en';
+}
+
+/**
+ * The resume a one-click language switch moves to: the active resume's linked resume when that one is in
+ * the other language, otherwise the first resume in the other language. Null when there is none.
+ */
+export function counterpartResume(profile: Profile): Resume | null {
+  const active = profile.resumes.find((r) => r.id === profile.activeResumeId);
+  if (!active) return null;
+  const language = resumeLanguage(active.locale);
+  const other = (r: Resume) => r.id !== active.id && resumeLanguage(r.locale) !== language;
+  const linked = profile.resumes.find((r) => r.id === active.linkedResumeId);
+  return linked && other(linked) ? linked : (profile.resumes.find(other) ?? null);
+}
+
+/** Make `counterpartResume` active. Resolves to it, or to null (nothing written) when there is none. */
+export function switchResumeLanguage(): Promise<Resume | null> {
+  return exclusive(async () => {
+    const p = await readProfile();
+    const target = counterpartResume(p);
+    if (target) await writeProfile({ ...p, activeResumeId: target.id });
+    return target;
+  });
+}
+
+/** Pin the interface language (replaces "follow the browser"); every surface follows through `watchProfile`. */
+export function setUiLanguage(language: 'zh' | 'en'): Promise<void> {
+  return exclusive(async () => {
+    const p = await readProfile();
+    if (p.settings.uiLanguage === language) return;
+    await writeProfile({ ...p, settings: { ...p.settings, uiLanguage: language } });
+  });
+}
+
 /**
  * Insert or replace (by id, keeping list position) a resume. The first resume ever stored becomes
  * active. Throws for invalid resumes. Resolves to the stored resume.

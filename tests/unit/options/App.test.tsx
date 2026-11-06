@@ -4,7 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import App from '../../../entrypoints/options/App';
 import { setLanguage } from '../../../src/i18n';
 import { ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
-import { getFile, loadProfile, resetFileStoreForTests, saveProfile } from '../../../src/storage';
+import { getFile, loadProfile, resetFileStoreForTests, saveProfile, setUiLanguage } from '../../../src/storage';
 
 const DELAY = 20;
 const WAIT = { timeout: 4000 };
@@ -409,6 +409,33 @@ describe('Options page – settings', () => {
     fireEvent.click(screen.getByRole('radio', { name: '中文' }));
     await screen.findByRole('radiogroup', { name: '界面语言' });
     await waitFor(async () => expect((await loadProfile()).settings.uiLanguage).toBe('zh'), WAIT);
+  });
+});
+
+describe('Options page – one-click interface language', () => {
+  const toggle = (name = 'Interface language') => screen.getByRole('group', { name });
+
+  it('the header toggle shows the language in use and switches the whole page in one click', async () => {
+    await renderApp(makeProfile('en'));
+    expect(within(toggle()).getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(toggle()).getByRole('button', { name: '中文' }).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(within(toggle()).getByRole('button', { name: '中文' }));
+    await screen.findByRole('tab', { name: '编辑' });
+    expect(within(toggle('界面语言')).getByRole('button', { name: '中文' }).getAttribute('aria-pressed')).toBe('true');
+    await waitFor(async () => expect((await loadProfile()).settings.uiLanguage).toBe('zh'), WAIT);
+  });
+
+  it('on "follow the browser" it marks the language actually shown, and a click pins the other one', async () => {
+    await renderApp(makeProfile('auto')); // jsdom's navigator.language is en-US
+    expect(within(toggle()).getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(toggle()).getByRole('button', { name: '中文' }));
+    await waitFor(async () => expect((await loadProfile()).settings.uiLanguage).toBe('zh'), WAIT);
+  });
+
+  it('follows a switch made in another surface (side panel)', async () => {
+    await renderApp(makeProfile('en'));
+    await setUiLanguage('zh');
+    await screen.findByRole('tab', { name: '编辑' }, WAIT);
   });
 });
 

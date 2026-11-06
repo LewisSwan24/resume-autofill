@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import {
   PROFILE_STORAGE_KEY,
+  counterpartResume,
   deleteResume,
   getActiveResume,
   loadProfile,
+  resumeLanguage,
   saveProfile,
   setActiveResume,
+  setUiLanguage,
+  switchResumeLanguage,
   upsertResume,
   watchProfile,
 } from '../../../src/storage';
@@ -259,5 +263,65 @@ describe('watchProfile', () => {
     expect(cb).toHaveBeenCalledTimes(1);
     expect(cb.mock.calls[0]![0].resumes).toEqual([]);
     stop();
+  });
+});
+
+describe('one-click switches', () => {
+  const zh = (id: string, extra: Record<string, unknown> = {}) => newResume(id, { locale: 'zh-CN', ...extra });
+  const en = (id: string, extra: Record<string, unknown> = {}) => newResume(id, { locale: 'en-AU', ...extra });
+  const profileOf = (resumes: ReturnType<typeof newResume>[], activeResumeId: string | null) =>
+    ProfileSchema.parse({ schemaVersion: 1, resumes, activeResumeId });
+
+  it('resumeLanguage maps a locale to the interface language it reads in', () => {
+    expect(resumeLanguage('zh-CN')).toBe('zh');
+    expect(resumeLanguage('en-AU')).toBe('en');
+  });
+
+  it('counterpartResume prefers the linked resume in the other language', () => {
+    const p = profileOf([zh('a', { linkedResumeId: 'c' }), en('b'), en('c')], 'a');
+    expect(counterpartResume(p)?.id).toBe('c');
+  });
+
+  it('counterpartResume falls back to the first resume in the other language when the link is missing, dangling or same-language', () => {
+    expect(counterpartResume(profileOf([zh('a'), zh('x'), en('b'), en('c')], 'a'))?.id).toBe('b');
+    expect(counterpartResume(profileOf([zh('a', { linkedResumeId: 'gone' }), en('b')], 'a'))?.id).toBe('b');
+    expect(counterpartResume(profileOf([zh('a', { linkedResumeId: 'x' }), zh('x'), en('b')], 'a'))?.id).toBe('b');
+    expect(counterpartResume(profileOf([en('b'), zh('a'), zh('x')], 'b'))?.id).toBe('a');
+  });
+
+  it('counterpartResume is null when every resume is in one language, or there is none', () => {
+    expect(counterpartResume(profileOf([zh('a'), zh('x')], 'a'))).toBeNull();
+    expect(counterpartResume(profileOf([], null))).toBeNull();
+  });
+
+  it('switchResumeLanguage makes the counterpart active, and a second click comes back', async () => {
+    const sample = await saveProfile(createSampleProfile());
+    expect(sample.activeResumeId).toBe('sample-zh');
+    expect((await switchResumeLanguage())?.id).toBe('sample-en');
+    expect((await loadProfile()).activeResumeId).toBe('sample-en');
+    expect((await switchResumeLanguage())?.id).toBe('sample-zh');
+    expect((await loadProfile()).activeResumeId).toBe('sample-zh');
+  });
+
+  it('switchResumeLanguage returns null and writes nothing when there is no other language', async () => {
+    await saveProfile(profileOf([zh('a'), zh('x')], 'a'));
+    const cb = vi.fn();
+    const stop = watchProfile(cb);
+    expect(await switchResumeLanguage()).toBeNull();
+    expect(cb).not.toHaveBeenCalled();
+    expect((await loadProfile()).activeResumeId).toBe('a');
+    stop();
+  });
+
+  it('setUiLanguage stores the language and leaves the resumes untouched', async () => {
+    const before = await saveProfile(createSampleProfile());
+    vi.setSystemTime(T0 + 60_000);
+    await setUiLanguage('en');
+    const after = await loadProfile();
+    expect(after.settings.uiLanguage).toBe('en');
+    expect(after.settings.previewBeforeFill).toBe(before.settings.previewBeforeFill);
+    expect(after.resumes).toEqual(before.resumes);
+    await setUiLanguage('zh');
+    expect((await loadProfile()).settings.uiLanguage).toBe('zh');
   });
 });

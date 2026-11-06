@@ -11,6 +11,9 @@ export const en: Record<MessageKey, string> = {
   'common.lang.auto': 'Auto (browser)',
   'common.lang.zh': '中文',
   'common.lang.en': 'English',
+  'common.uiLanguage': 'Interface language',
+  'common.resumeLang.zh': 'Chinese',
+  'common.resumeLang.en': 'English',
 
   // ---------------------------------------------------------------- options.* (page chrome)
   'options.title': 'Resume Library',
@@ -290,12 +293,16 @@ export const en: Record<MessageKey, string> = {
   'fab.result.failed': '{n} not filled',
   'fab.item.unnamed': 'Unnamed field',
   'fab.item.locate': 'Locate this field',
+  'fab.resumeChip': 'Filling with the {current} resume. Switch to {target}',
 
   // ---------------------------------------------------------------- panel.* (Task 20 appends below)
   'panel.title': 'Fill report',
   'panel.resume': 'Active resume',
   'panel.noResume': 'No resume yet. Add one in settings and it will show up here.',
   'panel.switchError': "Couldn't switch resumes. Nothing was changed, so give it another try.",
+  'panel.switchResume': 'Switch to {target}',
+  'panel.switchResumeHint': 'Fill with the {target} resume',
+  'panel.switchResumeNone': 'There is no resume in the other language yet. Add one on the settings page, or link the two you have.',
   'panel.loading': 'Just a moment',
   'panel.emptyTitle': 'Nothing here yet',
   'panel.empty': 'Press the Autofill button on the page. Results will show up here.',

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FieldReport } from '../../src/engine/types';
 import { resolveLanguage, setLanguage, useT } from '../../src/i18n';
+import { setUiLanguage } from '../../src/storage';
+import { LanguageToggle } from '../../src/ui/LanguageToggle';
 import type { StatusGroupId } from '../../src/ui/status';
 import { FilterChips } from './FilterChips';
 import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
@@ -62,16 +64,26 @@ export default function App() {
   return (
     <div className="raf-panel-app">
       <header className="raf-header">
-        <div className="raf-toolbar">
-          <h1 className="raf-toolbar-title">{t('panel.title')}</h1>
-          <div className="raf-toolbar-end">
-            {profile ? (
-              <ResumeSwitcher profile={profile} onError={(message) => setSwitchFailed(message !== null)} />
-            ) : (
-              <span className="raf-skeleton raf-skeleton-select" aria-hidden="true" />
-            )}
-            <IconButton icon="arrow-clockwise" label={t('panel.refresh')} onClick={reload} />
+        <div className="raf-toolbar raf-toolbar--rows">
+          <div className="raf-toolbar-row">
+            <h1 className="raf-toolbar-title">{t('panel.title')}</h1>
+            <div className="raf-toolbar-end">
+              {/* A failed write leaves the language as it was, which the toggle then still shows: nothing else to say. */}
+              <LanguageToggle onChange={(language) => void setUiLanguage(language).catch(() => undefined)} />
+              <IconButton icon="arrow-clockwise" label={t('panel.refresh')} onClick={reload} />
+            </div>
           </div>
+          {profile ? (
+            profile.resumes.length > 0 ? (
+              <div className="raf-toolbar-row">
+                <ResumeSwitcher profile={profile} onError={(message) => setSwitchFailed(message !== null)} />
+              </div>
+            ) : null
+          ) : (
+            <div className="raf-toolbar-row">
+              <span className="raf-skeleton raf-skeleton-select" aria-hidden="true" />
+            </div>
+          )}
         </div>
       </header>
 

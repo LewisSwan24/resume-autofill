@@ -7,7 +7,7 @@ import type { FieldReport, FillReport, Outcome } from '../../../src/engine/types
 import { setLanguage } from '../../../src/i18n';
 import type { UiToBg } from '../../../src/messaging';
 import { ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
-import { loadProfile, saveProfile } from '../../../src/storage';
+import { loadProfile, saveProfile, setUiLanguage } from '../../../src/storage';
 
 const WAIT = { timeout: 4000 };
 const TAB_ID = 7;
@@ -447,6 +447,51 @@ describe('Side panel – resume switcher', () => {
     expect(select.value).toBe('r1');
     fireEvent.change(select, { target: { value: 'r2' } });
     await waitFor(async () => expect((await loadProfile()).activeResumeId).toBe('r2'), WAIT);
+  });
+});
+
+describe('Side panel – one-click switches', () => {
+  it('the interface language toggle switches the panel at once and stores the choice', async () => {
+    await renderPanel();
+    const group = await screen.findByRole('group', { name: 'Interface language' });
+    expect(within(group).getByRole('button', { name: 'English' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(group).getByRole('button', { name: '中文' }));
+    await screen.findByRole('heading', { name: '填写报告' }, WAIT);
+    await waitFor(async () => expect((await loadProfile()).settings.uiLanguage).toBe('zh'), WAIT);
+  });
+
+  it('follows a language switch made elsewhere', async () => {
+    await renderPanel();
+    await screen.findByRole('group', { name: 'Interface language' });
+    await setUiLanguage('zh');
+    await screen.findByRole('group', { name: '界面语言' }, WAIT);
+  });
+
+  it('one click moves filling to the resume in the other language, and the next click comes back', async () => {
+    await renderPanel(); // r1 Main (zh-CN) active, r2 English CV (en-AU)
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to English' }));
+    await waitFor(async () => expect((await loadProfile()).activeResumeId).toBe('r2'), WAIT);
+    await waitFor(() => expect((screen.getByLabelText('Active resume') as HTMLSelectElement).value).toBe('r2'), WAIT);
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Chinese' }, WAIT));
+    await waitFor(async () => expect((await loadProfile()).activeResumeId).toBe('r1'), WAIT);
+  });
+
+  it('prefers the linked resume over the first one in the other language', async () => {
+    const profile = makeProfile();
+    profile.resumes.push(ResumeSchema.parse({ id: 'r3', title: 'Linked CV', locale: 'en-AU' }));
+    profile.resumes[0] = { ...profile.resumes[0]!, linkedResumeId: 'r3' };
+    await renderPanel({ profile });
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to English' }));
+    await waitFor(async () => expect((await loadProfile()).activeResumeId).toBe('r3'), WAIT);
+  });
+
+  it('is disabled and says what to do when no resume is in the other language', async () => {
+    const profile = makeProfile();
+    profile.resumes[1] = ResumeSchema.parse({ id: 'r2', title: 'Another', locale: 'zh-CN' });
+    await renderPanel({ profile });
+    const button = (await screen.findByRole('button', { name: 'Switch to English' })) as HTMLButtonElement;
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.title).toMatch(/settings page/);
   });
 });
 

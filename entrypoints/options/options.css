@@ -42,6 +42,11 @@ body {
   gap: var(--raf-space-2) var(--raf-space-4);
   margin-bottom: var(--raf-space-6);
 }
+.raf-header__end {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-3);
+}
 /* The ONLY place the playful display face (ZCOOL KuaiLe) is used: the page title. */
 .raf-title {
   margin: 0;

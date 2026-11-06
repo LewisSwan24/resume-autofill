@@ -77,6 +77,25 @@ select {
   border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-md);
 }
+/* Two rows in one island: title + interface language + refresh, then the resume select + its language switch. */
+.raf-toolbar--rows {
+  flex-direction: column;
+  align-items: stretch;
+}
+.raf-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-1);
+  min-width: 0;
+}
+.raf-switch-resume {
+  padding: 0 var(--raf-space-3);
+  white-space: nowrap;
+}
+.raf-switch-resume[aria-disabled='true'] {
+  opacity: var(--raf-opacity-disabled);
+  cursor: not-allowed;
+}
 .raf-toolbar-title {
   flex: none;
   margin: 0;

@@ -39,6 +39,7 @@ import { Badge, Button, EmptyState, Field, Input, Notice, SelectInput } from './
 import { Dialog } from './ui/Dialog';
 import { Tabs, panelId, tabId, type TabItem } from './ui/Tabs';
 import { ToastProvider } from './ui/Toast';
+import { LanguageToggle } from '../../src/ui/LanguageToggle';
 import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
 import './ui/ui.css';
@@ -295,7 +296,14 @@ function Options({ autosaveDelayMs }: AppProps) {
         <h1 className="raf-title">{t('options.title')}</h1>
         <p className="raf-caption">{t('options.subtitle')}</p>
       </div>
-      <SaveStatusLine status={status} />
+      <div className="raf-header__end">
+        <SaveStatusLine status={status} />
+        {profile ? (
+          <LanguageToggle
+            onChange={(uiLanguage) => void commit({ ...profile, settings: { ...profile.settings, uiLanguage } }, { immediate: true })}
+          />
+        ) : null}
+      </div>
     </header>
   );
 

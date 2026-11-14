@@ -60,7 +60,7 @@ function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
   const pathOf = (key: string) => (base ? `${base}.${key}` : key);
   const change = (path: string, v: unknown) => onEdit((r) => setByPath(r, path, v));
 
-  const renderField = (field: FieldMeta): ReactNode => {
+  const renderControl = (field: FieldMeta): ReactNode => {
     const path = pathOf(field.key);
     const label = t(field.labelKey);
     const error = issues.get(path);
@@ -134,6 +134,13 @@ function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
       </Field>
     );
   };
+
+  // The path marks where the side panel's "Add it to your profile" can jump to (see useFocusRequest.ts).
+  const renderField = (field: FieldMeta): ReactNode => (
+    <div key={field.key} className="raf-field-anchor" data-field-path={pathOf(field.key)}>
+      {renderControl(field)}
+    </div>
+  );
 
   const rows: ReactNode[] = [];
   for (let i = 0; i < fields.length; i += 1) {
@@ -226,7 +233,7 @@ export function ModuleForm({ resume, meta, issues, onEdit }: Props) {
           </Fragment>
         );
       })}
-      <Button className="raf-add" icon="plus-lg" onClick={() => onEdit((r) => addEntry(r, module))}>
+      <Button className="raf-add" icon="plus-lg" data-add-module={module} onClick={() => onEdit((r) => addEntry(r, module))}>
         {t('options.add', { name: lowerName })}
       </Button>
     </div>

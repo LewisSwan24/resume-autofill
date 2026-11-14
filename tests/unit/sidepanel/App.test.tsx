@@ -8,6 +8,7 @@ import { setLanguage } from '../../../src/i18n';
 import type { UiToBg } from '../../../src/messaging';
 import { ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
 import { loadProfile, saveProfile, setUiLanguage } from '../../../src/storage';
+import { PROFILE_FOCUS_KEY } from '../../../src/ui/pages';
 
 const WAIT = { timeout: 4000 };
 const TAB_ID = 7;
@@ -650,6 +651,28 @@ describe('Side panel – way to the profile page and to help', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Add it to your profile' }));
     expect(open).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole('button', { name: 'Add it to your profile' })).toHaveLength(1);
+  });
+
+  it('a field with no data asks the profile page to jump to its input', async () => {
+    const open = spyOptions();
+    const report = makeReport([
+      field('n1', 'no_data', { label: 'Second school', fieldKey: 'education.school', source: 'education[1].school' }),
+    ]);
+    await renderPanel({ report });
+    await screen.findByText('Second school');
+    fireEvent.click(within(expand('Second school')).getByRole('button', { name: 'Add it to your profile' }));
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    const stored = await fakeBrowser.storage.session.get(PROFILE_FOCUS_KEY);
+    expect(stored[PROFILE_FOCUS_KEY]).toMatchObject({ target: { module: 'education', entry: 1, field: 'school' } });
+  });
+
+  it('a field it cannot place just opens the profile page, with no jump request', async () => {
+    const open = spyOptions();
+    await renderPanel();
+    await screen.findByText('Fax');
+    fireEvent.click(within(expand('Fax')).getByRole('button', { name: 'Add it to your profile' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(await fakeBrowser.storage.session.get(PROFILE_FOCUS_KEY)).toEqual({});
   });
 
   it('speaks Chinese when the UI language is zh', async () => {

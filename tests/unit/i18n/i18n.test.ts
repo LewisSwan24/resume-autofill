@@ -11,7 +11,7 @@ describe('dictionaries', () => {
   it('keys are namespaced and values non-empty', () => {
     for (const lang of ['zh', 'en'] as const) {
       for (const [key, value] of Object.entries(DICTIONARIES[lang])) {
-        expect(key).toMatch(/^(common|options|fab|panel|status)\./);
+        expect(key).toMatch(/^(common|options|fab|panel|status|welcome|help)\./);
         expect(value.trim(), `${lang}:${key}`).not.toBe('');
       }
     }

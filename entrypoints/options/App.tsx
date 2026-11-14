@@ -40,6 +40,7 @@ import { Dialog } from './ui/Dialog';
 import { Tabs, panelId, tabId, type TabItem } from './ui/Tabs';
 import { ToastProvider } from './ui/Toast';
 import { LanguageToggle } from '../../src/ui/LanguageToggle';
+import { HELP_PAGE, openExtensionPage } from '../../src/ui/pages';
 import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
 import './ui/ui.css';
@@ -298,6 +299,9 @@ function Options({ autosaveDelayMs }: AppProps) {
       </div>
       <div className="raf-header__end">
         <SaveStatusLine status={status} />
+        <Button icon="book" onClick={() => openExtensionPage(HELP_PAGE)}>
+          {t('common.help')}
+        </Button>
         {profile ? (
           <LanguageToggle
             onChange={(uiLanguage) => void commit({ ...profile, settings: { ...profile.settings, uiLanguage } }, { immediate: true })}

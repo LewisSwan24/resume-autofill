@@ -6,6 +6,7 @@ import { useEffect, useId, useState } from 'react';
 import type { FieldReport } from '../../src/engine/types';
 import { useT } from '../../src/i18n';
 import { Icon } from '../../src/ui/Icon';
+import { openProfilePage } from '../../src/ui/pages';
 import { OUTCOME_STATUS } from '../../src/ui/status';
 import { confidencePercent, displayValue, fieldKey, formatConfidence, hasCandidateChoices, hasConfidence } from './model';
 import { ConfidenceBadge, IconButton, StatusBadge, StatusIcon } from './parts';
@@ -98,6 +99,13 @@ function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport 
           </div>
 
           {field.note === 'same_file_held' ? <p className="raf-help raf-field-note">{t('panel.note.sameFileHeld')}</p> : null}
+
+          {field.outcome === 'no_data' ? (
+            <button type="button" className="raf-btn raf-btn-small raf-add-missing" onClick={openProfilePage}>
+              <Icon name="person-vcard" />
+              <span className="raf-btn-text">{t('panel.addMissing')}</span>
+            </button>
+          ) : null}
 
           {percent !== null ? (
             <div className="raf-confidence">

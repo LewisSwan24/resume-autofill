@@ -1,10 +1,12 @@
-// Side panel: toolbar (title, active resume, refresh) + fill report of the current tab.
+// Side panel: toolbar (title, active resume, the way to the profile and help pages, refresh) + fill report of the current tab.
 // Layout follows DESIGN-SYSTEM §6.2-B: a `paper` page with `surface` islands, no shadows.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FieldReport } from '../../src/engine/types';
 import { resolveLanguage, setLanguage, useT } from '../../src/i18n';
 import { setUiLanguage } from '../../src/storage';
+import { Icon } from '../../src/ui/Icon';
 import { LanguageToggle } from '../../src/ui/LanguageToggle';
+import { HELP_PAGE, openExtensionPage, openProfilePage } from '../../src/ui/pages';
 import type { StatusGroupId } from '../../src/ui/status';
 import { FilterChips } from './FilterChips';
 import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
@@ -20,6 +22,16 @@ import '../../src/ui/theme.css';
 import './sidepanel.css';
 
 const NO_FIELDS: readonly FieldReport[] = [];
+
+/** The way to the profile editor (the options page), with its word: an icon alone was not found. */
+function ProfileButton({ label }: { label: string }) {
+  return (
+    <button type="button" className="raf-btn raf-profile-btn" onClick={openProfilePage}>
+      <Icon name="person-vcard" />
+      <span className="raf-btn-text">{label}</span>
+    </button>
+  );
+}
 
 export default function App() {
   const t = useT();
@@ -70,15 +82,21 @@ export default function App() {
             <div className="raf-toolbar-end">
               {/* A failed write leaves the language as it was, which the toggle then still shows: nothing else to say. */}
               <LanguageToggle onChange={(language) => void setUiLanguage(language).catch(() => undefined)} />
+              <IconButton icon="book" label={t('common.help')} onClick={() => openExtensionPage(HELP_PAGE)} />
               <IconButton icon="arrow-clockwise" label={t('panel.refresh')} onClick={reload} />
             </div>
           </div>
           {profile ? (
-            profile.resumes.length > 0 ? (
+            <>
+              {profile.resumes.length > 0 ? (
+                <div className="raf-toolbar-row">
+                  <ResumeSwitcher profile={profile} onError={(message) => setSwitchFailed(message !== null)} />
+                </div>
+              ) : null}
               <div className="raf-toolbar-row">
-                <ResumeSwitcher profile={profile} onError={(message) => setSwitchFailed(message !== null)} />
+                <ProfileButton label={t('common.editProfile')} />
               </div>
-            ) : null
+            </>
           ) : (
             <div className="raf-toolbar-row">
               <span className="raf-skeleton raf-skeleton-select" aria-hidden="true" />
@@ -88,7 +106,9 @@ export default function App() {
       </header>
 
       <main className="raf-main">
-        {profile && profile.resumes.length === 0 ? <Notice>{t('panel.noResume')}</Notice> : null}
+        {profile && profile.resumes.length === 0 ? (
+          <Notice action={<ProfileButton label={t('common.fillProfile')} />}>{t('panel.noResume')}</Notice>
+        ) : null}
         {switchFailed ? <Notice tone="danger">{t('panel.switchError')}</Notice> : null}
         {error ? (
           <Notice
@@ -107,7 +127,14 @@ export default function App() {
         {loading && tabId !== null ? (
           <LoadingList />
         ) : fields.length === 0 ? (
-          error ? null : <EmptyState icon="file-earmark-text" title={t('panel.emptyTitle')} text={t('panel.empty')} />
+          error ? null : (
+            <EmptyState
+              icon="file-earmark-text"
+              title={t('panel.emptyTitle')}
+              text={t('panel.empty')}
+              action={<ProfileButton label={t('common.fillProfile')} />}
+            />
+          )
         ) : (
           <>
             <section className="raf-overview">

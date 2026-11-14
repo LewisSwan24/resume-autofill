@@ -62,6 +62,16 @@ describe('Options page – shell', () => {
     expect(screen.getByText('All data stays in this browser')).toBeTruthy();
   });
 
+  it('has a Help button in the header that opens the help page in a tab', async () => {
+    const create = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as never);
+    await renderApp();
+    const header = screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
+    const help = within(header).getByRole('button', { name: 'Help' });
+    expect(help.textContent).toContain('Help');
+    fireEvent.click(help);
+    expect(create).toHaveBeenCalledWith({ url: fakeBrowser.runtime.getURL('/help.html') });
+  });
+
   it('switches top-level tabs; the resume list belongs to Editor and Attachments only', async () => {
     await renderApp();
     expect(screen.getByRole('tab', { name: 'Editor' }).getAttribute('aria-selected')).toBe('true');

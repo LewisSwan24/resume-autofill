@@ -330,7 +330,7 @@ describe('Side panel – report list', () => {
 
   it('tells the user when there is no resume yet', async () => {
     await renderPanel({ profile: makeProfile('en', false) });
-    await screen.findByText('No resume yet. Add one in settings and it will show up here.');
+    await screen.findByText('No resume yet. Fill one in on the profile page and it will show up here.');
     expect(screen.queryByLabelText('Active resume')).toBeNull();
   });
 });
@@ -594,5 +594,68 @@ describe('Side panel – field messages', () => {
     expect(rowOf('Mystery').querySelector('[role="group"]')).toBeNull();
     expect(document.querySelectorAll('.raf-item-body input[type="text"]')).toHaveLength(4);
     expect(screen.getAllByRole('button', { name: 'Locate this field' })).toHaveLength(4);
+  });
+});
+
+describe('Side panel – way to the profile page and to help', () => {
+  const spyOptions = () => vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockResolvedValue(undefined);
+  const spyTabs = () => vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({} as never);
+
+  it('has an "Edit profile" button with its word in the toolbar that opens the profile page', async () => {
+    const open = spyOptions();
+    await renderPanel();
+    const select = await screen.findByLabelText('Active resume');
+    const toolbar = select.closest('.raf-toolbar') as HTMLElement;
+    const edit = within(toolbar).getByRole('button', { name: 'Edit profile' });
+    expect(edit.textContent).toContain('Edit profile');
+    fireEvent.click(edit);
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('has a Help button in the toolbar that opens the help page in a tab', async () => {
+    const create = spyTabs();
+    await renderPanel();
+    const select = await screen.findByLabelText('Active resume');
+    const toolbar = select.closest('.raf-toolbar') as HTMLElement;
+    const help = within(toolbar).getByRole('button', { name: 'Help' });
+    expect(help.getAttribute('data-tip')).toBe('Help');
+    fireEvent.click(help);
+    expect(create).toHaveBeenCalledWith({ url: browser.runtime.getURL('/help.html') });
+  });
+
+  it('offers the profile page from the empty state', async () => {
+    const open = spyOptions();
+    await renderPanel({ report: null });
+    await screen.findByText('Nothing here yet');
+    const empty = document.querySelector('.raf-empty') as HTMLElement;
+    fireEvent.click(within(empty).getByRole('button', { name: 'Fill in your profile' }));
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the profile page when there is no resume yet, and keeps the Edit profile button', async () => {
+    const open = spyOptions();
+    await renderPanel({ profile: makeProfile('en', false), report: null });
+    const text = await screen.findByText('No resume yet. Fill one in on the profile page and it will show up here.');
+    const notice = text.closest('.raf-notice') as HTMLElement;
+    fireEvent.click(within(notice).getByRole('button', { name: 'Fill in your profile' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Edit profile' })).toBeTruthy();
+  });
+
+  it('a field with no data says where to add it; no other row does', async () => {
+    const open = spyOptions();
+    await renderPanel();
+    await screen.findByText('Fax');
+    const row = expand('Fax');
+    fireEvent.click(within(row).getByRole('button', { name: 'Add it to your profile' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('button', { name: 'Add it to your profile' })).toHaveLength(1);
+  });
+
+  it('speaks Chinese when the UI language is zh', async () => {
+    await renderPanel({ profile: makeProfile('zh'), report: null });
+    expect(await screen.findByRole('button', { name: '编辑简历资料' }, WAIT)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '使用说明' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '去填写简历资料' })).toBeTruthy();
   });
 });

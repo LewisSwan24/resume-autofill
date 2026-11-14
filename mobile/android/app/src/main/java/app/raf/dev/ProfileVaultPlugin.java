@@ -39,6 +39,9 @@ import javax.crypto.spec.GCMParameterSpec;
  * data, so an id with data but no meta is a half-written or half-deleted file: the page never shows it and its sweep
  * removes it.
  *
+ * App state (onboarding, fill language, recent application pages) is one more JSON string in {@code state.enc},
+ * sealed the same way under the same key. {@link #wipe} deletes all of it and the key itself.
+ *
  * File layout: [1 byte format version = 1][1 byte IV length][IV][ciphertext + GCM tag].
  */
 @CapacitorPlugin(name = "ProfileVault")
@@ -46,6 +49,7 @@ public class ProfileVaultPlugin extends Plugin {
     private static final String KEYSTORE = "AndroidKeyStore";
     private static final String KEY_ALIAS = "raf.profile.v1";
     private static final String FILE_NAME = "profile.enc";
+    private static final String STATE_FILE_NAME = "state.enc";
     private static final String ATTACHMENT_DIR = "attachments";
     private static final String META = ".meta";
     private static final String DATA = ".data";
@@ -87,6 +91,87 @@ public class ProfileVaultPlugin extends Plugin {
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Could not save the profile: " + e.getClass().getSimpleName(), e);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ app state
+
+    @PluginMethod
+    public void readState(PluginCall call) {
+        synchronized (lock) {
+            try {
+                JSObject result = new JSObject();
+                byte[] data = readSealed(stateFile());
+                result.put("data", data == null ? JSObject.NULL : new String(data, StandardCharsets.UTF_8));
+                call.resolve(result);
+            } catch (Exception e) {
+                call.reject("Could not read the app state: " + e.getClass().getSimpleName(), e);
+            }
+        }
+    }
+
+    @PluginMethod
+    public void writeState(PluginCall call) {
+        String data = call.getString("data");
+        if (data == null) {
+            call.reject("Missing data");
+            return;
+        }
+        synchronized (lock) {
+            try {
+                writeSealed(stateFile(), encrypt(data.getBytes(StandardCharsets.UTF_8)));
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Could not save the app state: " + e.getClass().getSimpleName(), e);
+            }
+        }
+    }
+
+    @PluginMethod
+    public void clearState(PluginCall call) {
+        synchronized (lock) {
+            deleteSealed(stateFile());
+            if (sealedExists(stateFile())) call.reject("Could not delete the app state");
+            else call.resolve();
+        }
+    }
+
+    // ------------------------------------------------------------ delete everything
+
+    /**
+     * Delete the profile, the app state, every attachment file and the Keystore key. The next write creates a fresh
+     * key through {@link #key()}. Rejects WIPE_FAILED when anything is left afterwards.
+     */
+    @PluginMethod
+    public void wipe(PluginCall call) {
+        synchronized (lock) {
+            synchronized (fileLock) {
+                boolean clean = true;
+                deleteSealed(profileFile());
+                deleteSealed(stateFile());
+                File dir = attachmentDir();
+                File[] found = dir.listFiles();
+                if (found != null) {
+                    for (File f : found) f.delete();
+                }
+                dir.delete();
+                try {
+                    KeyStore store = KeyStore.getInstance(KEYSTORE);
+                    store.load(null);
+                    if (store.containsAlias(KEY_ALIAS)) store.deleteEntry(KEY_ALIAS);
+                    clean = !store.containsAlias(KEY_ALIAS);
+                } catch (Exception e) {
+                    clean = false;
+                }
+                File[] left = dir.listFiles();
+                clean = clean
+                    && !sealedExists(profileFile())
+                    && !sealedExists(stateFile())
+                    && !dir.exists()
+                    && (left == null || left.length == 0);
+                if (clean) call.resolve();
+                else call.reject("Could not delete all data", "WIPE_FAILED");
             }
         }
     }
@@ -203,6 +288,23 @@ public class ProfileVaultPlugin extends Plugin {
 
     private File profileFile() {
         return new File(getContext().getFilesDir(), FILE_NAME);
+    }
+
+    private File stateFile() {
+        return new File(getContext().getFilesDir(), STATE_FILE_NAME);
+    }
+
+    /** Delete a sealed file with AtomicFile's side files ("x.new", "x.bak"). */
+    private static void deleteSealed(File target) {
+        new AtomicFile(target).delete();
+        new File(target.getPath() + ".new").delete();
+        new File(target.getPath() + ".bak").delete();
+    }
+
+    private static boolean sealedExists(File target) {
+        return target.exists()
+            || new File(target.getPath() + ".new").exists()
+            || new File(target.getPath() + ".bak").exists();
     }
 
     private static void writeSealed(File target, byte[] sealed) throws IOException {

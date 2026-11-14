@@ -2,14 +2,15 @@
 // file picker; a filled one shows the file (a thumbnail for the photo) and a ⋯ menu to choose another file or delete
 // it with undo. Files go to the FileStore; the resume keeps only their ids. Clearing files that no resume points at
 // any more is App's job (it knows every resume), not this screen's.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ATTACHMENT_SLOTS, setAttachment, type AttachmentSlot } from '../../../src/editor';
 import { useLanguage } from '../../../src/i18n';
 import type { Resume } from '../../../src/schema';
 import { formatSize, formatWhen } from '../../../entrypoints/options/format';
-import type { ResumeEdit } from './fields';
+import { findFieldTarget, revealField, type ResumeEdit } from './fields';
 import { Icon, type IconName } from './Icon';
 import { useMT } from './i18n';
+import type { FocusTarget } from './navigation';
 import { readBlob, type FileInfo, type FileStore } from './store/fileStore';
 import { IconButton, Sheet, SheetAction, type ToastMessage } from './ui';
 
@@ -176,7 +177,7 @@ function Slot({ slot, resume, files, edit, showToast, onStored }: SlotProps) {
 
   return (
     <li className="m-card m-card--padded">
-      <fieldset className="m-slot" data-slot={slot}>
+      <fieldset className="m-slot" data-slot={slot} data-field-path={`attachments.${slot}`}>
         <legend className="m-slot__label">{label}</legend>
         <p className="m-help">{t('options.attach.help', { types, max: MAX_ATTACHMENT_MB })}</p>
         {!fileId ? (
@@ -238,12 +239,26 @@ interface Props {
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   /** A file was just stored and is not yet in the resume: keep the sweep away from it. */
   onStored: (id: string) => void;
+  /** A jump from Home to a slot: put the cursor on it, then call onFocusDone. */
+  focus?: FocusTarget | null;
+  onFocusDone?: () => void;
 }
 
-export function AttachmentsBody(props: Props) {
+export function AttachmentsBody({ focus, onFocusDone, ...props }: Props) {
   const t = useMT();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const doneRef = useRef(onFocusDone);
+  doneRef.current = onFocusDone;
+  const field = focus && focus.module === 'attachments' ? focus.field : null;
+  const nonce = field === null ? null : focus!.nonce;
+  useEffect(() => {
+    if (nonce === null || field === null) return;
+    const target = findFieldTarget(rootRef.current, `attachments.${field}`);
+    if (target) revealField(target);
+    doneRef.current?.();
+  }, [nonce, field]);
   return (
-    <div className="m-entries">
+    <div className="m-entries" ref={rootRef}>
       <ul className="m-slots">
         {ATTACHMENT_SLOTS.map((slot) => (
           <Slot key={slot} slot={slot} {...props} />

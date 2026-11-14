@@ -39,7 +39,9 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return ka.every((k) => k in b && deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 
-const sameContent = (a: Resume, b: Resume) => deepEqual({ ...a, updatedAt: 0 }, { ...b, updatedAt: 0 });
+/** Whether two resumes hold the same content, ignoring `updatedAt`. */
+export const sameResumeContent = (a: Resume, b: Resume): boolean =>
+  deepEqual({ ...a, updatedAt: 0 }, { ...b, updatedAt: 0 });
 
 /**
  * The profile as it should be written: validated, `activeResumeId` pointing at an existing resume (null only when
@@ -53,7 +55,7 @@ export function prepareForSave(next: Profile, previous: Profile | null, now: num
   const before = new Map((previous?.resumes ?? []).map((r) => [r.id, r]));
   parsed.resumes = parsed.resumes.map((r) => {
     const old = before.get(r.id);
-    return old && sameContent(old, r) ? { ...r, updatedAt: old.updatedAt } : { ...r, updatedAt: now };
+    return old && sameResumeContent(old, r) ? { ...r, updatedAt: old.updatedAt } : { ...r, updatedAt: now };
   });
   return parsed;
 }

@@ -1,0 +1,109 @@
+// Home, block C: recent application pages, newest first. A row opens a sheet with the full link to copy; each row
+// can be removed, and the list cleared after a confirm. Undo for both lives in the toast (HomeScreen).
+import { useId, useState } from 'react';
+import { useLanguage } from '../../../../src/i18n';
+import { ConfirmSheet } from '../dialogs';
+import { Icon } from '../Icon';
+import { useMT } from '../i18n';
+import type { RecentPage } from '../store/appStateStore';
+import { IconButton, Sheet, SheetAction, type ToastMessage } from '../ui';
+import { relativeTime } from './relativeTime';
+
+export interface RecentPagesProps {
+  pages: readonly RecentPage[];
+  now: number;
+  onRemove: (page: RecentPage) => void;
+  onClear: () => void;
+  showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+}
+
+export function RecentPages({ pages, now, onRemove, onClear, showToast }: RecentPagesProps) {
+  const t = useMT();
+  const language = useLanguage();
+  const headingId = useId();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const open = pages.find((p) => p.id === openId) ?? null;
+
+  const copy = async (url: string) => {
+    try {
+      if (typeof navigator.clipboard?.writeText !== 'function') throw new Error('no clipboard');
+      await navigator.clipboard.writeText(url);
+      showToast({ text: t('m.recent.copied') });
+    } catch {
+      showToast({ text: t('m.recent.copyFailed') });
+    }
+  };
+
+  return (
+    <section className="m-recent">
+      <div className="m-recent__head">
+        <h2 id={headingId}>{t('m.recent.title')}</h2>
+        {pages.length > 0 ? (
+          <button type="button" className="m-button m-button--text" onClick={() => setConfirming(true)}>
+            {t('m.recent.clear')}
+          </button>
+        ) : null}
+      </div>
+      {pages.length === 0 ? (
+        <p className="m-empty">{t('m.recent.empty')}</p>
+      ) : (
+        <ul className="m-card m-recent__list" aria-label={t('m.recent.title')}>
+          {pages.map((p) => (
+            <li key={p.id} className="m-recent__row">
+              <button type="button" className="m-recent__open" onClick={() => setOpenId(p.id)}>
+                <span className="m-row__tile">
+                  <Icon name="link-45deg" />
+                </span>
+                <span className="m-row__text">
+                  <span className="m-recent__host">{p.host}</span>
+                  {p.title ? <span className="m-row__caption">{p.title}</span> : null}
+                  <span className="m-recent__meta">{relativeTime(p.addedAt, now, language)}</span>
+                </span>
+              </button>
+              <IconButton icon="x-lg" label={t('m.recent.remove', { host: p.host })} onClick={() => onRemove(p)} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Sheet open={open !== null} title={t('m.recent.detailTitle')} onClose={() => setOpenId(null)}>
+        {open ? (
+          <div className="m-sheet-stack">
+            <p className="m-recent__host">{open.host}</p>
+            {open.title ? <p className="m-sheet-text">{open.title}</p> : null}
+            <p className="m-url">{open.url}</p>
+            <p className="m-notice">
+              <Icon name="info-circle" />
+              <span>{t('m.recent.browserSoon')}</span>
+            </p>
+            <div className="m-actions">
+              <SheetAction icon="copy" label={t('m.recent.copy')} onClick={() => void copy(open.url)} />
+              <SheetAction
+                icon="x-lg"
+                label={t('m.recent.removeOne')}
+                onClick={() => {
+                  setOpenId(null);
+                  onRemove(open);
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </Sheet>
+
+      <ConfirmSheet
+        open={confirming}
+        title={t('m.recent.clearTitle')}
+        text={t('m.recent.clearText', { n: pages.length })}
+        confirmLabel={t('m.recent.clearConfirm')}
+        danger
+        onConfirm={() => {
+          setConfirming(false);
+          onClear();
+        }}
+        onClose={() => setConfirming(false)}
+      />
+    </section>
+  );
+}

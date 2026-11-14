@@ -1,39 +1,41 @@
-// The mobile app's profile page (简历资料): pick a resume, pick a module, edit it. Two screens, no router:
-// the module list and one module. The Android back key closes a sheet first, then returns to the list.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  MODULES,
-  getByPath,
-  issuesForResume,
-  referencedFileIds,
-  updateResume,
-  type ArrayModuleName,
-  type ModuleMeta,
-  type ModuleName,
-} from '../../../src/editor';
-import { resolveLanguage, setLanguage, useLanguage } from '../../../src/i18n';
-import type { Profile, Resume } from '../../../src/schema';
-import { blankValue, isFilled, type ResumeEdit } from './fields';
-import { Icon, MODULE_ICONS } from './Icon';
+// The mobile app's shell: onboarding on a first run, then three tabs (首页, 简历, 设置) with one back-key order for
+// the whole app. App holds what must outlive a wipe (toast, back stack); AppContent, keyed by a generation counter,
+// holds the profile editor, the app state and the navigation, so deleting everything remounts it on empty storage.
+import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { referencedFileIds, setActive, type ModuleMeta } from '../../../src/editor';
+import { resolveLanguage, setLanguage, useLanguage, type Language } from '../../../src/i18n';
+import type { Locale } from '../../../src/schema';
+import { Onboarding } from './onboarding/Onboarding';
+import { HomeScreen } from './home/HomeScreen';
 import { useMT } from './i18n';
-import { ModuleBody, entrySummary } from './ModuleScreen';
-import { ResumeSwitcher, startResume } from './ResumeSwitcher';
-import { AttachmentsBody, attachedCount } from './AttachmentsScreen';
+import { INITIAL_NAV, backFrom, navReduce, type FocusTarget, type NavAction, type NavState, type Tab } from './navigation';
+import { PROFILE_MODULES as RESUME_TAB_MODULES, ResumeTab } from './ResumeTab';
+import { startResume } from './ResumeSwitcher';
+import { SettingsScreen } from './settings/SettingsScreen';
+import { useImportFlow } from './settings/useImportFlow';
+import type { AppStateStore } from './store/appStateStore';
 import { sweepFiles, type FileStore } from './store/fileStore';
 import type { ProfileStore } from './store/profileStore';
-import { BackStackContext, IconButton, SaveStatusLine, Toast, createBackStack, type ToastMessage } from './ui';
+import type { Wiper } from './store/wipe';
+import { TabBar, useKeyboardOpen } from './TabBar';
+import { BackStackContext, Toast, createBackStack, type ToastMessage } from './ui';
+import { useAppState } from './useAppState';
 import { useProfileEditor } from './useProfileEditor';
 
-/** What the page needs from the phone. main.tsx wires it to Capacitor; tests press the keys by hand. */
+/** What the app needs from the phone. main.tsx wires it to Capacitor; tests press the keys by hand. */
 export interface Platform {
   /** The handler returns true when it used the back key, false to let the system have it (leave the app). */
   onBack(handler: () => boolean): () => void;
   /** The app is going to the background. */
   onPause(handler: () => void): () => void;
+  /** Name and version for the About sheet. */
+  appInfo?(): Promise<{ name: string; version: string; build: string }>;
+  /** Save a file where the person chooses (Android: the system "create document" picker). */
+  saveDocument?(file: { name: string; mimeType: string; bytes: Uint8Array }): Promise<'saved' | 'cancelled'>;
 }
 
-/** The modules this page edits: all of the extension editor's, in its order (attachments last). */
-export const PROFILE_MODULES: readonly ModuleMeta[] = MODULES;
+/** The modules the 简历 tab edits: all of the extension editor's, in its order (attachments last). */
+export const PROFILE_MODULES: readonly ModuleMeta[] = RESUME_TAB_MODULES;
 
 /** A deleted file can be brought back from the toast for 8 s; only after that may the sweep clear it. */
 export const SWEEP_DELAY_MS = 9000;
@@ -41,73 +43,181 @@ export const SWEEP_DELAY_MS = 9000;
 const HOLD_MS = 60_000;
 /** The sweep for a removal runs this much after the removal's hold has ended, so the hold is surely over. */
 const SWEEP_MARGIN_MS = 50;
+/** The loading line appears only when opening takes longer than this. */
+const LOADING_LINE_MS = 300;
 
 interface Props {
   store: ProfileStore;
   files: FileStore;
+  appState: AppStateStore;
+  wiper: Wiper;
   platform?: Platform;
   autosaveDelayMs?: number;
   sweepDelayMs?: number;
+  /** Tests pin the time for relative times. */
+  now?: () => number;
 }
 
-function moduleCaption(meta: ModuleMeta, resume: Resume, t: ReturnType<typeof useMT>): string {
-  if (meta.container === 'attachments') {
-    const n = attachedCount(resume);
-    return n === 0 ? t('m.notFilled') : t('m.attached', { n });
-  }
-  if (meta.repeatable) {
-    const entries = resume[meta.module as ArrayModuleName] as unknown as Record<string, unknown>[];
-    if (entries.length === 0) return t('m.notFilled');
-    const summary = entrySummary(meta, entries[0]!);
-    const count = t('m.entries', { n: entries.length });
-    return summary ? `${count} · ${summary}` : count;
-  }
-  const base = meta.container === 'root' ? '' : `${meta.module}.`;
-  const filled = meta.fields.filter((f) => isFilled(getByPath(resume, `${base}${f.key}`), blankValue(meta, f))).length;
-  return filled === 0 ? t('m.notFilled') : t('m.filled', { n: filled });
-}
+type ShowToast = (toast: Omit<ToastMessage, 'id'>) => void;
 
-export default function App({ store, files, platform, autosaveDelayMs, sweepDelayMs = SWEEP_DELAY_MS }: Props) {
+export default function App(props: Props) {
   const t = useMT();
-  const language = useLanguage();
-  const editor = useProfileEditor(store, autosaveDelayMs);
-  const { profile, edit } = editor;
-  const [moduleName, setModuleName] = useState<ModuleName | null>(null);
+  const [generation, setGeneration] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const backStack = useMemo(() => createBackStack(), []);
-  const moduleRef = useRef(moduleName);
-  moduleRef.current = moduleName;
+  const showToast = useCallback<ShowToast>((next) => setToast({ ...next, id: Date.now() }), []);
+  const hideToast = useCallback(() => setToast(null), []);
+  const tRef = useRef(t);
+  tRef.current = t;
+  const onWiped = useCallback(
+    (ok: boolean) => {
+      setGeneration((g) => g + 1);
+      showToast({ text: tRef.current(ok ? 'm.wipe.done' : 'm.wipe.failed') });
+    },
+    [showToast],
+  );
+  return (
+    <BackStackContext.Provider value={backStack}>
+      <AppContent
+        key={generation}
+        {...props}
+        showToast={showToast}
+        toast={<Toast toast={toast} onDone={hideToast} />}
+        onWiped={onWiped}
+      />
+    </BackStackContext.Provider>
+  );
+}
+
+type ShellAction = NavAction | { type: 'replace'; state: NavState };
+const shellReduce = (state: NavState, action: ShellAction): NavState => (action.type === 'replace' ? action.state : navReduce(state, action));
+
+function AppContent({
+  store,
+  files,
+  appState: appStateStore,
+  wiper,
+  platform,
+  autosaveDelayMs,
+  sweepDelayMs = SWEEP_DELAY_MS,
+  now,
+  showToast,
+  toast,
+  onWiped,
+}: Props & { showToast: ShowToast; toast: ReactNode; onWiped: (ok: boolean) => void }) {
+  const t = useMT();
+  const language = useLanguage();
+  const backStack = useContext(BackStackContext);
+  const editor = useProfileEditor(store, autosaveDelayMs);
+  const { profile, edit } = editor;
+  const [nav, dispatch] = useReducer(shellReduce, INITIAL_NAV);
+  const keyboard = useKeyboardOpen();
+
+  // App state starts once the profile has loaded: a phone that already has resumes (an earlier build) skips
+  // onboarding; a profile that cannot be read is not a first run either. Fixed at the first answer.
+  const seedRef = useRef<{ hasResumes: boolean } | null>(null);
+  if (!seedRef.current && (profile || editor.loadError)) seedRef.current = { hasResumes: profile ? profile.resumes.length > 0 : true };
+  const { state: appState, update: updateAppState } = useAppState(appStateStore, seedRef.current);
+  const onboarding = appState !== null && !appState.onboardingDone;
+  const ready = appState !== null && (profile !== null || editor.loadError !== null);
 
   const uiLanguage = profile?.settings.uiLanguage;
   useEffect(() => {
     if (uiLanguage) setLanguage(resolveLanguage(uiLanguage, navigator.language));
   }, [uiLanguage]);
 
-  const open = useCallback((name: ModuleName | null) => {
-    setModuleName(name);
+  // ------------------------------------------------------------ navigation
+  const scrollTop = () => {
     document.documentElement.scrollTop = 0;
+  };
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const onboardingRef = useRef(onboarding);
+  onboardingRef.current = onboarding;
+
+  /** Scroll position of each tab's root, restored when coming back to it. */
+  const rootScroll = useRef(new Map<Tab, number>());
+  const atRoot = (s: NavState) => (s.tab === 'resume' ? s.module === null : s.tab === 'settings' ? s.settingsPage === 'root' : true);
+  const selectTab = useCallback((tab: Tab) => {
+    const current = navRef.current;
+    if (atRoot(current)) rootScroll.current.set(current.tab, document.documentElement.scrollTop);
+    dispatch({ type: 'tab', tab });
   }, []);
+
+  // On a new screen (a tab, an onboarding step, a settings page, the shell after onboarding): focus its heading so a
+  // screen reader announces it, since the button that was focused may be gone. On a tab change, also go back to where
+  // that tab was. The first screen after loading keeps the page's own focus.
+  const screenKey = !ready
+    ? 'loading'
+    : onboarding
+      ? `onboarding:${nav.onboardingStep}`
+      : `${nav.tab}:${nav.tab === 'settings' ? nav.settingsPage : ''}`;
+  const lastScreen = useRef<string | null>(null);
+  const lastTab = useRef<Tab>(nav.tab);
+  useEffect(() => {
+    const previous = lastScreen.current;
+    lastScreen.current = screenKey;
+    const current = navRef.current;
+    const tabChanged = lastTab.current !== current.tab;
+    lastTab.current = current.tab;
+    if (previous === null || previous === 'loading' || screenKey === 'loading') return;
+    if (current.focus) return; // a jump puts the cursor in a field instead
+    if (tabChanged) document.documentElement.scrollTop = atRoot(current) ? (rootScroll.current.get(current.tab) ?? 0) : 0;
+    const h1 = document.querySelector<HTMLElement>('main h1');
+    if (h1) {
+      if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1');
+      h1.focus({ preventScroll: true });
+    }
+  }, [screenKey]);
+
+  const openModule = useCallback((module: ModuleMeta['module'] | null) => {
+    dispatch({ type: 'module', module });
+    scrollTop();
+  }, []);
+  const focusDone = useCallback(() => dispatch({ type: 'focusDone' }), []);
+
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const makeActive = useCallback(
+    (resumeId: string) => {
+      const current = profileRef.current;
+      if (current && current.activeResumeId !== resumeId && current.resumes.some((r) => r.id === resumeId)) {
+        edit((p) => setActive(p, resumeId), { immediate: true });
+      }
+    },
+    [edit],
+  );
+  const jump = useCallback(
+    (resumeId: string, target?: Omit<FocusTarget, 'nonce'>) => {
+      makeActive(resumeId);
+      if (target) dispatch({ type: 'jump', target });
+      else {
+        if (navRef.current.tab !== 'resume') dispatch({ type: 'tab', tab: 'resume' });
+        dispatch({ type: 'module', module: null });
+      }
+      scrollTop();
+    },
+    [makeActive],
+  );
 
   useEffect(() => {
     if (!platform) return;
     const offBack = platform.onBack(() => {
       if (backStack.pop()) return true;
-      if (moduleRef.current) {
-        open(null);
-        return true;
-      }
-      return false;
+      const next = backFrom(navRef.current, onboardingRef.current);
+      if (!next) return false;
+      dispatch({ type: 'replace', state: next });
+      if (next.tab === navRef.current.tab) scrollTop();
+      return true;
     });
     const offPause = platform.onPause(() => void editor.flush());
     return () => {
       offBack();
       offPause();
     };
-  }, [platform, backStack, open, editor.flush]);
+  }, [platform, backStack, editor.flush]);
 
   // ------------------------------------------------------------ attachment files no resume points at
-  const profileRef = useRef(profile);
-  profileRef.current = profile;
   /** Files no resume points at that must still stay, until the time given: a fresh upload, or a delete that can be undone. */
   const held = useRef(new Map<string, number>());
   const hold = useCallback((id: string) => void held.current.set(id, Date.now() + HOLD_MS), []);
@@ -160,135 +270,195 @@ export default function App({ store, files, platform, autosaveDelayMs, sweepDela
     return () => pending.forEach(clearTimeout);
   }, []);
 
-  const showToast = useCallback((next: Omit<ToastMessage, 'id'>) => setToast({ ...next, id: Date.now() }), []);
-  const hideToast = useCallback(() => setToast(null), []);
+  // ------------------------------------------------------------ actions shared by the screens
+  const tRef = useRef(t);
+  tRef.current = t;
+  /** Resolves false (after saying so) when the app state could not be saved; onboarding may then come back. */
+  const finishOnboarding = useCallback(async () => {
+    const ok = await updateAppState((s) => ({ ...s, onboardingDone: true }));
+    if (!ok) showToast({ text: tRef.current('m.saveStateFailed') });
+    return ok;
+  }, [updateAppState, showToast]);
 
-  const body = (() => {
-    if (editor.loadError) return <p className="m-empty">{t('m.loadFailed', { message: editor.loadError })}</p>;
-    if (!profile) return null;
-    const index = profile.resumes.findIndex((r) => r.id === profile.activeResumeId);
-    const resume = profile.resumes[index];
+  const chooseLanguage = useCallback(
+    (next: Language) => {
+      setLanguage(next);
+      const current = profileRef.current;
+      if (current && current.settings.uiLanguage !== next) {
+        edit((p) => ({ ...p, settings: { ...p.settings, uiLanguage: next } }), { immediate: true });
+      }
+    },
+    [edit],
+  );
 
-    if (!resume) {
-      return (
-        <ListHeader profile={profile} edit={edit} title={t('m.title')}>
-          <div className="m-card m-card--padded m-start">
-            <p className="m-empty">{t('m.empty')}</p>
-            <button
-              type="button"
-              className="m-button m-button--primary m-button--wide"
-              onClick={() => edit((p) => startResume(p, 'zh-CN', t('m.defaultTitle.zh')), { immediate: true })}
-            >
-              <Icon name="plus-lg" />
-              <span>{t('m.newZh')}</span>
-            </button>
-            <button
-              type="button"
-              className="m-button m-button--wide"
-              onClick={() => edit((p) => startResume(p, 'en-AU', t('m.defaultTitle.en')), { immediate: true })}
-            >
-              <Icon name="plus-lg" />
-              <span>{t('m.newEn')}</span>
-            </button>
-          </div>
-        </ListHeader>
-      );
+  const newResume = useCallback(
+    (locale: Locale) => {
+      const title = t(locale.startsWith('zh') ? 'm.defaultTitle.zh' : 'm.defaultTitle.en');
+      edit((p) => startResume(p, locale, title), { immediate: true });
+      if (navRef.current.tab !== 'resume') dispatch({ type: 'tab', tab: 'resume' });
+      dispatch({ type: 'module', module: null });
+      scrollTop();
+    },
+    [edit, t],
+  );
+
+  const importFlow = useImportFlow({
+    profile,
+    loadError: editor.loadError,
+    edit,
+    files,
+    showToast,
+    onImported: () => {
+      if (onboardingRef.current) {
+        void finishOnboarding();
+        dispatch({ type: 'replace', state: INITIAL_NAV });
+      }
+    },
+  });
+
+  const readStoredProfile = useCallback(async () => {
+    await editor.flush();
+    return store.load();
+  }, [editor.flush, store]);
+
+  const wipeAll = useCallback(async (): Promise<boolean> => {
+    try {
+      await editor.flush();
+    } catch {
+      // Being deleted anyway.
     }
-
-    const issues = issuesForResume(editor.issues, index);
-    const editResume: ResumeEdit = (change) => edit((p: Profile) => updateResume(p, resume.id, change));
-    const editResumeNow: ResumeEdit = (change) => edit((p: Profile) => updateResume(p, resume.id, change), { immediate: true });
-    const meta = moduleName ? PROFILE_MODULES.find((m) => m.module === moduleName) : undefined;
-
-    if (meta) {
-      return (
-        <>
-          <header className="m-header m-header--module">
-            <IconButton icon="arrow-left" label={t('m.back')} onClick={() => open(null)} />
-            <h1 className="m-title">{t(meta.labelKey)}</h1>
-          </header>
-          <SaveStatusLine status={editor.status} />
-          {meta.container === 'attachments' ? (
-            <AttachmentsBody key={resume.id} resume={resume} files={files} edit={editResumeNow} showToast={showToast} onStored={hold} />
-          ) : (
-            <ModuleBody key={`${resume.id}:${meta.module}`} meta={meta} resume={resume} issues={issues} edit={editResume} showToast={showToast} />
-          )}
-        </>
-      );
+    timers.current.forEach(clearTimeout);
+    timers.current.clear();
+    let ok = true;
+    try {
+      await wiper.wipeAll();
+    } catch {
+      ok = false;
     }
+    dispatch({ type: 'reset' });
+    onWiped(ok); // remounts this component, which reloads the profile and app state from storage
+    return ok;
+  }, [editor.flush, wiper, onWiped]);
 
+  const saveDocument = useMemo(
+    () => (platform?.saveDocument ? (file: Parameters<NonNullable<Platform['saveDocument']>>[0]) => platform.saveDocument!(file) : undefined),
+    [platform],
+  );
+  const appInfo = useMemo(() => (platform?.appInfo ? () => platform.appInfo!() : undefined), [platform]);
+
+  // ------------------------------------------------------------ loading line, after a moment
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (ready) return;
+    const timer = setTimeout(() => setSlow(true), LOADING_LINE_MS);
+    return () => clearTimeout(timer);
+  }, [ready]);
+
+  const lang = language === 'zh' ? 'zh-CN' : 'en';
+
+  if (!ready || onboarding) {
     return (
-      <ListHeader profile={profile} edit={edit} title={t('m.title')}>
-        <ResumeSwitcher profile={profile} edit={edit} showToast={showToast} />
-        <SaveStatusLine status={editor.status} />
-        <ul className="m-card m-modules" aria-label={t('m.modules')}>
-          {PROFILE_MODULES.map((m) => (
-            <li key={m.module}>
-              <button type="button" className="m-row" onClick={() => open(m.module)}>
-                <span className="m-row__tile">
-                  <Icon name={MODULE_ICONS[m.module]} />
-                </span>
-                <span className="m-row__text">
-                  <span className="m-row__name">{t(m.labelKey)}</span>
-                  <span className="m-row__caption">{moduleCaption(m, resume, t)}</span>
-                </span>
-                <Icon name="chevron-right" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </ListHeader>
+      <>
+        <main className="m-page" lang={lang}>
+          {!ready ? (
+            slow ? (
+              <p className="m-status" role="status">
+                {t('m.loading')}
+              </p>
+            ) : null
+          ) : (
+            <Onboarding
+              step={nav.onboardingStep}
+              onStep={(step) => dispatch({ type: 'onboardingStep', step })}
+              language={language}
+              onLanguage={chooseLanguage}
+              onSkip={() => {
+                void finishOnboarding();
+                dispatch({ type: 'replace', state: INITIAL_NAV });
+              }}
+              onStartBlank={(locale) => {
+                void finishOnboarding();
+                // A failed save brings onboarding back; trying again opens the resume made the first time.
+                if ((profileRef.current?.resumes.length ?? 0) === 0) newResume(locale);
+                else jump(profileRef.current!.activeResumeId ?? profileRef.current!.resumes[0]!.id);
+              }}
+              onImport={importFlow.start}
+              showToast={showToast}
+            />
+          )}
+        </main>
+        {importFlow.element}
+        {toast}
+      </>
     );
-  })();
+  }
+
+  let body: ReactNode;
+  switch (nav.tab) {
+    case 'home':
+      body = (
+        <HomeScreen
+          profile={profile}
+          loadError={editor.loadError}
+          appState={appState}
+          updateAppState={updateAppState}
+          onJump={jump}
+          onStartResume={newResume}
+          onImport={importFlow.start}
+          onOpenSettings={() => selectTab('settings')}
+          showToast={showToast}
+          now={now}
+        />
+      );
+      break;
+    case 'resume':
+      body = (
+        <ResumeTab
+          editor={editor}
+          files={files}
+          module={nav.module}
+          onModule={openModule}
+          focus={nav.focus}
+          onFocusDone={focusDone}
+          showToast={showToast}
+          onStored={hold}
+        />
+      );
+      break;
+    case 'settings':
+      body = (
+        <SettingsScreen
+          profile={profile}
+          loadError={editor.loadError}
+          page={nav.settingsPage}
+          onPage={(page) => {
+            dispatch({ type: 'settingsPage', page });
+            scrollTop();
+          }}
+          language={language}
+          onLanguage={chooseLanguage}
+          appState={appState}
+          updateAppState={updateAppState}
+          readStoredProfile={readStoredProfile}
+          files={files}
+          saveDocument={saveDocument}
+          appInfo={appInfo}
+          onImport={importFlow.start}
+          onWipe={wipeAll}
+          showToast={showToast}
+        />
+      );
+      break;
+  }
 
   return (
-    <BackStackContext.Provider value={backStack}>
-      <main className="m-page" lang={language === 'zh' ? 'zh-CN' : 'en'}>
+    <div className={keyboard ? 'm-shell m-shell--keyboard' : 'm-shell'}>
+      <main className="m-page m-shell__main" lang={lang}>
         {body}
       </main>
-      <Toast toast={toast} onDone={hideToast} />
-    </BackStackContext.Provider>
-  );
-}
-
-/** Title row of the first screen: the page title and the interface language switch. */
-function ListHeader({
-  profile,
-  edit,
-  title,
-  children,
-}: {
-  profile: Profile;
-  edit: (change: (p: Profile) => Profile, options?: { immediate?: boolean }) => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  const t = useMT();
-  const language = useLanguage();
-  const choose = (next: 'zh' | 'en') => {
-    setLanguage(next);
-    if (profile.settings.uiLanguage !== next) edit((p) => ({ ...p, settings: { ...p.settings, uiLanguage: next } }), { immediate: true });
-  };
-  return (
-    <>
-      <header className="m-header">
-        <h1 className="m-title">{title}</h1>
-        <div className="m-segmented m-segmented--small" role="radiogroup" aria-label={t('common.uiLanguage')}>
-          {(['zh', 'en'] as const).map((l) => (
-            <button
-              key={l}
-              type="button"
-              role="radio"
-              aria-checked={language === l}
-              className={language === l ? 'm-segment m-segment--on' : 'm-segment'}
-              onClick={() => choose(l)}
-            >
-              {l === 'zh' ? t('m.zhTag') : t('m.enTag')}
-            </button>
-          ))}
-        </div>
-      </header>
-      {children}
-    </>
+      <TabBar tab={nav.tab} onTab={selectTab} />
+      {importFlow.element}
+      {toast}
+    </div>
   );
 }

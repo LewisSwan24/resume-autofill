@@ -76,9 +76,33 @@ export function splitListInput(text: string): string[] {
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
 
+// ------------------------------------------------------------------ jump target
+
+/** How long a field reached by a jump stays highlighted. */
+export const TARGET_HIGHLIGHT_MS = 2000;
+
+/** The element marked with this path (`contact.phone`, `education.0.school`, `attachments.resumeFileId`), if shown. */
+export function findFieldTarget(root: ParentNode | null, path: string): HTMLElement | null {
+  if (!root) return null;
+  for (const el of root.querySelectorAll<HTMLElement>('[data-field-path]')) if (el.dataset.fieldPath === path) return el;
+  return null;
+}
+
+/** Bring a field into view, put the cursor in its first control and highlight it for a moment. */
+export function revealField(el: HTMLElement): void {
+  el.scrollIntoView?.({ block: 'center' });
+  const selector = 'input, textarea, select, button';
+  const control = el.matches(selector) ? el : el.querySelector<HTMLElement>(selector);
+  (control ?? el).focus({ preventScroll: true });
+  el.classList.add('m-field--target');
+  setTimeout(() => el.classList.remove('m-field--target'), TARGET_HIGHLIGHT_MS);
+}
+
 // ------------------------------------------------------------------ field shell
 
 interface ShellProps {
+  /** The path FieldEditor writes with; a jump from Home finds the field by it. */
+  path: string;
   label: string;
   htmlFor?: string;
   labelId?: string;
@@ -87,9 +111,9 @@ interface ShellProps {
   children: ReactNode;
 }
 
-function FieldShell({ label, htmlFor, labelId, error, errorId, children }: ShellProps) {
+function FieldShell({ path, label, htmlFor, labelId, error, errorId, children }: ShellProps) {
   return (
-    <div className="m-field">
+    <div className="m-field" data-field-path={path}>
       <label className="m-label" htmlFor={htmlFor} id={labelId}>
         {label}
       </label>
@@ -203,7 +227,7 @@ function InputField({ field, base, resume, issues, edit }: FieldProps) {
       control = <input className="m-input" {...textInputProps(field.key)} value={asString(value)} {...aria} onChange={(e) => set(e.target.value)} />;
   }
   return (
-    <FieldShell label={label} htmlFor={id} error={error} errorId={`${id}-error`}>
+    <FieldShell path={path} label={label} htmlFor={id} error={error} errorId={`${id}-error`}>
       {control}
     </FieldShell>
   );
@@ -226,7 +250,7 @@ function EnumField({ meta, field, base, resume, issues, edit }: FieldProps) {
   const shown = options.find((o) => o.value === currentValue)?.label ?? t('common.unset');
 
   return (
-    <FieldShell label={label} labelId={`${id}-label`} error={error} errorId={`${id}-error`}>
+    <FieldShell path={path} label={label} labelId={`${id}-label`} error={error} errorId={`${id}-error`}>
       <button
         type="button"
         className="m-input m-select"
@@ -282,7 +306,7 @@ function BoolField({ field, base, resume, issues, edit }: FieldProps) {
     { v: null, text: t('common.unset') },
   ];
   return (
-    <FieldShell label={label} labelId={`${id}-label`} error={error} errorId={`${id}-error`}>
+    <FieldShell path={path} label={label} labelId={`${id}-label`} error={error} errorId={`${id}-error`}>
       <div className="m-segmented" role="radiogroup" aria-labelledby={`${id}-label`}>
         {states.map((s) => {
           const checked = value === s.v || (s.v === null && value !== true && value !== false);
@@ -321,7 +345,7 @@ function ListField({ field, base, resume, issues, edit }: FieldProps) {
   };
 
   return (
-    <FieldShell label={label} htmlFor={id} error={error} errorId={`${id}-error`}>
+    <FieldShell path={path} label={label} htmlFor={id} error={error} errorId={`${id}-error`}>
       {items.length > 0 ? (
         <ul className="m-chips" aria-label={label}>
           {items.map((item, index) => (
@@ -378,7 +402,7 @@ function RegionField({ field, base, resume, issues, edit }: FieldProps) {
   const raw = getByPath(resume, path);
   const region = (raw && typeof raw === 'object' ? raw : {}) as Record<string, string | undefined>;
   return (
-    <fieldset className="m-field m-region" aria-describedby={error ? `${id}-error` : undefined}>
+    <fieldset className="m-field m-region" data-field-path={path} aria-describedby={error ? `${id}-error` : undefined}>
       <legend className="m-label">{label}</legend>
       <div className="m-region__parts">
         {REGION_PARTS.map((part) => (

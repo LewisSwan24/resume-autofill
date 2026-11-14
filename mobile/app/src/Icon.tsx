@@ -37,6 +37,25 @@ import fileEarmarkText from 'bootstrap-icons/icons/file-earmark-text.svg?raw';
 import image from 'bootstrap-icons/icons/image.svg?raw';
 import paperclip from 'bootstrap-icons/icons/paperclip.svg?raw';
 import upload from 'bootstrap-icons/icons/upload.svg?raw';
+import houseIcon from 'bootstrap-icons/icons/house.svg?raw';
+import personVcard from 'bootstrap-icons/icons/person-vcard.svg?raw';
+import gearIcon from 'bootstrap-icons/icons/gear.svg?raw';
+import link45deg from 'bootstrap-icons/icons/link-45deg.svg?raw';
+import clipboardIcon from 'bootstrap-icons/icons/clipboard.svg?raw';
+import copyIcon from 'bootstrap-icons/icons/copy.svg?raw';
+import downloadIcon from 'bootstrap-icons/icons/download.svg?raw';
+import lockIcon from 'bootstrap-icons/icons/lock.svg?raw';
+import eyeIcon from 'bootstrap-icons/icons/eye.svg?raw';
+import eyeSlash from 'bootstrap-icons/icons/eye-slash.svg?raw';
+import globeIcon from 'bootstrap-icons/icons/globe.svg?raw';
+import shieldIcon from 'bootstrap-icons/icons/shield.svg?raw';
+import infoCircle from 'bootstrap-icons/icons/info-circle.svg?raw';
+import checkCircle from 'bootstrap-icons/icons/check-circle.svg?raw';
+import exclamationCircle from 'bootstrap-icons/icons/exclamation-circle.svg?raw';
+import sendSlash from 'bootstrap-icons/icons/send-slash.svg?raw';
+import clipboardCheck from 'bootstrap-icons/icons/clipboard-check.svg?raw';
+import listUl from 'bootstrap-icons/icons/list-ul.svg?raw';
+import inputCursorText from 'bootstrap-icons/icons/input-cursor-text.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -77,6 +96,25 @@ const ICONS = {
   image,
   paperclip,
   upload,
+  'house': houseIcon,
+  'person-vcard': personVcard,
+  'gear': gearIcon,
+  'link-45deg': link45deg,
+  'clipboard': clipboardIcon,
+  'copy': copyIcon,
+  'download': downloadIcon,
+  'lock': lockIcon,
+  'eye': eyeIcon,
+  'eye-slash': eyeSlash,
+  'globe': globeIcon,
+  'shield': shieldIcon,
+  'info-circle': infoCircle,
+  'check-circle': checkCircle,
+  'exclamation-circle': exclamationCircle,
+  'send-slash': sendSlash,
+  'clipboard-check': clipboardCheck,
+  'list-ul': listUl,
+  'input-cursor-text': inputCursorText,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

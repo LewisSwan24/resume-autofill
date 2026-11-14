@@ -1,5 +1,5 @@
 // One module of the current resume: a single card of fields, or a list of entry cards (one open at a time).
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   addEntry,
   insertEntry,
@@ -9,9 +9,10 @@ import {
   type ModuleMeta,
 } from '../../../src/editor';
 import type { Resume } from '../../../src/schema';
-import { FieldEditor, type ResumeEdit } from './fields';
+import { FieldEditor, findFieldTarget, revealField, type ResumeEdit } from './fields';
 import { Icon } from './Icon';
 import { useMT } from './i18n';
+import type { FocusTarget } from './navigation';
 import { IconButton, Sheet, SheetAction, type ToastMessage } from './ui';
 
 interface Props {
@@ -20,6 +21,9 @@ interface Props {
   issues: ReadonlyMap<string, string>;
   edit: ResumeEdit;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  /** A jump from Home: open the entry, put the cursor in the field, then call onFocusDone. */
+  focus?: FocusTarget | null;
+  onFocusDone?: () => void;
 }
 
 /** First filled text field of an entry, shown on its folded card and in the module list. */
@@ -31,7 +35,7 @@ export function entrySummary(meta: ModuleMeta, entry: Record<string, unknown>): 
   return '';
 }
 
-function Fields({ meta, base, resume, issues, edit }: Omit<Props, 'showToast'> & { base: string }) {
+function Fields({ meta, base, resume, issues, edit }: Omit<Props, 'showToast' | 'focus' | 'onFocusDone'> & { base: string }) {
   return (
     <div className="m-fields">
       {meta.fields.map((field) => (
@@ -41,17 +45,50 @@ function Fields({ meta, base, resume, issues, edit }: Omit<Props, 'showToast'> &
   );
 }
 
-export function ModuleBody({ meta, resume, issues, edit, showToast }: Props) {
+export function ModuleBody({ meta, resume, issues, edit, showToast, focus, onFocusDone }: Props) {
   const t = useMT();
   const module = meta.module as ArrayModuleName;
   const entries = meta.repeatable ? (resume[module] as unknown as Record<string, unknown>[]) : [];
   const [openIndex, setOpenIndex] = useState<number | null>(entries.length === 1 ? 0 : null);
   const [menuIndex, setMenuIndex] = useState<number | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const setRoot = (el: HTMLElement | null) => {
+    rootRef.current = el;
+  };
+  const addRef = useRef<HTMLButtonElement>(null);
+  const doneRef = useRef(onFocusDone);
+  doneRef.current = onFocusDone;
+
+  // A jump: open the entry first (the next render shows its fields), then find the field and put the cursor in it.
+  const nonce = focus && focus.module === meta.module ? focus.nonce : null;
+  useEffect(() => {
+    if (nonce === null || !focus) return;
+    let path: string;
+    if (meta.repeatable) {
+      const index = focus.entry;
+      if (index === undefined || index < 0 || index >= entries.length) {
+        if (addRef.current) revealField(addRef.current);
+        doneRef.current?.();
+        return;
+      }
+      if (openIndex !== index) {
+        setOpenIndex(index);
+        return;
+      }
+      path = `${module}.${index}.${focus.field}`;
+    } else {
+      path = meta.container === 'root' ? focus.field : `${meta.module}.${focus.field}`;
+    }
+    const target = findFieldTarget(rootRef.current, path);
+    if (target) revealField(target);
+    doneRef.current?.();
+    // Runs again only for a new jump or once the entry has opened.
+  }, [nonce, openIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!meta.repeatable) {
     const base = meta.container === 'root' ? '' : meta.module;
     return (
-      <section className="m-card m-card--padded">
+      <section ref={setRoot} className="m-card m-card--padded">
         <Fields meta={meta} base={base} resume={resume} issues={issues} edit={edit} />
       </section>
     );
@@ -83,7 +120,7 @@ export function ModuleBody({ meta, resume, issues, edit, showToast }: Props) {
   };
 
   return (
-    <div className="m-entries">
+    <div className="m-entries" ref={setRoot}>
       {entries.length === 0 ? <p className="m-empty">{t('options.noEntries', { name })}</p> : null}
       {entries.map((entry, index) => {
         const open = openIndex === index;
@@ -112,7 +149,7 @@ export function ModuleBody({ meta, resume, issues, edit, showToast }: Props) {
           </section>
         );
       })}
-      <button type="button" className="m-button m-button--wide" onClick={add}>
+      <button ref={addRef} type="button" className="m-button m-button--wide" onClick={add}>
         <Icon name="plus-lg" />
         <span>{t('options.add', { name })}</span>
       </button>

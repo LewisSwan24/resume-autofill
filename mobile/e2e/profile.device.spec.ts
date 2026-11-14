@@ -1,11 +1,16 @@
-// The profile page on a real Android WebView: every field of every module is filled through the page, the app is
-// killed, and every value must come back from the encrypted file. Plus: a quick edit survives Home + kill, and the
-// on-screen keyboard does not cover the field being typed in.
+// The app on a real Android WebView: every field of every module is filled through the page, the app is killed, and
+// every value must come back from the encrypted file. Plus: a quick edit survives Home + kill, the on-screen keyboard
+// does not cover the field being typed in, onboarding runs once, export and import round-trip (plain and with a
+// password), delete all leaves nothing behind, the back key order, recent pages are encrypted, and 200% font scale.
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _android, expect, test, type AndroidDevice, type Page } from '@playwright/test';
-import { MODULES, enumOptions, type FieldMeta, type ModuleMeta } from '../../src/editor';
+import { MODULES, enumOptions, exportProfile, type FieldMeta, type ModuleMeta } from '../../src/editor';
 import { translate } from '../../src/i18n';
+// The export pieces, not transfer.ts's buildExport: that one pulls in the page's icons (svg?raw), which Node cannot load.
+import { encryptExport } from '../app/src/data/exportCrypto';
+import { ProfileSchema, ResumeSchema } from '../../src/schema';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APK = path.join(HERE, '..', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
@@ -34,28 +39,54 @@ test.afterAll(async () => {
   await device?.close();
 });
 
+/** Start the app; it shows onboarding on a first run, Home otherwise. */
 async function launch(): Promise<Page> {
   await device.shell(`am force-stop ${PKG}`);
   await device.shell(`am start -n ${PKG}/.MainActivity`);
   const page = await (await device.webView({ pkg: PKG })).page();
-  await page.getByRole('heading', { level: 1 }).waitFor();
+  await page.getByRole('heading', { level: 1 }).first().waitFor();
   return page;
 }
 
-/** Fresh app data, Chinese interface, one Chinese resume. */
+const WELCOME = '你好，先说三件事';
+
+/** Fresh app data, Chinese interface, through onboarding to one Chinese resume on the 简历 tab. */
 async function freshResume(): Promise<Page> {
   await device.shell(`pm clear ${PKG}`);
   const page = await launch();
+  await expect(page.getByRole('heading', { level: 1, name: /^(你好，先说三件事|Hi! Three things first)$/ })).toBeVisible();
   await page.getByRole('radio', { name: '中' }).click();
-  await page.getByRole('button', { name: '新建中文简历' }).click();
-  await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
+  await startBlank(page);
   return page;
+}
+
+/** Onboarding, welcome step in Chinese: continue, start from scratch, new Chinese resume. */
+async function startBlank(page: Page) {
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await page.getByRole('button', { name: '继续', exact: true }).click();
+  await page.getByRole('button', { name: /^从空白开始/ }).click();
+  await page.getByRole('button', { name: '新建中文简历', exact: true }).click();
+  await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
+}
+
+const tabButton = (page: Page, name: '首页' | '简历' | '设置') =>
+  page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name, exact: true });
+
+async function toTab(page: Page, name: '首页' | '简历' | '设置') {
+  const tab = tabButton(page, name);
+  if ((await tab.getAttribute('aria-current')) !== 'page') await tab.click();
+  await expect(tab).toHaveAttribute('aria-current', 'page');
 }
 
 const moduleButton = (page: Page, meta: ModuleMeta) =>
   page.getByRole('button', { name: new RegExp(`^${esc(zh(meta.labelKey))}`) });
 
 async function openModule(page: Page, meta: ModuleMeta) {
+  // After a relaunch the app opens on Home: the module list is on the 简历 tab.
+  if (!(await page.getByRole('list', { name: '简历模块' }).isVisible())) {
+    await toTab(page, '简历');
+    await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
+  }
   await moduleButton(page, meta).click();
   await expect(page.getByRole('heading', { level: 1, name: zh(meta.labelKey) })).toBeVisible();
 }
@@ -281,4 +312,333 @@ test('the keyboard does not cover the field being typed in', async () => {
   });
   expect(second.top, `second tap ${JSON.stringify(second)}`).toBeGreaterThanOrEqual(0);
   expect(second.bottom, `second tap ${JSON.stringify(second)}`).toBeLessThanOrEqual(second.viewBottom);
+});
+
+// ------------------------------------------------------------------ shell, onboarding, data
+
+const RESULTS = path.join(HERE, 'results');
+const BASICS = EDITABLE.find((m) => m.module === 'basics')!;
+const CONTACT = EDITABLE.find((m) => m.module === 'contact')!;
+
+/** File names directly in a folder of the app's private storage. */
+async function privateFiles(dir = 'files'): Promise<string[]> {
+  return (await device.shell(`run-as ${PKG} ls ${dir} 2>/dev/null`)).toString().split(/\s+/).filter(Boolean);
+}
+
+/** The Android back key, sent through adb (device.input needs Playwright's driver app, which is not installed). */
+async function pressBack() {
+  await device.shell('input keyevent KEYCODE_BACK');
+}
+
+/** The app is the one in front. */
+async function inFront(): Promise<boolean> {
+  return (await device.shell('dumpsys activity activities | grep -i resumedactivity')).toString().includes(PKG);
+}
+
+/** Settings → delete all → 永久删除; the app returns to onboarding, in the phone's language (the settings are gone). */
+async function deleteAllData(page: Page) {
+  await toTab(page, '设置');
+  await page.getByRole('button', { name: /^删除这台手机上的全部数据/ }).click();
+  const sheet = page.getByRole('dialog', { name: '删除全部数据？' });
+  await sheet.getByRole('button', { name: '永久删除', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: /^(你好，先说三件事|Hi! Three things first)$/ })).toBeVisible({ timeout: 15_000 });
+}
+
+/** Delete all, then switch onboarding to Chinese again (which saves a fresh, empty profile under a new key). */
+async function deleteAll(page: Page) {
+  await deleteAllData(page);
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+}
+
+/** Onboarding step 2 with a file handed to the hidden import input (no system picker needed). */
+async function importDuringOnboarding(page: Page, file: { name: string; buffer: Buffer }, password?: { wrong: string; right: string }) {
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await page.getByRole('button', { name: '继续', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '准备好你的简历' })).toBeVisible();
+  await page.locator('input[type="file"][aria-label="从文件导入"]').setInputFiles({ ...file, mimeType: 'application/json' });
+  if (password) {
+    const sheet = page.getByRole('dialog', { name: '这个文件有密码' });
+    await sheet.getByLabel('密码', { exact: true }).fill(password.wrong);
+    await sheet.getByRole('button', { name: '解锁', exact: true }).click();
+    await expect(sheet.getByText('密码不对，或者文件已损坏。')).toBeVisible({ timeout: 30_000 });
+    await sheet.getByLabel('密码', { exact: true }).fill(password.right);
+    await sheet.getByRole('button', { name: '解锁', exact: true }).click();
+  }
+  const preview = page.getByRole('dialog', { name: '文件里有什么' });
+  await expect(preview.getByText('1 份简历')).toBeVisible({ timeout: 30_000 });
+  await preview.getByRole('button', { name: '导入', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+}
+
+async function expectNameBack(page: Page) {
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+  await backToList(page);
+}
+
+/** A resume with 姓 张, 名 三 and an example.com email, typed through the page. */
+async function fillSample(page: Page) {
+  await openModule(page, BASICS);
+  await page.getByLabel('姓', { exact: true }).fill('张');
+  await page.getByLabel('名', { exact: true }).fill('三');
+  await backToList(page);
+  await openModule(page, CONTACT);
+  await page.getByLabel(zh('options.field.email'), { exact: true }).fill('zhangsan@example.com');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+}
+
+interface UiNode {
+  pkg: string;
+  res: string;
+  text: string;
+  x: number;
+  y: number;
+}
+
+/** The on-screen views of whatever app is in front, read with uiautomator (no Playwright driver app needed). */
+async function systemUiNodes(): Promise<UiNode[]> {
+  const xml = (await device.shell('uiautomator dump /sdcard/raf-ui.xml >/dev/null 2>&1; cat /sdcard/raf-ui.xml')).toString('utf8');
+  const nodes: UiNode[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    const attr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(match[0])?.[1] ?? '';
+    const bounds = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(attr('bounds'));
+    if (!bounds) continue;
+    const [x1, y1, x2, y2] = bounds.slice(1).map(Number) as [number, number, number, number];
+    nodes.push({ pkg: attr('package'), res: attr('resource-id'), text: attr('text'), x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) });
+  }
+  return nodes;
+}
+
+/** Wait for a view of the system UI (the document picker) and tap it with `input tap`. */
+async function tapInSystemUi(match: (node: UiNode) => boolean, what: string, timeoutMs = 30_000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const node = (await systemUiNodes()).find(match);
+    if (node) {
+      await device.shell(`input tap ${node.x} ${node.y}`);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`${what} did not appear`);
+}
+
+/** Settings → export, driving the system "create document" picker to save into Downloads. Returns the saved file. */
+async function exportThroughPicker(page: Page, password?: string): Promise<{ name: string; buffer: Buffer }> {
+  await device.shell('rm -f /sdcard/Download/resume-autofill-profile-*');
+  await toTab(page, '设置');
+  await page.getByRole('button', { name: /^导出全部数据/ }).click();
+  const sheet = page.getByRole('dialog', { name: '导出全部数据' });
+  if (password) {
+    await sheet.getByRole('checkbox', { name: '用密码加密这个文件' }).check();
+    await sheet.getByLabel('密码', { exact: true }).fill(password);
+    await sheet.getByLabel('再输一次密码', { exact: true }).fill(password);
+  }
+  await sheet.getByRole('button', { name: '导出文件', exact: true }).click();
+  await tapInSystemUi(
+    (node) => node.pkg.includes('documentsui') && (node.res === 'android:id/button1' || /^(SAVE|Save|保存)$/.test(node.text)),
+    'the picker save button',
+  );
+  await expect(page.getByText('已导出')).toBeVisible({ timeout: 30_000 });
+  const listed = (await device.shell('ls /sdcard/Download')).toString().split(/\s+/).filter((n) => n.startsWith('resume-autofill-profile-'));
+  expect(listed, 'exported file in Downloads').toHaveLength(1);
+  const name = listed[0]!;
+  return { name, buffer: await device.shell(`cat /sdcard/Download/${name}`) };
+}
+
+test('first run: onboarding once, start blank lands on the resume page, and a restart opens Home', async () => {
+  await device.shell(`pm clear ${PKG}`);
+  let page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '主导航' })).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '三个承诺' }).getByRole('listitem')).toHaveCount(3);
+  await startBlank(page);
+  await expect(tabButton(page, '简历')).toHaveAttribute('aria-current', 'page');
+
+  page = await launch();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: WELCOME })).toHaveCount(0);
+});
+
+test('export and import round trip, plain and with a password, through the system picker', async () => {
+  try {
+    let page = await freshResume();
+    await fillSample(page);
+
+    const plain = await exportThroughPicker(page);
+    expect(JSON.parse(plain.buffer.toString('utf8')).resumes[0].basics.familyName).toBe('张');
+    await deleteAll(page);
+    await importDuringOnboarding(page, plain);
+    await expectNameBack(page);
+
+    page = await launch();
+    const locked = await exportThroughPicker(page, 'example-pass-123');
+    const text = locked.buffer.toString('utf8');
+    expect(JSON.parse(text).format).toBe('resume-autofill-encrypted');
+    expect(text.includes('张')).toBe(false);
+    expect(text.includes('example.com')).toBe(false);
+    await deleteAll(page);
+    await importDuringOnboarding(page, locked, { wrong: 'wrong-pass-000', right: 'example-pass-123' });
+    await expectNameBack(page);
+  } finally {
+    await device.shell('rm -f /sdcard/Download/resume-autofill-profile-*');
+  }
+});
+
+test('import round trip with files built in Node (no system picker), plain and with a password', async () => {
+  const profile = ProfileSchema.parse({
+    schemaVersion: 1,
+    resumes: [ResumeSchema.parse({ id: 'r1', title: '示例简历', locale: 'zh-CN', basics: { familyName: '张', givenName: '三' } })],
+    activeResumeId: 'r1',
+    settings: { uiLanguage: 'zh' },
+  });
+  const plain = { name: 'resume-autofill-profile-node.json', text: exportProfile(profile) };
+  const locked = { name: 'resume-autofill-profile-node-encrypted.json', text: await encryptExport(plain.text, 'example-pass-123') };
+
+  await device.shell(`pm clear ${PKG}`);
+  let page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await importDuringOnboarding(page, { name: plain.name, buffer: Buffer.from(plain.text) });
+  await expectNameBack(page);
+
+  page = await launch();
+  await deleteAll(page);
+  await importDuringOnboarding(page, { name: locked.name, buffer: Buffer.from(locked.text) }, { wrong: 'wrong-pass-000', right: 'example-pass-123' });
+  await expectNameBack(page);
+});
+
+test('delete all removes the encrypted files and the key', async () => {
+  let page = await freshResume();
+  await fillSample(page);
+  await openModule(page, ATTACHMENTS);
+  await page.getByLabel(`${zh('options.attach.resume')} – 选择文件`).setInputFiles({
+    name: '示例简历.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\n%%EOF\n'),
+  });
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+  await toTab(page, '首页');
+  await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await expect.poll(() => privateFiles()).toEqual(expect.arrayContaining(['profile.enc', 'state.enc', 'attachments']));
+
+  await deleteAllData(page);
+  const left = await privateFiles();
+  expect(left).not.toContain('profile.enc');
+  // Onboarding has started again and may already have stored its fresh state under a new key; never the old data.
+  if (left.includes('attachments')) expect(await privateFiles('files/attachments')).toEqual([]);
+  if (left.includes('state.enc')) {
+    const raw = await device.shell(`run-as ${PKG} cat files/state.enc`);
+    expect(raw.includes(Buffer.from('jobs.example.com'))).toBe(false);
+  }
+
+  // A fresh key works: a new resume is saved and read back after a kill.
+  await page.getByRole('radio', { name: '中' }).click();
+  await startBlank(page);
+  await openModule(page, BASICS);
+  await page.getByLabel('名', { exact: true }).fill('新');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  page = await launch();
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('新');
+});
+
+test('the back key: sheet, module, home, then out', async () => {
+  const page = await freshResume();
+  const languages = EDITABLE.find((m) => m.module === 'languages')!;
+  await openModule(page, languages);
+  await page.getByRole('button', { name: zh('options.add', { name: zh(languages.labelKey) }) }).click();
+  await page.getByRole('button', { name: /^熟练程度/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+
+  await pressBack();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await pressBack();
+  await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
+  await pressBack();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  await pressBack();
+  await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
+});
+
+test('recent pages survive a restart and are not stored in plain text', async () => {
+  let page = await freshResume();
+  await toTab(page, '首页');
+  await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+
+  page = await launch();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  const raw = await device.shell(`run-as ${PKG} cat files/state.enc`);
+  expect(raw.length).toBeGreaterThan(0);
+  expect(raw.includes(Buffer.from('jobs.example.com'))).toBe(false);
+  expect(raw.includes(Buffer.from('apply'))).toBe(false);
+});
+
+/** No sideways scroll, no clipped tab label, and every visible button at least 44px tall. */
+async function expectFits(page: Page, where: string) {
+  const report = await page.evaluate(() => {
+    const visible = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+    return {
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      clippedTabs: [...document.querySelectorAll('.m-tab')].filter((el) => el.scrollHeight > el.clientHeight + 1).map((el) => el.textContent),
+      small: [...document.querySelectorAll('button, .m-picker')]
+        .filter((el) => visible(el) && el.getBoundingClientRect().height < 43.5)
+        .map((el) => el.getAttribute('aria-label') ?? el.textContent?.trim().slice(0, 30)),
+    };
+  });
+  expect(report.overflow, `${where}: horizontal scroll`).toBeLessThanOrEqual(0);
+  expect(report.clippedTabs, `${where}: clipped tab labels`).toEqual([]);
+  expect(report.small, `${where}: buttons under 44px`).toEqual([]);
+}
+
+test('at 200% font scale nothing is cut off; light and dark screenshots for a human look', async () => {
+  mkdirSync(RESULTS, { recursive: true });
+  try {
+    await device.shell(`pm clear ${PKG}`);
+    await device.shell('settings put system font_scale 2.0');
+    let page = await launch();
+    await page.getByRole('radio', { name: '中' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+    await expectFits(page, 'onboarding welcome');
+    await startBlank(page);
+    await toTab(page, '首页');
+    await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+    await expectFits(page, 'home');
+    await toTab(page, '设置');
+    await expect(page.getByRole('heading', { level: 1, name: '设置' })).toBeVisible();
+    await expectFits(page, 'settings');
+    await page.getByRole('button', { name: /^导出全部数据/ }).click();
+    await expect(page.getByRole('dialog', { name: '导出全部数据' })).toBeVisible();
+    await expectFits(page, 'export sheet');
+
+    await device.shell('settings put system font_scale 1.0');
+    for (const mode of ['no', 'yes'] as const) {
+      await device.shell(`cmd uimode night ${mode}`);
+      page = await launch();
+      // Playwright emulates a light colour scheme by default; turn that off so the page sees the phone's setting.
+      await page.emulateMedia({ colorScheme: null });
+      await expect.poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(mode === 'yes');
+      const look = mode === 'yes' ? 'dark' : 'light';
+      await toTab(page, '首页');
+      await page.screenshot({ path: path.join(RESULTS, `home-${look}.png`) });
+      await toTab(page, '设置');
+      await page.screenshot({ path: path.join(RESULTS, `settings-${look}.png`) });
+    }
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+  }
 });

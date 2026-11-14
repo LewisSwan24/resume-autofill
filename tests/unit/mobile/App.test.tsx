@@ -3,8 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App, { type Platform } from '../../../mobile/app/src/App';
+import { createMemoryAppStateStore } from '../../../mobile/app/src/store/appStateStore';
 import { createMemoryFileStore } from '../../../mobile/app/src/store/fileStore';
 import { createMemoryStore, type ProfileStore } from '../../../mobile/app/src/store/profileStore';
+import { createStoreWiper } from '../../../mobile/app/src/store/wipe';
 import { MODULES, enumLabel, type FieldMeta, type ModuleMeta } from '../../../src/editor';
 import { setLanguage, translate } from '../../../src/i18n';
 import { EducationSchema, ProfileSchema, ResumeSchema, type Profile, type Resume } from '../../../src/schema';
@@ -51,7 +53,13 @@ let device: ReturnType<typeof fakePlatform>;
 async function renderApp(profile: Profile = makeProfile(), delay = DELAY) {
   store = createMemoryStore(profile);
   device = fakePlatform();
-  const view = render(<App store={store} files={createMemoryFileStore()} platform={device.platform} autosaveDelayMs={delay} />);
+  const files = createMemoryFileStore();
+  const appState = createMemoryAppStateStore({ version: 1, onboardingDone: true });
+  const wiper = createStoreWiper({ profile: store, files, appState });
+  const view = render(
+    <App store={store} files={files} appState={appState} wiper={wiper} platform={device.platform} autosaveDelayMs={delay} />,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: '简历' }, WAIT));
   await screen.findByRole('heading', { level: 1, name: '简历资料' });
   return view;
 }
@@ -337,13 +345,15 @@ describe('Profile page – resume switcher', () => {
 describe('Profile page – language, back key and pause', () => {
   it('switches the interface to English and remembers it', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('radio', { name: 'EN' }));
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    fireEvent.click(await screen.findByRole('radio', { name: 'EN' }, WAIT));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resumes' }, WAIT));
     await screen.findByRole('heading', { level: 1, name: 'Resume details' });
     expect(screen.getByRole('button', { name: new RegExp(`^${esc(translate('en', 'options.module.basics'))}`) })).toBeTruthy();
     await waitFor(async () => expect((await store.load()).settings.uiLanguage).toBe('en'), WAIT);
   });
 
-  it('back closes a sheet first, then leaves a module, then lets the system handle it', async () => {
+  it('back closes a sheet first, then leaves a module, then goes home, then lets the system handle it', async () => {
     await renderApp();
     openModule(MODULES.find((m) => m.module === 'languages')!);
     addEntry(MODULES.find((m) => m.module === 'languages')!);
@@ -358,6 +368,8 @@ describe('Profile page – language, back key and pause', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(device.pressBack()).toBe(true);
     await screen.findByRole('heading', { level: 1, name: '简历资料' });
+    expect(device.pressBack()).toBe(true);
+    await screen.findByRole('heading', { level: 1, name: '首页' });
     expect(device.pressBack()).toBe(false);
   });
 

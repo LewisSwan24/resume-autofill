@@ -3,8 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../../mobile/app/src/App';
+import { createMemoryAppStateStore } from '../../../mobile/app/src/store/appStateStore';
 import { createMemoryFileStore, type FileStore } from '../../../mobile/app/src/store/fileStore';
 import { createMemoryStore, type ProfileStore } from '../../../mobile/app/src/store/profileStore';
+import { createStoreWiper } from '../../../mobile/app/src/store/wipe';
 import { setLanguage, translate } from '../../../src/i18n';
 import { ProfileSchema, ResumeSchema, type Profile, type Resume } from '../../../src/schema';
 
@@ -30,7 +32,10 @@ let files: FileStore;
 async function renderApp(profile: Profile = makeProfile(), fileStore: FileStore = createMemoryFileStore()) {
   store = createMemoryStore(profile);
   files = fileStore;
-  render(<App store={store} files={files} autosaveDelayMs={20} sweepDelayMs={SWEEP} />);
+  const appState = createMemoryAppStateStore({ version: 1, onboardingDone: true });
+  const wiper = createStoreWiper({ profile: store, files, appState });
+  render(<App store={store} files={files} appState={appState} wiper={wiper} autosaveDelayMs={20} sweepDelayMs={SWEEP} />);
+  fireEvent.click(await screen.findByRole('button', { name: '简历' }, WAIT));
   await screen.findByRole('heading', { level: 1, name: '简历资料' });
 }
 

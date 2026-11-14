@@ -1,0 +1,113 @@
+// Bootstrap Icons for the mobile app, same approach as src/ui/Icon.tsx: each icon imported by name (`?raw`) so
+// only these end up in the bundle. One icon means one thing everywhere (Lively Icons, "Icon meanings").
+import arrowDown from 'bootstrap-icons/icons/arrow-down.svg?raw';
+import arrowLeft from 'bootstrap-icons/icons/arrow-left.svg?raw';
+import arrowUp from 'bootstrap-icons/icons/arrow-up.svg?raw';
+import briefcase from 'bootstrap-icons/icons/briefcase.svg?raw';
+import bullseye from 'bootstrap-icons/icons/bullseye.svg?raw';
+import chatLeftText from 'bootstrap-icons/icons/chat-left-text.svg?raw';
+import chatQuote from 'bootstrap-icons/icons/chat-quote.svg?raw';
+import checkLg from 'bootstrap-icons/icons/check-lg.svg?raw';
+import chevronDown from 'bootstrap-icons/icons/chevron-down.svg?raw';
+import chevronRight from 'bootstrap-icons/icons/chevron-right.svg?raw';
+import chevronUp from 'bootstrap-icons/icons/chevron-up.svg?raw';
+import exclamationTriangle from 'bootstrap-icons/icons/exclamation-triangle.svg?raw';
+import globe2 from 'bootstrap-icons/icons/globe2.svg?raw';
+import houseHeart from 'bootstrap-icons/icons/house-heart.svg?raw';
+import kanban from 'bootstrap-icons/icons/kanban.svg?raw';
+import lifePreserver from 'bootstrap-icons/icons/life-preserver.svg?raw';
+import mortarboard from 'bootstrap-icons/icons/mortarboard.svg?raw';
+import passport from 'bootstrap-icons/icons/passport.svg?raw';
+import patchCheck from 'bootstrap-icons/icons/patch-check.svg?raw';
+import pencil from 'bootstrap-icons/icons/pencil.svg?raw';
+import people from 'bootstrap-icons/icons/people.svg?raw';
+import person from 'bootstrap-icons/icons/person.svg?raw';
+import personCheck from 'bootstrap-icons/icons/person-check.svg?raw';
+import plusLg from 'bootstrap-icons/icons/plus-lg.svg?raw';
+import telephone from 'bootstrap-icons/icons/telephone.svg?raw';
+import threeDots from 'bootstrap-icons/icons/three-dots.svg?raw';
+import tools from 'bootstrap-icons/icons/tools.svg?raw';
+import translate from 'bootstrap-icons/icons/translate.svg?raw';
+import trash from 'bootstrap-icons/icons/trash.svg?raw';
+import trophy from 'bootstrap-icons/icons/trophy.svg?raw';
+import xLg from 'bootstrap-icons/icons/x-lg.svg?raw';
+import type { ModuleName } from '../../../src/editor';
+
+const ICONS = {
+  'arrow-down': arrowDown,
+  'arrow-left': arrowLeft,
+  'arrow-up': arrowUp,
+  briefcase,
+  bullseye,
+  'chat-left-text': chatLeftText,
+  'chat-quote': chatQuote,
+  'check-lg': checkLg,
+  'chevron-down': chevronDown,
+  'chevron-right': chevronRight,
+  'chevron-up': chevronUp,
+  'exclamation-triangle': exclamationTriangle,
+  globe2,
+  'house-heart': houseHeart,
+  kanban,
+  'life-preserver': lifePreserver,
+  mortarboard,
+  passport,
+  'patch-check': patchCheck,
+  pencil,
+  people,
+  person,
+  'person-check': personCheck,
+  'plus-lg': plusLg,
+  telephone,
+  'three-dots': threeDots,
+  tools,
+  translate,
+  trash,
+  trophy,
+  'x-lg': xLg,
+} as const satisfies Record<string, string>;
+
+export type IconName = keyof typeof ICONS;
+
+/** The icon of each module in the module list. */
+export const MODULE_ICONS: Record<Exclude<ModuleName, 'attachments'>, IconName> = {
+  basics: 'person',
+  contact: 'telephone',
+  workRights: 'passport',
+  jobIntention: 'bullseye',
+  education: 'mortarboard',
+  work: 'briefcase',
+  projects: 'kanban',
+  campus: 'people',
+  awards: 'trophy',
+  languages: 'translate',
+  certificates: 'patch-check',
+  skills: 'tools',
+  family: 'house-heart',
+  emergencyContact: 'life-preserver',
+  referees: 'person-check',
+  diversity: 'globe2',
+  about: 'chat-quote',
+  customAnswers: 'chat-left-text',
+};
+
+const INNER = Object.fromEntries(
+  Object.entries(ICONS).map(([name, raw]) => [name, raw.replace(/^[\s\S]*?<svg\b[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim()]),
+) as Record<IconName, string>;
+
+/** Decorative unless `label` is given. Sized by CSS (`--m-icon`, 24px on touch screens). */
+export function Icon({ name, label, className }: { name: IconName; label?: string; className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      className={className ? `m-icon ${className}` : 'm-icon'}
+      data-icon={name}
+      focusable="false"
+      {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
+      // Static markup from the bootstrap-icons package, never user input.
+      dangerouslySetInnerHTML={{ __html: INNER[name] }}
+    />
+  );
+}

@@ -154,9 +154,13 @@ export function createIndexedDbFileStore(): FileStore {
   };
 }
 
-/** Delete every stored file whose id is not in `keep`. Resolves to the removed ids. */
-export async function sweepFiles(files: FileStore, keep: ReadonlySet<string>): Promise<string[]> {
-  const removed = (await files.list()).filter((id) => !keep.has(id));
+/**
+ * Delete every stored file not kept. `keep` as a function is asked after the files are listed, so it can see state
+ * that changed while listing. Resolves to the removed ids.
+ */
+export async function sweepFiles(files: FileStore, keep: ReadonlySet<string> | ((id: string) => boolean)): Promise<string[]> {
+  const kept = typeof keep === 'function' ? keep : (id: string) => keep.has(id);
+  const removed = (await files.list()).filter((id) => !kept(id));
   for (const id of removed) await files.remove(id);
   return removed;
 }

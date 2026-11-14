@@ -182,6 +182,50 @@ describe('Attachment files on the phone', () => {
     await waitFor(async () => expect(await fileStore.list()).toEqual([kept.id]), WAIT);
   });
 
+  it('a sweep started by one delete keeps a file deleted later whose undo is still on screen', async () => {
+    const fileStore = createMemoryFileStore();
+    const photo = await fileStore.put({ name: 'face.png', type: 'image/png', bytes: new Uint8Array([1]) });
+    const transcript = await fileStore.put({ name: 'grades.pdf', type: 'application/pdf', bytes: new Uint8Array([2]) });
+    await renderApp(makeProfile([{ id: 'r1', title: '我的简历', attachments: { photoFileId: photo.id, transcriptFileId: transcript.id } }]), fileStore);
+    openAttachments();
+    await within(slot(TRANSCRIPT)).findByText('grades.pdf');
+    openMenu(PHOTO);
+    fireEvent.click(within(screen.getByRole('dialog', { name: PHOTO })).getByRole('button', { name: '删除' }));
+    await pause(SWEEP * 0.6);
+    openMenu(TRANSCRIPT);
+    fireEvent.click(within(screen.getByRole('dialog', { name: TRANSCRIPT })).getByRole('button', { name: '删除' }));
+    await pause(SWEEP * 0.8); // the photo's sweep has run; the transcript's undo window is still open
+    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: '撤销' }));
+    await until((r) => expect(r.attachments.transcriptFileId).toBe(transcript.id));
+    await pause(SWEEP * 4);
+    expect(await fileStore.list()).toEqual([transcript.id]);
+  });
+
+  it('a file stored while a sweep is listing files is not swept', async () => {
+    const inner = createMemoryFileStore();
+    let release: () => void = () => undefined;
+    let stalled = false;
+    // A store whose list() waits until the test lets it go, so an upload can finish in between.
+    const fileStore: FileStore = {
+      ...inner,
+      list: async () => {
+        if (!stalled) {
+          stalled = true;
+          await new Promise<void>((r) => (release = r));
+        }
+        return inner.list();
+      },
+    };
+    await renderApp(makeProfile(), fileStore); // the start-up sweep is now waiting in list()
+    openAttachments();
+    chooseFor(RESUME, pdf('late.pdf'));
+    await waitFor(async () => expect(await inner.list()).toHaveLength(1), WAIT);
+    release();
+    await until((r) => expect(r.attachments.resumeFileId).toBeTruthy());
+    await pause(SWEEP * 2);
+    expect(await inner.list()).toEqual([(await saved()).attachments.resumeFileId]);
+  });
+
   it('deleting a resume clears its files, but not one another resume also uses', async () => {
     const fileStore = createMemoryFileStore();
     const own = await fileStore.put({ name: 'cv.pdf', type: 'application/pdf', bytes: new Uint8Array([1]) });

@@ -39,6 +39,8 @@ export const PROFILE_MODULES: readonly ModuleMeta[] = MODULES;
 export const SWEEP_DELAY_MS = 9000;
 /** A file just stored, not yet in the resume, is kept from the sweep this long. */
 const HOLD_MS = 60_000;
+/** The sweep for a removal runs this much after the removal's hold has ended, so the hold is surely over. */
+const SWEEP_MARGIN_MS = 50;
 
 interface Props {
   store: ProfileStore;
@@ -106,8 +108,9 @@ export default function App({ store, files, platform, autosaveDelayMs, sweepDela
   // ------------------------------------------------------------ attachment files no resume points at
   const profileRef = useRef(profile);
   profileRef.current = profile;
+  /** Files no resume points at that must still stay, until the time given: a fresh upload, or a delete that can be undone. */
   const held = useRef(new Map<string, number>());
-  const hold = useCallback((id: string) => void held.current.set(id, Date.now()), []);
+  const hold = useCallback((id: string) => void held.current.set(id, Date.now() + HOLD_MS), []);
   const flush = editor.flush;
   const sweep = useCallback(async () => {
     try {
@@ -115,13 +118,14 @@ export default function App({ store, files, platform, autosaveDelayMs, sweepDela
       const current = profileRef.current;
       if (!current) return;
       const stored = await store.load();
-      const keep = new Set([...referencedFileIds(current), ...referencedFileIds(stored)]);
-      const now = Date.now();
-      for (const [id, at] of held.current) {
-        if (now - at < HOLD_MS) keep.add(id);
-        else held.current.delete(id);
-      }
-      await sweepFiles(files, keep);
+      const used = new Set([...referencedFileIds(current), ...referencedFileIds(stored)]);
+      // Asked after the files are listed, against the newest state, so an upload that landed meanwhile is kept.
+      let usedNow: Set<string> | null = null;
+      await sweepFiles(files, (id) => {
+        usedNow ??= profileRef.current ? referencedFileIds(profileRef.current) : new Set<string>();
+        return used.has(id) || usedNow.has(id) || (held.current.get(id) ?? 0) > Date.now();
+      });
+      for (const [id, until] of held.current) if (until <= Date.now()) held.current.delete(id);
     } catch {
       // Not sure what is still in use: keep everything; the next start tries again.
     }
@@ -139,11 +143,15 @@ export default function App({ store, files, platform, autosaveDelayMs, sweepDela
       void sweep(); // on start: whatever an earlier run left behind
       return;
     }
-    if ([...before].some((id) => !refs.has(id))) {
+    const removed = [...before].filter((id) => !refs.has(id));
+    if (removed.length > 0) {
+      // Each removed file stays through its own undo window, whichever sweep comes first.
+      const until = Date.now() + sweepDelayMs;
+      for (const id of removed) held.current.set(id, Math.max(until, held.current.get(id) ?? 0));
       const timer = setTimeout(() => {
         timers.current.delete(timer);
         void sweep();
-      }, sweepDelayMs);
+      }, sweepDelayMs + SWEEP_MARGIN_MS);
       timers.current.add(timer);
     }
   }, [refsKey, sweep, sweepDelayMs]);

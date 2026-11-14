@@ -65,12 +65,8 @@ public class ProfileVaultPlugin extends Plugin {
         synchronized (lock) {
             try {
                 JSObject result = new JSObject();
-                File file = profileFile();
-                if (!file.exists()) {
-                    result.put("data", JSObject.NULL);
-                } else {
-                    result.put("data", new String(decrypt(new AtomicFile(file).readFully()), StandardCharsets.UTF_8));
-                }
+                byte[] data = readSealed(profileFile());
+                result.put("data", data == null ? JSObject.NULL : new String(data, StandardCharsets.UTF_8));
                 call.resolve(result);
             } catch (Exception e) {
                 call.reject("Could not read the profile: " + e.getClass().getSimpleName(), e);

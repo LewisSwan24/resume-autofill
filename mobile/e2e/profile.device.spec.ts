@@ -230,6 +230,20 @@ test('an edit made just before Home survives the app being killed', async () => 
   await expect(page.getByLabel('名', { exact: true })).toHaveValue('快手');
 });
 
+test('a profile left only as the backup file of an interrupted save is still read', async () => {
+  let page = await freshResume();
+  const basics = EDITABLE.find((m) => m.module === 'basics')!;
+  await openModule(page, basics);
+  await page.getByLabel('名', { exact: true }).fill('备份');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await device.shell(`am force-stop ${PKG}`);
+  // What Android 10's AtomicFile leaves when the app dies between renaming the old file and writing the new one.
+  await device.shell(`run-as ${PKG} mv files/profile.enc files/profile.enc.bak`);
+  page = await launch();
+  await openModule(page, basics);
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('备份');
+});
+
 test('the keyboard does not cover the field being typed in', async () => {
   const page = await freshResume();
   await openModule(page, EDITABLE.find((m) => m.module === 'basics')!);

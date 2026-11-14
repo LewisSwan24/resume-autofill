@@ -12,8 +12,11 @@ const REQUIRED = [
   'm.nav', 'm.tab.home', 'm.tab.resume', 'm.tab.settings', 'm.loading', 'm.saveStateFailed',
   'm.home.keyModules', 'm.paste.err.unsupported_scheme', 'm.recent.clearText', 'm.time.yesterday',
   'm.settings.wipe', 'm.fillLang.hint', 'm.export.pwNote', 'm.import.err.too_large', 'm.import.copySuffix',
-  'm.wipe.resumesMore', 'm.privacy.delete.body', 'm.about.version', 'm.onb.pdfSoon',
+  'm.wipe.resumesMore', 'm.privacy.delete.body', 'm.about.version', 'm.ri.import', 'm.ri.fail.title.encrypted',
 ];
+
+/** Keys that went with "PDF import is coming" once import landed. */
+const REMOVED = ['m.onb.soon', 'm.onb.pdfSoon'];
 
 describe('mobile words', () => {
   it('every mobile key has non-empty zh and en text with the same {placeholders}', () => {
@@ -24,6 +27,7 @@ describe('mobile words', () => {
       expect([key, placeholders(zh[key]!)]).toEqual([key, placeholders(en[key]!)]);
     }
     for (const key of REQUIRED) expect([key, key in zh]).toEqual([key, true]);
+    for (const key of REMOVED) expect([key, key in zh || key in en]).toEqual([key, false]);
   });
 
   it('zh text has no ASCII dash used as a dash and no 「它」', () => {

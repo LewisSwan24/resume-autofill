@@ -19,6 +19,8 @@ export interface HomeScreenProps {
   onJump: (resumeId: string, target?: JumpTarget) => void;
   onStartResume: (locale: Locale) => void;
   onImport: () => void;
+  /** Read a PDF or Word resume. */
+  onImportResume?: () => void;
   onOpenSettings: () => void;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   now?: () => number;
@@ -32,6 +34,7 @@ export function HomeScreen({
   onJump,
   onStartResume,
   onImport,
+  onImportResume,
   onOpenSettings,
   showToast,
   now = Date.now,
@@ -76,6 +79,7 @@ export function HomeScreen({
         onJump={onJump}
         onStartResume={onStartResume}
         onImport={onImport}
+        onImportResume={onImportResume}
         onOpenSettings={onOpenSettings}
       />
       <PasteLinkCard

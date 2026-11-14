@@ -13,6 +13,9 @@ import { PROFILE_MODULES as RESUME_TAB_MODULES, ResumeTab } from './ResumeTab';
 import { startResume } from './ResumeSwitcher';
 import { SettingsScreen } from './settings/SettingsScreen';
 import { useImportFlow } from './settings/useImportFlow';
+import type { IncomingFileSource } from './resumeImport/incoming';
+import type { ResumeReader } from './resumeImport/types';
+import { useResumeImport } from './resumeImport/useResumeImport';
 import type { AppStateStore } from './store/appStateStore';
 import { sweepFiles, type FileStore } from './store/fileStore';
 import type { ProfileStore } from './store/profileStore';
@@ -32,7 +35,12 @@ export interface Platform {
   appInfo?(): Promise<{ name: string; version: string; build: string }>;
   /** Save a file where the person chooses (Android: the system "create document" picker). */
   saveDocument?(file: { name: string; mimeType: string; bytes: Uint8Array }): Promise<'saved' | 'cancelled'>;
+  /** PDF and Word files other apps hand over ("open with", "share"). */
+  incoming?: IncomingFileSource;
 }
+
+/** The real reader, loaded on first use so pdf.js stays out of the start-up bundle. */
+const lazyReadResume: ResumeReader = (file, options) => import('./resumeImport/reader').then((m) => m.readResume(file, options));
 
 /** The modules the 简历 tab edits: all of the extension editor's, in its order (attachments last). */
 export const PROFILE_MODULES: readonly ModuleMeta[] = RESUME_TAB_MODULES;
@@ -56,6 +64,8 @@ interface Props {
   sweepDelayMs?: number;
   /** Tests pin the time for relative times. */
   now?: () => number;
+  /** Reads a PDF or Word resume; tests pass a fake. */
+  resumeReader?: ResumeReader;
 }
 
 type ShowToast = (toast: Omit<ToastMessage, 'id'>) => void;
@@ -101,6 +111,7 @@ function AppContent({
   autosaveDelayMs,
   sweepDelayMs = SWEEP_DELAY_MS,
   now,
+  resumeReader = lazyReadResume,
   showToast,
   toast,
   onWiped,
@@ -134,6 +145,9 @@ function AppContent({
   navRef.current = nav;
   const onboardingRef = useRef(onboarding);
   onboardingRef.current = onboarding;
+  /** Set below once the resume import exists; the back key and the screen focus read them. */
+  const resumeImportBack = useRef<() => boolean>(() => false);
+  const overlayOpenRef = useRef(false);
 
   /** Scroll position of each tab's root, restored when coming back to it. */
   const rootScroll = useRef(new Map<Tab, number>());
@@ -161,6 +175,7 @@ function AppContent({
     const tabChanged = lastTab.current !== current.tab;
     lastTab.current = current.tab;
     if (previous === null || previous === 'loading' || screenKey === 'loading') return;
+    if (overlayOpenRef.current) return; // the import overlay looks after the focus
     if (current.focus) return; // a jump puts the cursor in a field instead
     if (tabChanged) document.documentElement.scrollTop = atRoot(current) ? (rootScroll.current.get(current.tab) ?? 0) : 0;
     const h1 = document.querySelector<HTMLElement>('main h1');
@@ -204,6 +219,7 @@ function AppContent({
     if (!platform) return;
     const offBack = platform.onBack(() => {
       if (backStack.pop()) return true;
+      if (resumeImportBack.current()) return true;
       const next = backFrom(navRef.current, onboardingRef.current);
       if (!next) return false;
       dispatch({ type: 'replace', state: next });
@@ -316,6 +332,34 @@ function AppContent({
     },
   });
 
+  const resumeImport = useResumeImport({
+    profile,
+    loadError: editor.loadError,
+    ready,
+    edit,
+    files,
+    reader: resumeReader,
+    showToast,
+    onStored: hold,
+    onImported: (resumeId) => {
+      if (onboardingRef.current) {
+        void finishOnboarding();
+        dispatch({ type: 'replace', state: INITIAL_NAV });
+      }
+      jump(resumeId);
+    },
+    onStartBlank: (locale) => {
+      if (onboardingRef.current) {
+        void finishOnboarding();
+        dispatch({ type: 'replace', state: INITIAL_NAV });
+      }
+      newResume(locale);
+    },
+    incoming: platform?.incoming,
+  });
+  resumeImportBack.current = resumeImport.back;
+  overlayOpenRef.current = resumeImport.open;
+
   const readStoredProfile = useCallback(async () => {
     await editor.flush();
     return store.load();
@@ -359,7 +403,7 @@ function AppContent({
   if (!ready || onboarding) {
     return (
       <>
-        <main className="m-page" lang={lang}>
+        <main className="m-page" lang={lang} inert={resumeImport.open || undefined}>
           {!ready ? (
             slow ? (
               <p className="m-status" role="status">
@@ -383,11 +427,13 @@ function AppContent({
                 else jump(profileRef.current!.activeResumeId ?? profileRef.current!.resumes[0]!.id);
               }}
               onImport={importFlow.start}
+              onImportResume={resumeImport.pick}
               showToast={showToast}
             />
           )}
         </main>
         {importFlow.element}
+        {resumeImport.element}
         {toast}
       </>
     );
@@ -405,6 +451,7 @@ function AppContent({
           onJump={jump}
           onStartResume={newResume}
           onImport={importFlow.start}
+          onImportResume={resumeImport.pick}
           onOpenSettings={() => selectTab('settings')}
           showToast={showToast}
           now={now}
@@ -422,6 +469,8 @@ function AppContent({
           onFocusDone={focusDone}
           showToast={showToast}
           onStored={hold}
+          onImportResume={resumeImport.pick}
+          onReadStored={resumeImport.openStored}
         />
       );
       break;
@@ -452,12 +501,13 @@ function AppContent({
   }
 
   return (
-    <div className={keyboard ? 'm-shell m-shell--keyboard' : 'm-shell'}>
-      <main className="m-page m-shell__main" lang={lang}>
+    <div className={['m-shell', keyboard ? 'm-shell--keyboard' : '', resumeImport.open ? 'm-shell--overlay' : ''].filter(Boolean).join(' ')}>
+      <main className="m-page m-shell__main" lang={lang} inert={resumeImport.open || undefined}>
         {body}
       </main>
-      <TabBar tab={nav.tab} onTab={selectTab} />
+      {resumeImport.open ? null : <TabBar tab={nav.tab} onTab={selectTab} />}
       {importFlow.element}
+      {resumeImport.element}
       {toast}
     </div>
   );

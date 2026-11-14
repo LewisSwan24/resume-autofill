@@ -56,6 +56,14 @@ import sendSlash from 'bootstrap-icons/icons/send-slash.svg?raw';
 import clipboardCheck from 'bootstrap-icons/icons/clipboard-check.svg?raw';
 import listUl from 'bootstrap-icons/icons/list-ul.svg?raw';
 import inputCursorText from 'bootstrap-icons/icons/input-cursor-text.svg?raw';
+import fileEarmarkWord from 'bootstrap-icons/icons/file-earmark-word.svg?raw';
+import fileEarmarkImage from 'bootstrap-icons/icons/file-earmark-image.svg?raw';
+import fileEarmarkLock from 'bootstrap-icons/icons/file-earmark-lock.svg?raw';
+import fileEarmarkX from 'bootstrap-icons/icons/file-earmark-x.svg?raw';
+import cardText from 'bootstrap-icons/icons/card-text.svg?raw';
+import arrowCounterclockwise from 'bootstrap-icons/icons/arrow-counterclockwise.svg?raw';
+import dashCircle from 'bootstrap-icons/icons/dash-circle.svg?raw';
+import boxArrowInDown from 'bootstrap-icons/icons/box-arrow-in-down.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -115,6 +123,16 @@ const ICONS = {
   'clipboard-check': clipboardCheck,
   'list-ul': listUl,
   'input-cursor-text': inputCursorText,
+  // Resume import: a Word file, a scan with no text, a locked file, a file the app cannot take, show the original
+  // text, put back what was left out, leave out of this import, merge into an existing resume.
+  'file-earmark-word': fileEarmarkWord,
+  'file-earmark-image': fileEarmarkImage,
+  'file-earmark-lock': fileEarmarkLock,
+  'file-earmark-x': fileEarmarkX,
+  'card-text': cardText,
+  'arrow-counterclockwise': arrowCounterclockwise,
+  'dash-circle': dashCircle,
+  'box-arrow-in-down': boxArrowInDown,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

@@ -26,10 +26,13 @@ export function ResumeSwitcher({
   profile,
   edit,
   showToast,
+  onImportResume,
 }: {
   profile: Profile;
   edit: ProfileEdit;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  /** Read a PDF or Word resume: the sheet closes first. */
+  onImportResume?: () => void;
 }) {
   const t = useMT();
   const [open, setOpen] = useState(false);
@@ -137,6 +140,16 @@ export function ResumeSwitcher({
         <div className="m-actions">
           <SheetAction icon="plus-lg" label={t('m.newZh')} onClick={() => start('zh-CN')} />
           <SheetAction icon="plus-lg" label={t('m.newEn')} onClick={() => start('en-AU')} />
+          {onImportResume ? (
+            <SheetAction
+              icon="file-earmark-pdf"
+              label={t('m.ri.entry')}
+              onClick={() => {
+                close();
+                onImportResume();
+              }}
+            />
+          ) : null}
           <SheetAction icon="pencil" label={t('m.rename')} onClick={() => setRenaming(active.title)} />
           <SheetAction icon="trash" label={t('m.delete')} danger onClick={remove} />
         </div>

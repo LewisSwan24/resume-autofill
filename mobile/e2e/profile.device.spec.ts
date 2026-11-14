@@ -2,7 +2,9 @@
 // every value must come back from the encrypted file. Plus: a quick edit survives Home + kill, the on-screen keyboard
 // does not cover the field being typed in, onboarding runs once, export and import round-trip (plain and with a
 // password), delete all leaves nothing behind, the back key order, recent pages are encrypted, and 200% font scale.
-import { mkdirSync } from 'node:fs';
+// Resume import: a PDF opened with the app and a Word file shared to it (through the manifest's intent filters), a
+// stored attachment read back, files it cannot read, and the review at 200% font scale and in dark mode.
+import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _android, expect, test, type AndroidDevice, type Page } from '@playwright/test';
@@ -10,12 +12,15 @@ import { MODULES, enumOptions, exportProfile, type FieldMeta, type ModuleMeta } 
 import { translate } from '../../src/i18n';
 // The export pieces, not transfer.ts's buildExport: that one pulls in the page's icons (svg?raw), which Node cannot load.
 import { encryptExport } from '../app/src/data/exportCrypto';
+import { mt } from '../app/src/i18n';
 import { ProfileSchema, ResumeSchema } from '../../src/schema';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APK = path.join(HERE, '..', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
 const PKG = 'app.raf.dev';
 const zh = (key: string, params?: Record<string, string | number>) => translate('zh', key, params);
+/** The app's own words (mobile/app/src/i18n.ts), in Chinese. */
+const mzh = (key: string, params?: Record<string, string | number>) => mt('zh', key, params);
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EDITABLE = MODULES.filter((m) => m.container !== 'attachments');
 const REGION_PARTS = ['province', 'city', 'district'] as const;
@@ -637,6 +642,277 @@ test('at 200% font scale nothing is cut off; light and dark screenshots for a hu
       await toTab(page, '设置');
       await page.screenshot({ path: path.join(RESULTS, `settings-${look}.png`) });
     }
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+  }
+});
+
+// ---- Resume import: open with, share, a stored attachment, files it cannot read, 200% and dark ----
+
+const IMPORT_FIXTURES = path.join(HERE, '..', '..', 'tests', 'unit', 'mobile', 'fixtures', 'import');
+const RESUME_SAMPLES = path.join(HERE, '..', '..', 'fixtures', 'resume-samples');
+const MIME_PDF = 'application/pdf';
+const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const REVIEW_TITLE = '核对导入的内容';
+
+/**
+ * Puts a file in the app's own cache (after `pm clear`) and returns its content URI through the app's FileProvider
+ * (`cache-path name="my_cache_images" path="."`). The name must be plain ASCII: it goes into a shell command and a URI.
+ */
+async function pushToAppCache(local: string | Buffer, name: string): Promise<string> {
+  const tmp = `/data/local/tmp/raf-${name}`;
+  await device.push(typeof local === 'string' ? readFileSync(local) : local, tmp);
+  try {
+    await device.shell(`cat ${tmp} | run-as ${PKG} sh -c 'mkdir -p cache/incoming-test && cat > cache/incoming-test/${name}'`);
+  } finally {
+    await device.shell(`rm -f ${tmp}`);
+  }
+  return `content://${PKG}.fileprovider/my_cache_images/incoming-test/${name}`;
+}
+
+/** "Open with": ACTION_VIEW resolved through the manifest's filters to this app, without a chooser. */
+async function openWith(uri: string, mime: string) {
+  await device.shell(`am start -a android.intent.action.VIEW -d ${uri} -t ${mime} --grant-read-uri-permission -p ${PKG}`);
+}
+
+/** "Share": ACTION_SEND with the file as EXTRA_STREAM. */
+async function shareTo(uri: string, mime: string) {
+  await device.shell(
+    `am start -a android.intent.action.SEND -t ${mime} --eu android.intent.extra.STREAM ${uri} --grant-read-uri-permission -p ${PKG}`,
+  );
+}
+
+async function airplane(on: boolean) {
+  await device.shell(`cmd connectivity airplane-mode ${on ? 'enable' : 'disable'}`);
+}
+
+const importDialog = (page: Page, title: string | RegExp = REVIEW_TITLE) => page.getByRole('dialog', { name: title });
+
+/** The review's primary action: 导入 n 项 or 合并 n 项. */
+const primaryAction = (page: Page, verb: '导入' | '合并') =>
+  importDialog(page).getByRole('button', { name: new RegExp(`^${verb} \\d+ 项$`) });
+
+/** Fresh data, the interface switched to Chinese on onboarding's first step, and the app stopped there. */
+async function chineseOnboardingStopped() {
+  await device.shell(`pm clear ${PKG}`);
+  const page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  // The language is stored with the first save; give it time before the process goes.
+  await expect.poll(() => privateFiles(), { timeout: 15_000 }).toContain('profile.enc');
+  await device.shell(`am force-stop ${PKG}`);
+}
+
+test('open with: a Chinese PDF opened from another app, cold start in airplane mode, is reviewed and imported as a new resume', async () => {
+  try {
+    await chineseOnboardingStopped();
+    await airplane(true);
+    const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan-3pages.pdf'), 'zh-zhangsan-3pages.pdf');
+    const started = Date.now();
+    await openWith(uri, MIME_PDF);
+    let page = await (await device.webView({ pkg: PKG })).page();
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
+    const workers = new Set(page.workers().map((w) => w.url()));
+    page.on('worker', (worker) => workers.add(worker.url()));
+
+    const review = importDialog(page);
+    await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+    const elapsed = Date.now() - started;
+    test.info().annotations.push({ type: 'intent to review (ms)', description: String(elapsed) });
+    console.log(`D1: intent to review heading ${elapsed} ms`);
+    for (const w of page.workers()) workers.add(w.url());
+    expect([...workers].some((url) => url.endsWith('/pdfjs/pdf.worker.min.mjs')), [...workers].join(', ')).toBe(true);
+
+    await expect(review.getByLabel('姓', { exact: true })).toHaveValue('张');
+    await expect(review.getByLabel('名', { exact: true })).toHaveValue('三');
+    await expect(review.getByText(/^认出 \d+ 项/)).toBeVisible();
+    await expect(review.getByRole('radio', { name: '新建一份简历' })).toBeChecked();
+    await expect(review.getByRole('radio', { name: mzh('m.lang.zh'), exact: true })).toBeChecked();
+    await primaryAction(page, '导入').click();
+
+    await expect(importDialog(page)).toHaveCount(0);
+    await expect(tabButton(page, '简历')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
+    await openModule(page, BASICS);
+    await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+    await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+    await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+
+    const seen = [...requests];
+    page = await launch();
+    await expect(page.getByRole('heading', { name: WELCOME })).toHaveCount(0);
+    await openModule(page, BASICS);
+    await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+    await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+
+    const offsite = seen.filter((url) => !/^(https:\/\/localhost\/|blob:|data:)/.test(url));
+    expect(offsite, 'requests outside the app').toEqual([]);
+  } finally {
+    await airplane(false);
+  }
+});
+
+test('share: a Word file shared to the app merges into the current resume, fills only empty fields, and undo puts it back', async () => {
+  const page = await freshResume();
+  await openModule(page, BASICS);
+  await page.getByLabel('姓', { exact: true }).fill('李');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+
+  const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan.docx'), 'zh-zhangsan.docx');
+  await shareTo(uri, MIME_DOCX);
+  const review = importDialog(page);
+  await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+  // The resume is not blank, so a new one is the default.
+  await expect(review.getByRole('radio', { name: '新建一份简历' })).toBeChecked();
+  await review.getByRole('radio', { name: `合并到「${mzh('m.defaultTitle.zh')}」` }).check();
+  await expect(review.getByText('现有：李')).toBeVisible();
+  await expect(review.getByRole('checkbox', { name: '覆盖：姓' })).not.toBeChecked();
+  await primaryAction(page, '合并').click();
+
+  const preview = page.getByRole('dialog', { name: '合并前看一下' });
+  await expect(preview.getByText(/^填入空着的 \d+ 项/)).toBeVisible();
+  await preview.getByRole('button', { name: '确认合并', exact: true }).click();
+  await expect(importDialog(page)).toHaveCount(0);
+
+  // The toast's 撤销 stays for 8 s: check what was merged quickly, then undo.
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('李');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+  await backToList(page);
+  await openModule(page, CONTACT);
+  const email = page.getByLabel(zh('options.field.email'), { exact: true });
+  await expect(email).toHaveValue('zhangsan@example.com');
+  await page.getByRole('button', { name: zh('options.undo'), exact: true }).click();
+  await expect(page.getByText('已撤销导入')).toBeVisible();
+  await expect(email).toHaveValue('');
+  await backToList(page);
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('李');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('');
+});
+
+test('open with, then leaving with back: the intent redelivered from Recents is not imported again', async () => {
+  const page = await freshResume();
+  const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan.docx'), 'zh-zhangsan.docx');
+  await openWith(uri, MIME_DOCX);
+  const review = importDialog(page);
+  await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+  await review.getByRole('button', { name: zh('common.cancel'), exact: true }).click();
+  await expect(importDialog(page)).toHaveCount(0);
+  for (let i = 0; i < 4 && (await inFront()); i += 1) {
+    await pressBack();
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
+
+  // Recents starts the activity again with its original intent plus FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY (0x00100000).
+  await device.shell(`am start -a android.intent.action.VIEW -d ${uri} -t ${MIME_DOCX} -f 0x00100000 --grant-read-uri-permission -p ${PKG}`);
+  // The process lives on, so Playwright keeps the closed page of the finished activity; read the screen instead.
+  const appTexts = async () => (await systemUiNodes()).filter((n) => n.pkg === PKG && n.text).map((n) => n.text);
+  await expect.poll(async () => (await appTexts()).some((t) => /^(首页|简历资料|正在读取简历|核对导入的内容)$/.test(t)), { timeout: 30_000 }).toBe(true);
+  await new Promise((r) => setTimeout(r, 4_000));
+  const shown = await appTexts();
+  expect(shown.filter((t) => /正在读取简历|核对导入的内容/.test(t))).toEqual([]);
+});
+
+test('attachment: 从这份 PDF 读取简历内容 reads the stored PDF and fills the blank resume', async () => {
+  const page = await freshResume();
+  await openModule(page, ATTACHMENTS);
+  const resumeLabel = zh('options.attach.resume');
+  await page.getByLabel(`${resumeLabel} – 选择文件`).setInputFiles({
+    name: '示例简历.pdf',
+    mimeType: MIME_PDF,
+    buffer: readFileSync(path.join(IMPORT_FIXTURES, 'zh-zhangsan.pdf')),
+  });
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+
+  await page.getByRole('button', { name: '从这份 PDF 读取简历内容' }).click();
+  const review = importDialog(page);
+  await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+  await expect(review.getByRole('radio', { name: `合并到「${mzh('m.defaultTitle.zh')}」` })).toBeChecked();
+  await expect(review.getByRole('checkbox', { name: /^同时/ })).toHaveCount(0);
+  await primaryAction(page, '合并').click();
+  await page.getByRole('dialog', { name: '合并前看一下' }).getByRole('button', { name: '确认合并', exact: true }).click();
+  await expect(importDialog(page)).toHaveCount(0);
+
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+  await backToList(page);
+  await openModule(page, ATTACHMENTS);
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  // Still the one stored file (a .meta and a .data), not a second copy.
+  expect(await privateFiles('files/attachments')).toHaveLength(2);
+});
+
+test('files the app cannot read: a scan, a locked PDF, an 11 MB file and a non-PDF each explain why and store nothing', async () => {
+  await device.shell(`pm clear ${PKG}`);
+  const page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await page.getByRole('button', { name: '跳过', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  const before = await privateFiles();
+
+  const tooBig = Buffer.alloc(11 * 1024 * 1024, 0x20);
+  tooBig.write('%PDF-1.4\n', 0, 'latin1');
+  const cases: Array<{ file: string | Buffer; name: string; title: string }> = [
+    { file: path.join(RESUME_SAMPLES, 'image-only.pdf'), name: 'image-only.pdf', title: '这份 PDF 是扫描件' },
+    { file: path.join(RESUME_SAMPLES, 'encrypted.pdf'), name: 'encrypted.pdf', title: '这份 PDF 设了密码' },
+    { file: tooBig, name: 'too-big.pdf', title: '文件超过 10 MB' },
+    // Sent as a PDF, but the provider knows it as text: refused by type.
+    { file: Buffer.from('plain notes, not a resume\n'), name: 'notes.txt', title: '不是 PDF 或 Word 文件' },
+  ];
+  for (const { file, name, title } of cases) {
+    const uri = await pushToAppCache(file, name);
+    await openWith(uri, MIME_PDF);
+    const failure = importDialog(page, title);
+    await expect(failure.getByRole('heading', { level: 1, name: title }), name).toBeVisible({ timeout: 60_000 });
+    await failure.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(importDialog(page, title), name).toHaveCount(0);
+  }
+
+  const after = await privateFiles();
+  if (after.includes('attachments')) expect(await privateFiles('files/attachments')).toEqual([]);
+  // profileInstalled is AndroidX ProfileInstaller's marker, written a few seconds after any launch: not app data.
+  const ignored = new Set(['state.enc', 'profile.enc', 'profileInstalled']);
+  expect(after.filter((n) => !before.includes(n) && !ignored.has(n))).toEqual([]);
+  await toTab(page, '简历');
+  await expect(page.getByText(mzh('m.empty'))).toBeVisible();
+});
+
+test('the review at 200% font scale and in dark mode: nothing cut off; screenshots for a human look', async () => {
+  mkdirSync(RESULTS, { recursive: true });
+  try {
+    await device.shell(`pm clear ${PKG}`);
+    await device.shell('settings put system font_scale 2.0');
+    const page = await launch();
+    await page.getByRole('radio', { name: '中' }).click();
+    await startBlank(page);
+
+    // The three-page file keeps the progress screen up long enough to measure it.
+    const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan-3pages.pdf'), 'zh-zhangsan-3pages.pdf');
+    await openWith(uri, MIME_PDF);
+    const progress = importDialog(page, '正在读取简历');
+    await expect(progress.getByRole('heading', { level: 1, name: '正在读取简历' })).toBeVisible({ timeout: 30_000 });
+    await expectFits(page, 'import progress');
+
+    const review = importDialog(page);
+    await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+    await expectFits(page, 'import review');
+    // Playwright emulates a light colour scheme by default; let the page follow the phone instead.
+    await page.emulateMedia({ colorScheme: null });
+    await page.screenshot({ path: path.join(RESULTS, 'review-light-200.png') });
+    await page.screenshot({ path: path.join(RESULTS, 'review-light-200-full.png'), fullPage: true });
+
+    await device.shell('cmd uimode night yes');
+    await expect.poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true);
+    await page.screenshot({ path: path.join(RESULTS, 'review-dark-200.png') });
+    await page.screenshot({ path: path.join(RESULTS, 'review-dark-200-full.png'), fullPage: true });
   } finally {
     await device.shell('settings put system font_scale 1.0');
     await device.shell('cmd uimode night no');

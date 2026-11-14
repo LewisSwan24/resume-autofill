@@ -22,6 +22,8 @@ export interface SummaryCardProps {
   onFocusField: (item: SummaryItem) => void;
   onOpenSidePanel: () => void;
   onOpenOptions: () => void;
+  /** "Add them to your profile": the profile page, at the first field with no data. */
+  onFillMissing: () => void;
 }
 
 /** Longer than `--raf-motion-settle` (160ms): fallback in case `animationend` never fires. */
@@ -55,6 +57,7 @@ export function SummaryCard({
   onFocusField,
   onOpenSidePanel,
   onOpenOptions,
+  onFillMissing,
 }: SummaryCardProps) {
   const t = useT();
 
@@ -105,9 +108,12 @@ export function SummaryCard({
               })}
             </div>
             {summary.noData > 0 && (
-              <p className="raf-card__note" data-testid="raf-nodata">
-                {t(summary.noData === 1 ? 'fab.card.noData.one' : 'fab.card.noData.other', { n: summary.noData })}
-              </p>
+              <div className="raf-card__nodata">
+                <p className="raf-card__note" data-testid="raf-nodata">
+                  {t(summary.noData === 1 ? 'fab.card.noData.one' : 'fab.card.noData.other', { n: summary.noData })}
+                </p>
+                <Button onClick={onFillMissing}>{t('fab.card.addMissing')}</Button>
+              </div>
             )}
           </>
         )}

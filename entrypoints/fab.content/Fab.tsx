@@ -186,6 +186,9 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
           }
           onOpenSidePanel={() => void sendToBackground({ type: 'ui:openSidePanel' }).catch(ignore)}
           onOpenOptions={() => void sendToBackground({ type: 'ui:openOptions' }).catch(ignore)}
+          onFillMissing={() =>
+            void sendToBackground({ type: 'ui:openOptions', ...(shown.kind === 'done' ? shown.summary.firstMissing : undefined) }).catch(ignore)
+          }
         />
       )}
       {/* Primary Button; with no detected fields it becomes the outlined button + muted caption (still clickable).

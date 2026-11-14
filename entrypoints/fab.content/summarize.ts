@@ -41,6 +41,8 @@ export interface FillSummary {
   noData: number;
   /** Fields that need a look (review group, then unrecognized group); never filled and never no_data. */
   items: SummaryItem[];
+  /** First no_data field in page order that names a resume field: where "Add them to your profile" jumps. A path, never a value. */
+  firstMissing?: { fieldKey: string; source?: string };
 }
 
 /** List order by tone group: review first, then not filled (`Array#sort` is stable, so report order holds within a group). */
@@ -58,7 +60,10 @@ export function summarize(report: FillReport): FillSummary {
     if (group === 'filled') summary.filled++;
     else if (group === 'review') summary.review++;
     else if (group === 'failed') summary.unrecognized++;
-    else if (f.outcome === 'no_data') summary.noData++;
+    else if (f.outcome === 'no_data') {
+      summary.noData++;
+      if (!summary.firstMissing && f.fieldKey) summary.firstMissing = f.source ? { fieldKey: f.fieldKey, source: f.source } : { fieldKey: f.fieldKey };
+    }
     if (group !== 'review' && group !== 'failed') continue; // filled / no data (counted) / no_control (ignored)
     summary.items.push({ fieldId: f.fieldId, frameId: f.frameId ?? 0, label: f.label.trim(), outcome: f.outcome as SummaryOutcome });
   }

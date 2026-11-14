@@ -224,7 +224,7 @@ describe('Fab: fill flow', () => {
     expect(button().disabled).toBe(false);
   });
 
-  it('shows the background error with an "Open settings" action that sends ui:openOptions', async () => {
+  it('shows the background error with an "Open your profile" action that sends ui:openOptions', async () => {
     answerFill({ ok: false, error: 'No active resume' });
     render(<Fab />);
     fireEvent.click(button());
@@ -236,7 +236,7 @@ describe('Fab: fill flow', () => {
     expect(notice.querySelector('svg[data-icon="exclamation-triangle"]')).not.toBeNull();
     expect(notice.querySelector('.raf-notice__title')?.textContent).toBe("Couldn't autofill");
     expect(screen.queryByRole('button', { name: 'View details in side panel' })).toBeNull();
-    const open = screen.getByRole('button', { name: 'Open settings' });
+    const open = screen.getByRole('button', { name: 'Open your profile' });
     expect(open.classList.contains('raf-btn--primary')).toBe(false);
     fireEvent.click(open);
     expect(sentTypes()).toEqual(['fill:request', 'ui:openOptions']);
@@ -477,5 +477,54 @@ describe('Fab: resume language chip', () => {
     await waitFor(() => expect(chip.disabled).toBe(true));
     deliver({ type: 'report:updated', report: report([field('a', 'filled')]) });
     expect(screen.queryByRole('button', { name: ZH_NAME })).toBeNull();
+  });
+});
+
+describe('Fab: fields with no data', () => {
+  /** The message the FAB sent of one type. */
+  const sent = (type: string) => send.mock.calls.map((c) => c[0] as { type: string }).filter((m) => m.type === type);
+
+  it('offers to add the missing data, and asks the background to open the profile page at the first such field', async () => {
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({
+      type: 'report:updated',
+      tabId: 1,
+      report: report([
+        field('a', 'filled', { fieldKey: 'contact.email' }),
+        field('b', 'no_data', { fieldKey: 'jobIntention.cities' }),
+        field('c', 'no_data', { fieldKey: 'education.gpa', source: 'education[1].gpa' }),
+      ]),
+    });
+    await screen.findByTestId('raf-nodata');
+    // The sentence stays a sentence; the action sits next to it.
+    expect(screen.getByTestId('raf-nodata').textContent).toBe('2 fields have no data in your resume.');
+    fireEvent.click(screen.getByRole('button', { name: 'Add them to your profile' }));
+    expect(sent('ui:openOptions')).toEqual([{ type: 'ui:openOptions', fieldKey: 'jobIntention.cities' }]);
+  });
+
+  it('still opens the profile page when no missing field names a resume field', async () => {
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled'), field('b', 'no_data')]) });
+    await screen.findByTestId('raf-nodata');
+    fireEvent.click(screen.getByRole('button', { name: 'Add them to your profile' }));
+    expect(sent('ui:openOptions')).toEqual([{ type: 'ui:openOptions' }]);
+  });
+
+  it('offers nothing to add when no field is missing data', async () => {
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled'), field('b', 'needs_review')]) });
+    await screen.findByTestId('raf-card');
+    expect(screen.queryByRole('button', { name: 'Add them to your profile' })).toBeNull();
+  });
+
+  it('says it in Chinese', async () => {
+    setLanguage('zh');
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('b', 'no_data', { fieldKey: 'contact.email' })]) });
+    expect(await screen.findByRole('button', { name: '去补上' })).toBeTruthy();
   });
 });

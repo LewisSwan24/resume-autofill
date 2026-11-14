@@ -27,7 +27,8 @@ export type UiToBg =
   | { type: 'scan:query' }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
   | { type: 'field:apply'; tabId: number; frameId: number; fieldId: string; text?: string; optionLabel?: string }
-  | { type: 'ui:openOptions' }
+  /** Open the profile page; with a field key (and its source path), at that field's input. */
+  | { type: 'ui:openOptions'; fieldKey?: string; source?: string }
   | { type: 'ui:openSidePanel' };
 
 /** background → top frame and extension pages (runtime broadcast; no response expected) */

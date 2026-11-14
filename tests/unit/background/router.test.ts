@@ -191,6 +191,20 @@ describe('ui:*', () => {
     route({ type: 'ui:openOptions' }, contentSender(), respond);
     route({ type: 'ui:openOptions' }, pageSender(), respond);
     expect(deps.openOptions).toHaveBeenCalledTimes(2);
+    expect(deps.openOptions).toHaveBeenCalledWith(null);
+  });
+
+  it('opens the options page at the input of a field the page asks about', () => {
+    route({ type: 'ui:openOptions', fieldKey: 'education.gpa', source: 'education[1].gpa' }, contentSender(), respond);
+    expect(deps.openOptions).toHaveBeenCalledWith({ module: 'education', entry: 1, field: 'gpa' });
+  });
+
+  it('just opens the options page for a field it cannot place or a malformed one', () => {
+    for (const extra of [{ fieldKey: 'nope.thing' }, { fieldKey: 5 }, { fieldKey: 'contact.email', source: 7 }, { fieldKey: 'x'.repeat(300) }]) {
+      deps.openOptions.mockClear();
+      route({ type: 'ui:openOptions', ...extra } as never, contentSender(), respond);
+      expect(deps.openOptions, JSON.stringify(extra).slice(0, 60)).toHaveBeenCalledWith(null);
+    }
   });
 });
 
@@ -214,5 +228,22 @@ describe('scan:query (FAB mounted after the first scan)', () => {
     route({ type: 'scan:query' }, pageInTabSender(), respond);
     await flush();
     expect(deps.currentTotal).not.toHaveBeenCalled();
+  });
+});
+
+describe('defaultRouterDeps.openOptions', () => {
+  it('leaves the jump request for the options page before opening it', async () => {
+    const open = vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockResolvedValue(undefined);
+    defaultRouterDeps.openOptions({ module: 'contact', field: 'email' });
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    const stored = await fakeBrowser.storage.session.get('profile:focus');
+    expect(stored['profile:focus']).toMatchObject({ target: { module: 'contact', field: 'email' } });
+  });
+
+  it('without a target only opens it', async () => {
+    const open = vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockResolvedValue(undefined);
+    defaultRouterDeps.openOptions(null);
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    expect(await fakeBrowser.storage.session.get('profile:focus')).toEqual({});
   });
 });

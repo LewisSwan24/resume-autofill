@@ -279,7 +279,7 @@ export const zh = {
   'fab.error.title': '没能完成填写',
   'fab.error.generic': '后台没有响应。刷新页面，再试一次。',
   'fab.error.noReport': '填写已经开始，但没收到结果。再试一次吧。',
-  'fab.error.openOptions': '打开设置页',
+  'fab.error.openOptions': '打开简历资料',
   'fab.card.title': '填写结果',
   'fab.card.close': '关闭',
   'fab.card.allDone': '已识别的字段全部填写完成。',
@@ -288,6 +288,7 @@ export const zh = {
   // 状态词和统计徽标的文字来自 status.*（src/ui/status.ts）；这里只放"简历里没有数据"那句话。
   'fab.card.noData.one': '简历里没有 {n} 个字段的数据。',
   'fab.card.noData.other': '简历里没有 {n} 个字段的数据。',
+  'fab.card.addMissing': '去补上',
   // 填写后 FAB 的副标题：已填 44 · 2 项待确认 · 1 项未填写（每段对应卡片上的一个徽章）
   'fab.result.filled': '已填 {n}',
   'fab.result.review': '{n} 项待确认',
@@ -303,7 +304,7 @@ export const zh = {
   'panel.switchError': '没能切换简历。数据没有变，再试一次吧。',
   'panel.switchResume': '换成{target}',
   'panel.switchResumeHint': '用{target}简历填写',
-  'panel.switchResumeNone': '还没有另一种语言的简历。先到设置页添加一份，或把现有的两份关联起来。',
+  'panel.switchResumeNone': '还没有另一种语言的简历。先到简历资料里添加一份，或把现有的两份关联起来。',
   'panel.loading': '稍等一下',
   'panel.emptyTitle': '这里还空着',
   'panel.empty': '点一下页面上的“一键填写”按钮，结果会出现在这里。',
@@ -349,7 +350,7 @@ export const zh = {
   'status.group.failed': '未填写',
   'status.group.nodata': '简历里没有',
   // fab.error.* codes returned by the background
-  'fab.error.no_resume': '还没有可用的简历。先去设置页创建或选一份吧。',
+  'fab.error.no_resume': '还没有可用的简历。先去简历资料里创建或选一份吧。',
   'fab.error.no_frames': '这个页面没有可填写的内容。刷新页面，再试一次。',
   'fab.error.busy': '正在填写中，稍等一下。',
   'panel.addMissing': '去简历资料里补上',

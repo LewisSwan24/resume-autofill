@@ -5,6 +5,8 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { Fab } from '../../../entrypoints/fab.content/Fab';
 import { setLanguage } from '../../../src/i18n';
 import type { FieldReport, FillReport, Outcome } from '../../../src/engine/types';
+import { ProfileSchema, ResumeSchema, createSampleProfile } from '../../../src/schema';
+import { loadProfile, saveProfile, setActiveResume } from '../../../src/storage';
 
 const OUTCOMES: Outcome[] = ['filled', 'needs_review', 'unmatched', 'no_data', 'no_control', 'no_option', 'action_failed'];
 
@@ -416,5 +418,64 @@ describe('Fab: summary card actions', () => {
     render(<Fab />);
     deliver({ type: 'report:updated', tabId: 1, report: report([field('x', 'unmatched')]) }, { id: browser.runtime.id, tab: { id: 3 } });
     expect(screen.queryByTestId('raf-card')).toBeNull();
+  });
+});
+
+describe('Fab: resume language chip', () => {
+  const ZH_NAME = 'Filling with the Chinese resume. Switch to English';
+  const EN_NAME = 'Filling with the English resume. Switch to Chinese';
+
+  it('shows the active resume language and switches it in one click, without filling or dragging', async () => {
+    await saveProfile(createSampleProfile()); // sample-zh active, linked to sample-en
+    render(<Fab />);
+    const chip = await screen.findByRole('button', { name: ZH_NAME });
+    expect(chip.textContent).toBe('中');
+    expect(chip.closest('.raf-fab')).toBeNull(); // not inside the draggable fill button
+    fireEvent.click(chip);
+    await waitFor(async () => expect((await loadProfile()).activeResumeId).toBe('sample-en'));
+    expect((await screen.findByRole('button', { name: EN_NAME })).textContent).toBe('EN');
+    expect(sentTypes()).not.toContain('fill:request');
+  });
+
+  it('follows a resume switch made in the side panel', async () => {
+    await saveProfile(createSampleProfile());
+    render(<Fab />);
+    await screen.findByRole('button', { name: ZH_NAME });
+    await setActiveResume('sample-en');
+    await screen.findByRole('button', { name: EN_NAME });
+  });
+
+  it('speaks the interface language', async () => {
+    setLanguage('zh');
+    await saveProfile(createSampleProfile());
+    render(<Fab />);
+    await screen.findByRole('button', { name: '填写用简历：中文版，点一下换成英文版' });
+  });
+
+  it('is not there when no resume is in the other language', async () => {
+    await saveProfile(
+      ProfileSchema.parse({
+        schemaVersion: 1,
+        resumes: [ResumeSchema.parse({ id: 'a', title: 'a', locale: 'zh-CN' })],
+        activeResumeId: 'a',
+      }),
+    );
+    render(<Fab />);
+    await act(async () => {
+      await loadProfile();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(screen.queryByRole('button', { name: /Filling with/ })).toBeNull();
+  });
+
+  it('is disabled while filling and gone while the result card is open', async () => {
+    await saveProfile(createSampleProfile());
+    answerFill({ ok: true });
+    render(<Fab />);
+    const chip = (await screen.findByRole('button', { name: ZH_NAME })) as HTMLButtonElement;
+    fireEvent.click(button());
+    await waitFor(() => expect(chip.disabled).toBe(true));
+    deliver({ type: 'report:updated', report: report([field('a', 'filled')]) });
+    expect(screen.queryByRole('button', { name: ZH_NAME })).toBeNull();
   });
 });

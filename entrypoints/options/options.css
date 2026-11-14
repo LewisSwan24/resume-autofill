@@ -42,6 +42,11 @@ body {
   gap: var(--raf-space-2) var(--raf-space-4);
   margin-bottom: var(--raf-space-6);
 }
+.raf-header__end {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-3);
+}
 /* The ONLY place the playful display face (ZCOOL KuaiLe) is used: the page title. */
 .raf-title {
   margin: 0;
@@ -477,3 +482,29 @@ body {
   background: var(--raf-review-check);
 }
 
+
+/* ------------------------------------------------------------- jump from the side panel */
+/* Carries the field path for "Add it to your profile" without a box of its own, so pairs keep their grid. */
+.raf-field-anchor {
+  display: contents;
+}
+/* The input the side panel jumped to: an accent ring that fades after two seconds (an outline, not a shadow). */
+.raf-jump-target {
+  outline: var(--raf-focus-ring-width) solid var(--raf-color-primary);
+  outline-offset: var(--raf-focus-ring-offset);
+  animation: raf-jump-fade 2s var(--raf-motion-easing) forwards;
+}
+@keyframes raf-jump-fade {
+  0%,
+  60% {
+    outline-color: var(--raf-color-primary);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .raf-jump-target {
+    animation: none;
+  }
+}

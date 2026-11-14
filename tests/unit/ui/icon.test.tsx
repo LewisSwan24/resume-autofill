@@ -11,6 +11,8 @@ const REQUIRED: IconName[] = [
   'gear', 'layout-sidebar-reverse',
   // options page (M1.2-D)
   'paperclip', 'arrow-counterclockwise', 'download', 'arrow-left-right', 'copy', 'link-45deg',
+  // the profile page and the help page, reached from every surface ('question-circle' already means "not recognized")
+  'person-vcard', 'book',
 ];
 
 describe('<Icon>', () => {

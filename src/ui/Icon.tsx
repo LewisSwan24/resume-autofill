@@ -36,6 +36,8 @@ import downloadDownload from 'bootstrap-icons/icons/download.svg?raw';
 import arrowLeftRight from 'bootstrap-icons/icons/arrow-left-right.svg?raw';
 import copyCopy from 'bootstrap-icons/icons/copy.svg?raw';
 import link45deg from 'bootstrap-icons/icons/link-45deg.svg?raw';
+import personVcard from 'bootstrap-icons/icons/person-vcard.svg?raw';
+import bookBook from 'bootstrap-icons/icons/book.svg?raw';
 
 export const ICONS = {
   'file-earmark-text': fileEarmarkText,
@@ -68,6 +70,8 @@ export const ICONS = {
   'arrow-left-right': arrowLeftRight,
   'copy': copyCopy,
   'link-45deg': link45deg,
+  'person-vcard': personVcard,
+  'book': bookBook,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

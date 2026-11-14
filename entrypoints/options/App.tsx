@@ -34,11 +34,14 @@ import { ImportReview, type ReviewProblem } from './ImportReview';
 import { ResumeList } from './ResumeList';
 import { DataPanel, SettingsPanel } from './SidePanels';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
+import { findJumpControl, focusAndMark, useFocusRequest } from './useFocusRequest';
 import { Accordion, AccordionItem } from './ui/Accordion';
 import { Badge, Button, EmptyState, Field, Input, Notice, SelectInput } from './ui/controls';
 import { Dialog } from './ui/Dialog';
 import { Tabs, panelId, tabId, type TabItem } from './ui/Tabs';
 import { ToastProvider } from './ui/Toast';
+import { LanguageToggle } from '../../src/ui/LanguageToggle';
+import { HELP_PAGE, openExtensionPage } from '../../src/ui/pages';
 import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
 import './ui/ui.css';
@@ -107,6 +110,8 @@ function Options({ autosaveDelayMs }: AppProps) {
   const [imported, setImported] = useState<ImportState | null>(null);
   const importTurn = useRef(0);
 
+  const jump = useFocusRequest();
+
   // Handlers run after awaits (and Undo runs seconds later); always read the newest profile through this ref.
   const latest = useRef<Profile | null>(profile);
   latest.current = profile;
@@ -133,6 +138,20 @@ function Options({ autosaveDelayMs }: AppProps) {
   }, [profile, selectedId]);
   const resumeIndex = resume && profile ? profile.resumes.indexOf(resume) : -1;
   const resumeIssues = useMemo(() => issuesForResume(issues, resumeIndex), [issues, resumeIndex]);
+
+  // A jump request from the side panel: one state change per render until the input is on screen, then focus it.
+  // The resume shown is the active one, the one that filled the form.
+  const { target: jumpTarget, done: jumpDone } = jump;
+  useEffect(() => {
+    if (!jumpTarget || !profile) return;
+    const wantTab: TabKey = jumpTarget.module === 'attachments' ? 'attachments' : 'editor';
+    if (tab !== wantTab) return setTab(wantTab);
+    if (profile.activeResumeId && resume?.id !== profile.activeResumeId) return setSelectedId(profile.activeResumeId);
+    if (wantTab === 'editor' && !open.has(jumpTarget.module)) return setOpen((prev) => new Set(prev).add(jumpTarget.module));
+    jumpDone();
+    const control = findJumpControl(jumpTarget);
+    if (control) focusAndMark(control);
+  }, [jumpTarget, jumpDone, profile, tab, resume, open]);
 
   // ---------------------------------------------------------------- resume-level actions
 
@@ -295,7 +314,17 @@ function Options({ autosaveDelayMs }: AppProps) {
         <h1 className="raf-title">{t('options.title')}</h1>
         <p className="raf-caption">{t('options.subtitle')}</p>
       </div>
-      <SaveStatusLine status={status} />
+      <div className="raf-header__end">
+        <SaveStatusLine status={status} />
+        <Button icon="book" onClick={() => openExtensionPage(HELP_PAGE)}>
+          {t('common.help')}
+        </Button>
+        {profile ? (
+          <LanguageToggle
+            onChange={(uiLanguage) => void commit({ ...profile, settings: { ...profile.settings, uiLanguage } }, { immediate: true })}
+          />
+        ) : null}
+      </div>
     </header>
   );
 

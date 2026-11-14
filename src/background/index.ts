@@ -3,6 +3,7 @@ import { browser } from 'wxt/browser';
 import { seedSamplesIfEmpty } from './seed';
 import { createRouter, type BgSender } from './router';
 import { clearTabState } from './tabState';
+import { WELCOME_PAGE, openExtensionPage } from '../ui/pages';
 
 export * from './fill';
 export * from './frames';
@@ -19,7 +20,10 @@ export function registerBackground(): void {
   });
 
   browser.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'install') void seedSamplesIfEmpty().catch(() => undefined);
+    if (details.reason !== 'install') return;
+    void seedSamplesIfEmpty().catch(() => undefined);
+    // Once, on a fresh install: what the extension does and where to start. Updates open nothing.
+    openExtensionPage(WELCOME_PAGE);
   });
 
   const router = createRouter();

@@ -26,3 +26,20 @@ docs/
 research/
 # Local automation tools (Chrome CDP relay etc.)
 tools/
+
+# Mobile: throwaway P0 probes, native build output, local SDK paths
+spikes/
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+**/Pods/
+DerivedData/
+*.xcuserstate
+
+# Signing keys never enter the repository
+*.jks
+*.keystore
+*.p12
+*.mobileprovision

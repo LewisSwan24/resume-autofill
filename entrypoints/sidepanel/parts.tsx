@@ -109,7 +109,20 @@ export function Toast({ text, onDismiss }: { text: string; onDismiss: () => void
  * Tile icon + (optional title) + caption. The tile has a 1px line so it reads on `paper`. By default it fills the
  * free height of the page and centres its content; `compact` keeps it in flow (e.g. under the filter chips).
  */
-export function EmptyState({ icon, title, text, compact = false }: { icon: IconName; title?: string; text: string; compact?: boolean }) {
+export function EmptyState({
+  icon,
+  title,
+  text,
+  compact = false,
+  action,
+}: {
+  icon: IconName;
+  title?: string;
+  text: string;
+  compact?: boolean;
+  /** One button under the caption, e.g. the way to the profile page. */
+  action?: ReactNode;
+}) {
   return (
     <div className={compact ? 'raf-empty raf-empty-compact' : 'raf-empty'}>
       <span className="raf-empty-tile">
@@ -119,6 +132,7 @@ export function EmptyState({ icon, title, text, compact = false }: { icon: IconN
         {title ? <p className="raf-empty-title">{title}</p> : null}
         <p className="raf-empty-text">{text}</p>
       </div>
+      {action}
     </div>
   );
 }

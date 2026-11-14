@@ -36,6 +36,7 @@ interface Fakes {
   files?: FileStore;
   loadError?: string | null;
   title?: string;
+  clearSiteData?: () => Promise<void>;
 }
 
 let store: AppStateStore;
@@ -90,6 +91,7 @@ async function renderSettings(f: Fakes = {}) {
       onImport={spies.onImport}
       onWipe={spies.onWipe}
       loadError={f.loadError ?? null}
+      clearSiteData={f.clearSiteData}
     />,
   );
   await screen.findByRole('heading', { level: 1, name: f.title ?? '设置' });
@@ -293,6 +295,49 @@ describe('Settings: about and privacy', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Nothing is uploaded' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+  });
+});
+
+describe('Settings: site sign-ins', () => {
+  it('「清除网站登录状态」 asks first, then clears and says so', async () => {
+    const clearSiteData = vi.fn(async () => undefined);
+    await renderSettings({ clearSiteData });
+    const row = screen.getByRole('button', { name: /^清除网站登录状态/ });
+    expect(row.querySelector('svg')?.getAttribute('data-icon')).toBe('trash');
+    expect(within(row).getByText('网申网站的登录、cookie 和缓存')).toBeTruthy();
+    fireEvent.click(row);
+    let sheet = screen.getByRole('dialog', { name: '清除所有网站的登录状态？' });
+    expect(within(sheet).getByText('下次打开网申页面需要重新登录，简历和附件不受影响。')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: '取消' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(clearSiteData).not.toHaveBeenCalled();
+    fireEvent.click(row);
+    sheet = screen.getByRole('dialog', { name: '清除所有网站的登录状态？' });
+    fireEvent.click(within(sheet).getByRole('button', { name: '清除' }));
+    await waitFor(() => expect(toastText()).toContain('已清除网站登录状态'));
+    expect(clearSiteData).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('when clearing fails, says so', async () => {
+    await renderSettings({ clearSiteData: () => Promise.reject(new Error('no')) });
+    fireEvent.click(screen.getByRole('button', { name: /^清除网站登录状态/ }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '清除' }));
+    await waitFor(() => expect(toastText()).toContain('没能清除，请再试一次。'));
+  });
+
+  it('without the fill browser plugin (browser preview) the row is absent', async () => {
+    await renderSettings();
+    expect(screen.queryByRole('button', { name: /^清除网站登录状态/ })).toBeNull();
+  });
+
+  it('the privacy page says where site sign-ins live and what a page is handed', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: /^隐私说明/ }));
+    await screen.findByRole('heading', { level: 1, name: '隐私说明' });
+    expect(screen.getByText(/App 内浏览器的登录状态、cookie 和网页缓存由系统 WebView 保存/)).toBeTruthy();
+    expect(screen.getByText(/只有你点「一键填写」时，App 才会把网页需要的那部分简历交出去/)).toBeTruthy();
+    expect(screen.queryByText(/上线后/)).toBeNull();
   });
 });
 

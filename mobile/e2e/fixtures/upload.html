@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- Device test page (fill browser): one file input, for the app's file chooser. No scripts, nothing is sent anywhere. -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>上传示例页</title>
+    <style>
+      body { font: 18px/1.5 system-ui, sans-serif; margin: 16px; }
+      label { display: block; margin: 12px 0 4px; }
+      input { display: block; width: 100%; min-height: 48px; font: inherit; }
+    </style>
+  </head>
+  <body>
+    <h1>上传附件</h1>
+    <form>
+      <label for="cv">简历附件（PDF）</label>
+      <input id="cv" name="cv" type="file" accept=".pdf,application/pdf" />
+    </form>
+  </body>
+</html>

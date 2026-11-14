@@ -1,14 +1,23 @@
 // The mobile app's shell: onboarding on a first run, then three tabs (首页, 简历, 设置) with one back-key order for
-// the whole app. App holds what must outlive a wipe (toast, back stack); AppContent, keyed by a generation counter,
-// holds the profile editor, the app state and the navigation, so deleting everything remounts it on empty storage.
+// the whole app, and the fill browser over them (or hidden behind a return pill while the person adds data). App
+// holds what must outlive a wipe (toast, back stack); AppContent, keyed by a generation counter, holds the profile
+// editor, the app state, the navigation and the browser session, so deleting everything remounts it on empty storage.
 import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { referencedFileIds, setActive, type ModuleMeta } from '../../../src/editor';
 import { resolveLanguage, setLanguage, useLanguage, type Language } from '../../../src/i18n';
 import type { Locale } from '../../../src/schema';
+import { BrowserScreen, type BrowserScreenHandle } from './browser/BrowserScreen';
+import { DEMO_URL } from './browser/model/constants';
+import { displayHost } from './browser/model/displayHost';
+import { updateRecentTitle } from './browser/model/recentTitle';
+import type { FillBrowserNative } from './browser/native';
+import { ReturnPill } from './browser/ReturnPill';
+import { useBrowserSession } from './browser/useBrowserSession';
+import { ConfirmSheet } from './dialogs';
 import { Onboarding } from './onboarding/Onboarding';
 import { HomeScreen } from './home/HomeScreen';
 import { useMT } from './i18n';
-import { INITIAL_NAV, backFrom, navReduce, type FocusTarget, type NavAction, type NavState, type Tab } from './navigation';
+import { INITIAL_NAV, backFrom, navReduce, type BrowserOpen, type FocusTarget, type NavAction, type NavState, type Tab } from './navigation';
 import { PROFILE_MODULES as RESUME_TAB_MODULES, ResumeTab } from './ResumeTab';
 import { startResume } from './ResumeSwitcher';
 import { SettingsScreen } from './settings/SettingsScreen';
@@ -37,6 +46,23 @@ export interface Platform {
   saveDocument?(file: { name: string; mimeType: string; bytes: Uint8Array }): Promise<'saved' | 'cancelled'>;
   /** PDF and Word files other apps hand over ("open with", "share"). */
   incoming?: IncomingFileSource;
+  /** The native fill browser; absent in the browser preview, where pages cannot be opened in the app. */
+  fillBrowser?: FillBrowserNative;
+}
+
+/** Delete-all also clears the fill browser's cookies, web storage and cache (errors ignored: the data is gone anyway). */
+export function withSiteDataClear(wiper: Wiper, fillBrowser: Pick<FillBrowserNative, 'clearSiteData'> | null | undefined): Wiper {
+  if (!fillBrowser) return wiper;
+  return {
+    async wipeAll() {
+      await wiper.wipeAll();
+      try {
+        await fillBrowser.clearSiteData();
+      } catch {
+        // Site sign-ins are not resume data; a failure here must not report the wipe as failed.
+      }
+    },
+  };
 }
 
 /** The real reader, loaded on first use so pdf.js stays out of the start-up bundle. */
@@ -112,13 +138,27 @@ function AppContent({
   sweepDelayMs = SWEEP_DELAY_MS,
   now,
   resumeReader = lazyReadResume,
-  showToast,
+  showToast: appToast,
   toast,
   onWiped,
 }: Props & { showToast: ShowToast; toast: ReactNode; onWiped: (ok: boolean) => void }) {
   const t = useMT();
   const language = useLanguage();
   const backStack = useContext(BackStackContext);
+  /** While the browser shows, toasts go to its own slot above the toolbar (the page would hide the app's). */
+  const browserHandle = useRef<BrowserScreenHandle | null>(null);
+  /** Between dispatching openBrowser and the screen mounting, a toast waits for the browser's slot: the app's own would
+   * be covered by the opaque browser at once (a failed recent-page save). */
+  const openingBrowser = useRef(false);
+  const queuedBrowserToast = useRef<Omit<ToastMessage, 'id'> | null>(null);
+  const showToast = useCallback<ShowToast>(
+    (message) => {
+      if (browserHandle.current) browserHandle.current.toast(message);
+      else if (openingBrowser.current) queuedBrowserToast.current = message;
+      else appToast(message);
+    },
+    [appToast],
+  );
   const editor = useProfileEditor(store, autosaveDelayMs);
   const { profile, edit } = editor;
   const [nav, dispatch] = useReducer(shellReduce, INITIAL_NAV);
@@ -161,11 +201,14 @@ function AppContent({
   // On a new screen (a tab, an onboarding step, a settings page, the shell after onboarding): focus its heading so a
   // screen reader announces it, since the button that was focused may be gone. On a tab change, also go back to where
   // that tab was. The first screen after loading keeps the page's own focus.
+  const browserShown = nav.browser !== null && !nav.browser.hidden;
   const screenKey = !ready
     ? 'loading'
-    : onboarding
-      ? `onboarding:${nav.onboardingStep}`
-      : `${nav.tab}:${nav.tab === 'settings' ? nav.settingsPage : ''}`;
+    : browserShown
+      ? 'browser'
+      : onboarding
+        ? `onboarding:${nav.onboardingStep}`
+        : `${nav.tab}:${nav.tab === 'settings' ? nav.settingsPage : ''}`;
   const lastScreen = useRef<string | null>(null);
   const lastTab = useRef<Tab>(nav.tab);
   useEffect(() => {
@@ -174,7 +217,7 @@ function AppContent({
     const current = navRef.current;
     const tabChanged = lastTab.current !== current.tab;
     lastTab.current = current.tab;
-    if (previous === null || previous === 'loading' || screenKey === 'loading') return;
+    if (previous === null || previous === 'loading' || screenKey === 'loading' || screenKey === 'browser') return;
     if (overlayOpenRef.current) return; // the import overlay looks after the focus
     if (current.focus) return; // a jump puts the cursor in a field instead
     if (tabChanged) document.documentElement.scrollTop = atRoot(current) ? (rootScroll.current.get(current.tab) ?? 0) : 0;
@@ -219,6 +262,17 @@ function AppContent({
     if (!platform) return;
     const offBack = platform.onBack(() => {
       if (backStack.pop()) return true;
+      // An import over everything (a file shared while the page showed) is left first.
+      if (overlayOpenRef.current && resumeImportBack.current()) return true;
+      const browserNav = navRef.current.browser;
+      if (browserNav && !browserNav.hidden) {
+        // The page's own history, then close (asking first when a fill ran in this document).
+        const open = browserRef.current;
+        if (open && open.session.getState().canGoBack) void open.session.back();
+        else if (browserHandle.current) browserHandle.current.requestClose();
+        else dispatch({ type: 'closeBrowser' });
+        return true;
+      }
       if (resumeImportBack.current()) return true;
       const next = backFrom(navRef.current, onboardingRef.current);
       if (!next) return false;
@@ -365,12 +419,95 @@ function AppContent({
     return store.load();
   }, [editor.flush, store]);
 
+  // ------------------------------------------------------------ fill browser
+  const fillBrowser = platform?.fillBrowser ?? null;
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
+  const browser = useBrowserSession(fillBrowser, nav.browser?.target ?? null, {
+    getFillContext: () => ({ profile: profileRef.current, fillLanguage: appStateRef.current?.fillLanguage ?? 'active' }),
+    readFile: (id) => files.read(id),
+    onTitle: (recentId, title, host) => void updateAppState((s) => updateRecentTitle(s, recentId, title, host)),
+  });
+  const browserRef = useRef(browser);
+  browserRef.current = browser;
+  const browserHidden = nav.browser?.hidden ?? false;
+  useEffect(() => {
+    browser?.session.setHidden(browserHidden);
+  }, [browser?.session, browserHidden]);
+
+  // A file opened with or shared to the app while the page shows: the import overlay takes the screen, so the page
+  // steps aside behind the return pill (the native page view would cover the review and take its touches).
+  useEffect(() => {
+    if (resumeImport.open && browserShown) dispatch({ type: 'hideBrowser' });
+  }, [resumeImport.open, browserShown]);
+
+  // The browser screen is up (its session exists, so it has mounted): a toast that waited for it goes to its slot now.
+  const browserTarget = nav.browser?.target;
+  const browserScreenUp = browserShown && browser !== null;
+  useEffect(() => {
+    if (!browserScreenUp) return;
+    openingBrowser.current = false;
+    const queued = queuedBrowserToast.current;
+    queuedBrowserToast.current = null;
+    if (queued) (browserHandle.current ? browserHandle.current.toast : appToast)(queued);
+  }, [browserScreenUp, browserTarget, appToast]);
+
+  // The page's renderer died and took the app's with it: the activity was recreated (FillBrowserPlugin). Say so once.
+  const crashAsked = useRef(false);
+  useEffect(() => {
+    if (!fillBrowser || crashAsked.current) return;
+    crashAsked.current = true;
+    fillBrowser
+      .takeCrashNotice()
+      .then(({ crashed }) => {
+        if (crashed) appToast({ text: tRef.current('m.br.crash.restarted') });
+      })
+      .catch(() => undefined);
+  }, [fillBrowser, appToast]);
+
+  /** Another page while one is open replaces it, asking first when a fill ran there. */
+  const [pendingOpen, setPendingOpen] = useState<BrowserOpen | null>(null);
+  const openBrowser = useCallback(
+    (target: BrowserOpen) => {
+      if (!fillBrowser) {
+        showToast({ text: tRef.current('m.br.needsPhone') });
+        return;
+      }
+      const open = browserRef.current;
+      if (open && open.state.run.phase === 'done') setPendingOpen(target);
+      else {
+        openingBrowser.current = true;
+        dispatch({ type: 'openBrowser', target });
+      }
+    },
+    [fillBrowser, showToast],
+  );
+  const closeBrowser = useCallback(() => {
+    openingBrowser.current = false;
+    const returnTo = navRef.current.browser?.returnTo;
+    dispatch({ type: 'closeBrowser' });
+    if (returnTo === 'home' && !onboardingRef.current) dispatch({ type: 'tab', tab: 'home' });
+    scrollTop();
+  }, []);
+  const goToResume = useCallback(() => {
+    if (onboardingRef.current) void finishOnboarding();
+    dispatch({ type: 'hideBrowser' });
+    scrollTop();
+  }, [finishOnboarding]);
+
   const wipeAll = useCallback(async (): Promise<boolean> => {
     try {
       await editor.flush();
     } catch {
       // Being deleted anyway.
     }
+    // The page goes first, so clearing site data afterwards finds no live WebView writing cookies back.
+    try {
+      await browserRef.current?.session.dispose();
+    } catch {
+      // Closing is best effort; the wipe goes on.
+    }
+    dispatch({ type: 'closeBrowser' });
     timers.current.forEach(clearTimeout);
     timers.current.clear();
     let ok = true;
@@ -398,12 +535,61 @@ function AppContent({
     return () => clearTimeout(timer);
   }, [ready]);
 
+  // The bottom bar (return pill + tab bar) grows with the font: toasts sit above whatever height it has now.
+  const shellRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const bar = bottomRef.current;
+    const shell = shellRef.current;
+    if (!bar || !shell || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(() => shell.style.setProperty('--m-bottom-h', `${Math.round(bar.getBoundingClientRect().height)}px`));
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [ready, onboarding, resumeImport.open, browserShown]);
+
   const lang = language === 'zh' ? 'zh-CN' : 'en';
+
+  const browserElement =
+    browser && nav.browser && !nav.browser.hidden ? (
+      <BrowserScreen
+        key={nav.browser.target.url + String(nav.browser.target.recentId ?? '')}
+        open={browser}
+        profile={profile}
+        files={files}
+        fillLanguage={appState?.fillLanguage ?? 'active'}
+        handleRef={browserHandle}
+        onClose={closeBrowser}
+        onGoToResume={goToResume}
+        showToast={appToast}
+      />
+    ) : null;
+  const returnPill =
+    browser && nav.browser?.hidden && !resumeImport.open ? (
+      <ReturnPill
+        host={browser.state.host.kind === 'demo' ? t('m.br.demoHost') : browser.state.host.host || displayHost(nav.browser.target.url).host}
+        onReturn={() => dispatch({ type: 'showBrowser' })}
+      />
+    ) : null;
+  const replaceSheet = (
+    <ConfirmSheet
+      open={pendingOpen !== null}
+      title={t('m.br.closeTitle')}
+      text={t('m.br.closeText')}
+      confirmLabel={t('m.br.closeConfirm')}
+      danger
+      onConfirm={() => {
+        const next = pendingOpen;
+        setPendingOpen(null);
+        if (next) dispatch({ type: 'openBrowser', target: next });
+      }}
+      onClose={() => setPendingOpen(null)}
+    />
+  );
 
   if (!ready || onboarding) {
     return (
       <>
-        <main className="m-page" lang={lang} inert={resumeImport.open || undefined}>
+        <main className="m-page" lang={lang} inert={resumeImport.open || browserShown || undefined}>
           {!ready ? (
             slow ? (
               <p className="m-status" role="status">
@@ -428,12 +614,15 @@ function AppContent({
               }}
               onImport={importFlow.start}
               onImportResume={resumeImport.pick}
+              onTryDemo={() => openBrowser({ url: DEMO_URL, demo: true, source: 'demo-onboarding' })}
               showToast={showToast}
             />
           )}
         </main>
+        {returnPill ? <div className="m-shell__bottom">{returnPill}</div> : null}
         {importFlow.element}
         {resumeImport.element}
+        {browserElement}
         {toast}
       </>
     );
@@ -453,6 +642,7 @@ function AppContent({
           onImport={importFlow.start}
           onImportResume={resumeImport.pick}
           onOpenSettings={() => selectTab('settings')}
+          onOpenBrowser={openBrowser}
           showToast={showToast}
           now={now}
         />
@@ -494,6 +684,7 @@ function AppContent({
           appInfo={appInfo}
           onImport={importFlow.start}
           onWipe={wipeAll}
+          clearSiteData={fillBrowser ? () => fillBrowser.clearSiteData() : undefined}
           showToast={showToast}
         />
       );
@@ -501,13 +692,23 @@ function AppContent({
   }
 
   return (
-    <div className={['m-shell', keyboard ? 'm-shell--keyboard' : '', resumeImport.open ? 'm-shell--overlay' : ''].filter(Boolean).join(' ')}>
-      <main className="m-page m-shell__main" lang={lang} inert={resumeImport.open || undefined}>
+    <div
+      ref={shellRef}
+      className={['m-shell', keyboard ? 'm-shell--keyboard' : '', resumeImport.open ? 'm-shell--overlay' : ''].filter(Boolean).join(' ')}
+    >
+      <main className="m-page m-shell__main" lang={lang} inert={resumeImport.open || browserShown || undefined}>
         {body}
       </main>
-      {resumeImport.open ? null : <TabBar tab={nav.tab} onTab={selectTab} />}
+      {resumeImport.open || browserShown ? null : (
+        <div className="m-shell__bottom" ref={bottomRef}>
+          {returnPill}
+          <TabBar tab={nav.tab} onTab={selectTab} />
+        </div>
+      )}
       {importFlow.element}
       {resumeImport.element}
+      {browserElement}
+      {replaceSheet}
       {toast}
     </div>
   );

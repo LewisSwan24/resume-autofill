@@ -1,7 +1,11 @@
-// Home (首页): the resume used for filling, the paste-a-link box, and recent application pages. Recent pages live in
-// app state (state.enc), not in the profile; every change is saved at once and can be undone from the toast.
+// Home (首页): the resume used for filling, the paste-a-link box (opens the fill browser), the sample form, and recent
+// application pages. Recent pages live in app state (state.enc), not in the profile; every change is saved at once and
+// can be undone from the toast. The sample form is never written to recent pages.
 import type { Locale, Profile } from '../../../../src/schema';
+import { DEMO_URL } from '../browser/model/constants';
+import { Icon } from '../Icon';
 import { useMT } from '../i18n';
+import type { BrowserOpen } from '../navigation';
 import type { AppState, RecentPage } from '../store/appStateStore';
 import { addRecentPage, clearRecentPages, removeRecentPage, restoreRecentPages } from '../store/recentPages';
 import type { ToastMessage } from '../ui';
@@ -22,6 +26,8 @@ export interface HomeScreenProps {
   /** Read a PDF or Word resume. */
   onImportResume?: () => void;
   onOpenSettings: () => void;
+  /** Open a page (or the sample form) in the fill browser. */
+  onOpenBrowser: (target: BrowserOpen) => void;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   now?: () => number;
 }
@@ -36,6 +42,7 @@ export function HomeScreen({
   onImport,
   onImportResume,
   onOpenSettings,
+  onOpenBrowser,
   showToast,
   now = Date.now,
 }: HomeScreenProps) {
@@ -60,6 +67,19 @@ export function HomeScreen({
     }
   };
 
+  /** Put the page on top of recent pages (same id when listed) and open it; a failed save still opens it, and says so
+   * after the browser is asked to open, so the words land where the person will be looking (the browser's toast slot). */
+  const openPage = async (page: { url: string; host: string; title?: string }, source: 'paste' | 'recent') => {
+    let recentId: string | undefined;
+    const ok = await updateAppState((s) => {
+      const next = addRecentPage(s, page, now());
+      recentId = next.recentPages[0]?.id;
+      return next;
+    });
+    onOpenBrowser({ url: page.url, demo: false, ...(recentId ? { recentId } : {}), source });
+    if (!ok) showToast({ text: t('m.saveStateFailed') });
+  };
+
   const clear = async () => {
     const before = appState.recentPages;
     if (await save(clearRecentPages)) showToast({ text: t('m.recent.cleared'), action: undoTo(before) });
@@ -82,11 +102,29 @@ export function HomeScreen({
         onImportResume={onImportResume}
         onOpenSettings={onOpenSettings}
       />
-      <PasteLinkCard
+      <PasteLinkCard showToast={showToast} onOpen={(link) => openPage({ url: link.url, host: link.host, title: link.title }, 'paste')} />
+      <div className="m-home-demo">
+        <button
+          type="button"
+          className="m-button m-button--text"
+          aria-describedby="m-home-demo-hint"
+          onClick={() => onOpenBrowser({ url: DEMO_URL, demo: true, source: 'demo-home' })}
+        >
+          <Icon name="play-circle" />
+          <span>{t('m.home.demo')}</span>
+        </button>
+        <p className="m-help" id="m-home-demo-hint">
+          {t('m.home.demoHint')}
+        </p>
+      </div>
+      <RecentPages
+        pages={appState.recentPages}
+        now={now()}
+        onOpen={(p) => void openPage({ url: p.url, host: p.host }, 'recent')}
+        onRemove={(p) => void remove(p)}
+        onClear={() => void clear()}
         showToast={showToast}
-        onSave={(link) => save((s) => addRecentPage(s, { url: link.url, host: link.host, title: link.title }, now()))}
       />
-      <RecentPages pages={appState.recentPages} now={now()} onRemove={(p) => void remove(p)} onClear={() => void clear()} showToast={showToast} />
     </>
   );
 }

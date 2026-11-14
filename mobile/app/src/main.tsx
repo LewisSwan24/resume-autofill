@@ -1,6 +1,7 @@
-// Entry of the mobile app's web UI. Wires the app to the phone: the encrypted ProfileVault stores, the wipe, the
-// "create document" saver, files handed over by other apps (open with / share), app info and the Android back key /
-// pause events on a device; localStorage, IndexedDB, downloads and page visibility when previewed in a desktop browser.
+// Entry of the mobile app's web UI. Wires the app to the phone: the encrypted ProfileVault stores, the wipe (which also
+// clears the fill browser's site data), the "create document" saver, files handed over by other apps (open with /
+// share), the native fill browser, app info and the Android back key / pause events on a device; localStorage,
+// IndexedDB, downloads and page visibility when previewed in a desktop browser (no fill browser there).
 import './fonts.css';
 import '../../../src/ui/theme.css';
 import './styles.css';
@@ -8,7 +9,8 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App, { type Platform } from './App';
+import App, { withSiteDataClear, type Platform } from './App';
+import { createNativeFillBrowser } from './browser/native';
 import { createNativeIncomingSource, type IncomingFilePlugin } from './resumeImport/incoming';
 import { createLocalStorageAppStateStore, createVaultAppStateStore, type AppStateVaultPlugin } from './store/appStateStore';
 import { createIndexedDbFileStore, createVaultFileStore, toBase64, type FileVaultPlugin } from './store/fileStore';
@@ -29,7 +31,9 @@ const vault = native ? registerPlugin<VaultPlugin & FileVaultPlugin & AppStateVa
 const store = vault ? createVaultStore(vault) : createLocalStorageStore(localStorage);
 const files = vault ? createVaultFileStore(vault) : createIndexedDbFileStore();
 const appState = vault ? createVaultAppStateStore(vault) : createLocalStorageAppStateStore(localStorage);
-const wiper = vault ? createVaultWiper(vault) : createStoreWiper({ profile: store, files, appState });
+/** The FillBrowser plugin (FillBrowserPlugin.java). The browser preview has none: links are saved but not opened. */
+const fillBrowser = native ? createNativeFillBrowser() : null;
+const wiper = withSiteDataClear(vault ? createVaultWiper(vault) : createStoreWiper({ profile: store, files, appState }), fillBrowser);
 const documentSaver = native ? registerPlugin<DocumentSaverPlugin>('DocumentSaver') : null;
 /** The native IncomingFile plugin (IncomingFilePlugin.java). The browser preview has no incoming files. */
 const incomingPlugin = native ? registerPlugin<IncomingFilePlugin>('IncomingFile') : null;
@@ -88,6 +92,7 @@ const platform: Platform = {
     return result.saved ? 'saved' : 'cancelled';
   },
   incoming: incomingPlugin ? createNativeIncomingSource(incomingPlugin) : undefined,
+  ...(fillBrowser ? { fillBrowser } : {}),
 };
 
 createRoot(document.getElementById('root')!).render(

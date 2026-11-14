@@ -1,5 +1,5 @@
-// Settings (设置): interface language and the resume used for filling; export, import and delete everything; the
-// privacy page and the about sheet. Each sheet registers on the back stack through the shared Sheet.
+// Settings (设置): interface language and the resume used for filling; export, import, clear site sign-ins and delete
+// everything; the privacy page and the about sheet. Each sheet registers on the back stack through the shared Sheet.
 import { useState, type ReactNode } from 'react';
 import type { Language } from '../../../../src/i18n';
 import type { Profile } from '../../../../src/schema';
@@ -10,6 +10,7 @@ import type { AppState } from '../store/appStateStore';
 import type { FileStore } from '../store/fileStore';
 import type { ToastMessage } from '../ui';
 import { AboutSheet, type AppInfo } from './AboutSheet';
+import { ClearSiteDataSheet } from './ClearSiteDataSheet';
 import { DeleteAllSheet } from './DeleteAllSheet';
 import { ExportSheet, type SaveDocument } from './ExportSheet';
 import { FILL_LANGUAGE_LABELS, FillLanguageSheet } from './FillLanguageSheet';
@@ -35,10 +36,12 @@ export interface SettingsScreenProps {
   onImport: () => void;
   /** App's wipeAll; false on failure. */
   onWipe: () => Promise<boolean>;
+  /** Clear the fill browser's cookies, web storage and cache; absent without the plugin (browser preview). */
+  clearSiteData?: () => Promise<void>;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
 }
 
-type OpenSheet = 'fill' | 'export' | 'wipe' | 'about' | null;
+type OpenSheet = 'fill' | 'export' | 'siteData' | 'wipe' | 'about' | null;
 
 function Row({
   icon,
@@ -113,6 +116,9 @@ export function SettingsScreen(props: SettingsScreenProps) {
       <ul className="m-card m-settings-group">
         <Row icon="download" label={t('m.settings.export')} onClick={() => setSheet('export')} />
         <Row icon="upload" label={t('m.settings.import')} onClick={props.onImport} />
+        {props.clearSiteData ? (
+          <Row icon="trash" label={t('m.settings.siteData')} value={t('m.settings.siteDataHint')} onClick={() => setSheet('siteData')} />
+        ) : null}
         <Row icon="trash" label={t('m.settings.wipe')} danger onClick={() => setSheet('wipe')} />
       </ul>
 
@@ -140,6 +146,9 @@ export function SettingsScreen(props: SettingsScreenProps) {
         saveDocument={props.saveDocument}
         showToast={showToast}
       />
+      {props.clearSiteData ? (
+        <ClearSiteDataSheet open={sheet === 'siteData'} onClose={close} clearSiteData={props.clearSiteData} showToast={showToast} />
+      ) : null}
       <DeleteAllSheet
         loadError={props.loadError ?? null}
         open={sheet === 'wipe'}

@@ -64,6 +64,19 @@ import cardText from 'bootstrap-icons/icons/card-text.svg?raw';
 import arrowCounterclockwise from 'bootstrap-icons/icons/arrow-counterclockwise.svg?raw';
 import dashCircle from 'bootstrap-icons/icons/dash-circle.svg?raw';
 import boxArrowInDown from 'bootstrap-icons/icons/box-arrow-in-down.svg?raw';
+import magic from 'bootstrap-icons/icons/magic.svg?raw';
+import arrowRight from 'bootstrap-icons/icons/arrow-right.svg?raw';
+import arrowClockwise from 'bootstrap-icons/icons/arrow-clockwise.svg?raw';
+import slashCircle from 'bootstrap-icons/icons/slash-circle.svg?raw';
+import cardChecklist from 'bootstrap-icons/icons/card-checklist.svg?raw';
+import boxArrowUpRight from 'bootstrap-icons/icons/box-arrow-up-right.svg?raw';
+import windowIcon from 'bootstrap-icons/icons/window.svg?raw';
+import playCircle from 'bootstrap-icons/icons/play-circle.svg?raw';
+import folder2Open from 'bootstrap-icons/icons/folder2-open.svg?raw';
+import wifiOff from 'bootstrap-icons/icons/wifi-off.svg?raw';
+import questionCircle from 'bootstrap-icons/icons/question-circle.svg?raw';
+import shieldExclamation from 'bootstrap-icons/icons/shield-exclamation.svg?raw';
+import xCircle from 'bootstrap-icons/icons/x-circle.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -133,6 +146,22 @@ const ICONS = {
   'arrow-counterclockwise': arrowCounterclockwise,
   'dash-circle': dashCircle,
   'box-arrow-in-down': boxArrowInDown,
+  // Fill browser: fill in one tap, the fill report, forward, reload / retry, stop loading, open outside the app, the
+  // open application page, try the sample form, choose from the phone, offline, site not found, certificate problem.
+  magic,
+  'card-checklist': cardChecklist,
+  'arrow-right': arrowRight,
+  'arrow-clockwise': arrowClockwise,
+  'slash-circle': slashCircle,
+  'box-arrow-up-right': boxArrowUpRight,
+  window: windowIcon,
+  'play-circle': playCircle,
+  'folder2-open': folder2Open,
+  'wifi-off': wifiOff,
+  'question-circle': questionCircle,
+  'shield-exclamation': shieldExclamation,
+  // The report's status word for a fill that failed (src/ui/status.ts, same meaning as in the extension).
+  'x-circle': xCircle,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

@@ -1,5 +1,6 @@
 // First run: step 1 says what the app promises, step 2 gets a resume ready (import a file, start blank, or read a PDF
-// or Word resume). Nothing is marked done until the person leaves through one of those or 跳过.
+// or Word resume) or tries the sample form first. Nothing is marked done until the person leaves through one of the
+// three resume choices or 跳过; the sample form comes back to step 2.
 import { useState } from 'react';
 import type { Language } from '../../../../src/i18n';
 import type { Locale } from '../../../../src/schema';
@@ -18,6 +19,8 @@ export interface OnboardingProps {
   onImport: () => void;
   /** Read a PDF or Word resume (the resume import). */
   onImportResume: () => void;
+  /** Open the sample form in the fill browser; absent, the option is not offered. */
+  onTryDemo?: () => void;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
 }
 
@@ -88,7 +91,7 @@ function Option({
   );
 }
 
-function GetReady({ onStep, onSkip, onStartBlank, onImport, onImportResume }: OnboardingProps) {
+function GetReady({ onStep, onSkip, onStartBlank, onImport, onImportResume, onTryDemo }: OnboardingProps) {
   const t = useMT();
   const [blankOpen, setBlankOpen] = useState(false);
   return (
@@ -125,6 +128,7 @@ function GetReady({ onStep, onSkip, onStartBlank, onImport, onImportResume }: On
           </div>
         ) : null}
         <Option icon="file-earmark-pdf" name={t('m.onb.pdf')} hint={t('m.onb.pdfHint')} onClick={onImportResume} />
+        {onTryDemo ? <Option icon="play-circle" name={t('m.onb.demo')} hint={t('m.onb.demoHint')} onClick={onTryDemo} /> : null}
       </div>
     </div>
   );

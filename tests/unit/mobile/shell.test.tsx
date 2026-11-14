@@ -2,7 +2,8 @@
 // missing item on Home to its field, and deleting everything. Full App with memory stores and a fake phone.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import App, { type Platform } from '../../../mobile/app/src/App';
+import App, { withSiteDataClear, type Platform } from '../../../mobile/app/src/App';
+import { createFakeFillBrowser, type FakeFillBrowser } from '../../../mobile/app/src/browser/native';
 import { createMemoryAppStateStore, type AppStateStore } from '../../../mobile/app/src/store/appStateStore';
 import { createMemoryFileStore, type FileStore } from '../../../mobile/app/src/store/fileStore';
 import { createMemoryStore, type ProfileStore } from '../../../mobile/app/src/store/profileStore';
@@ -25,10 +26,11 @@ function makeProfile(resumes: ResumeSeed[] = [{ id: 'r1', title: '我的简历' 
   });
 }
 
-function fakePlatform() {
+function fakePlatform(fillBrowser?: FakeFillBrowser) {
   let back: (() => boolean) | null = null;
   let pause: (() => void) | null = null;
   const platform: Platform = {
+    ...(fillBrowser ? { fillBrowser } : {}),
     onBack(handler) {
       back = handler;
       return () => {
@@ -51,14 +53,15 @@ let appState: AppStateStore;
 let device: ReturnType<typeof fakePlatform>;
 
 /** Render the app on the given stores (a second call on the same stores is "the next start"). */
-function start(options: { delay?: number } = {}) {
-  device = fakePlatform();
+function start(options: { delay?: number; fillBrowser?: FakeFillBrowser } = {}) {
+  device = fakePlatform(options.fillBrowser);
+  const wiper = createStoreWiper({ profile: store, files, appState });
   return render(
     <App
       store={store}
       files={files}
       appState={appState}
-      wiper={createStoreWiper({ profile: store, files, appState })}
+      wiper={options.fillBrowser ? withSiteDataClear(wiper, options.fillBrowser) : wiper}
       platform={device.platform}
       autosaveDelayMs={options.delay ?? 20}
       sweepDelayMs={30}
@@ -387,6 +390,157 @@ describe('Shell – data', () => {
     await heading('设置');
     device.pause();
     await waitFor(async () => expect((await stored()).resumes[0]!.basics.givenName).toBe('三'), WAIT);
+  });
+});
+
+describe('Shell – the fill browser', () => {
+  const URL_A = 'https://jobs.example.com/apply/1';
+  const msg = (data: object, over: Partial<{ frame: number; generation: number; origin: string; main: boolean }> = {}) => ({
+    frame: 1,
+    generation: 1,
+    origin: 'https://jobs.example.com',
+    main: true,
+    data: JSON.stringify({ v: 1, ...data }),
+    ...over,
+  });
+
+  async function openPasted(fake: FakeFillBrowser, profile: Profile = makeProfile()) {
+    stores(profile, { version: 1, onboardingDone: true });
+    start({ fillBrowser: fake });
+    await heading('首页');
+    fireEvent.change(screen.getByLabelText('网申链接'), { target: { value: URL_A } });
+    press('打开');
+    await screen.findByRole('button', { name: '关闭网申页面' }, WAIT);
+    await waitFor(() => expect(fake.callsOf('open').map((o) => o.url)).toEqual([URL_A]), WAIT);
+  }
+
+  /** The page loads and its top frame checks in with a form. */
+  function load(fake: FakeFillBrowser, over: { canGoBack?: boolean } = {}) {
+    act(() => {
+      fake.emit('navigation', { phase: 'started', url: URL_A, generation: 1, canGoBack: over.canGoBack ?? false, canGoForward: false });
+      fake.emit('navigation', { phase: 'finished', url: URL_A, generation: 1, canGoBack: over.canGoBack ?? false, canGoForward: false });
+      fake.emit('message', msg({ kind: 'hello', iframes: 0 }));
+      fake.emit('message', msg({ kind: 'scan', count: 3, iframes: 0 }));
+    });
+  }
+
+  it('a pasted link opens full screen over the tabs; closing goes back to Home', async () => {
+    const fake = createFakeFillBrowser();
+    await openPasted(fake);
+    expect(screen.queryByRole('navigation', { name: '主导航' })).toBeNull();
+    expect(screen.getByRole('button', { name: '网页信息：jobs.example.com' })).toBeTruthy();
+    expect(document.querySelector('main')!.hasAttribute('inert')).toBe(true);
+    press('关闭网申页面');
+    await heading('首页');
+    expect(nav()).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '关闭网申页面' })).toBeNull();
+    await waitFor(() => expect(fake.callsOf('close').length).toBeGreaterThan(0), WAIT);
+  });
+
+  it('without the fill browser (browser preview) 打开 saves the link and says the browser needs the phone', async () => {
+    stores(makeProfile(), { version: 1, onboardingDone: true });
+    start();
+    await heading('首页');
+    fireEvent.change(screen.getByLabelText('网申链接'), { target: { value: URL_A } });
+    press('打开');
+    expect(await screen.findByText('填写浏览器要在手机上用。', undefined, WAIT)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '关闭网申页面' })).toBeNull();
+    await waitFor(async () => expect((await appState.load())?.recentPages.map((p) => p.url)).toEqual([URL_A]), WAIT);
+  });
+
+  it('back key: a sheet first, then the page history, then closes the browser', async () => {
+    const fake = createFakeFillBrowser();
+    await openPasted(fake);
+    load(fake, { canGoBack: true });
+    press('网页信息：jobs.example.com');
+    expect(await screen.findByRole('dialog', { name: '网页信息' }, WAIT)).toBeTruthy();
+    act(() => void expect(device.pressBack()).toBe(true));
+    expect(screen.queryByRole('dialog', { name: '网页信息' })).toBeNull();
+    act(() => void expect(device.pressBack()).toBe(true));
+    await waitFor(() => expect(fake.callsOf('navigate')).toContainEqual({ action: 'back' }), WAIT);
+    act(() => fake.emit('navigation', { phase: 'history', url: URL_A, generation: 1, canGoBack: false, canGoForward: true }));
+    act(() => void expect(device.pressBack()).toBe(true));
+    await heading('首页');
+    expect(nav()).toBeTruthy();
+  });
+
+  it('「去填简历」 hides the page behind a return pill on the 简历 tab; the pill brings it back', async () => {
+    const fake = createFakeFillBrowser();
+    await openPasted(fake, makeProfile([]));
+    load(fake);
+    act(() => fake.emit('fabTap', {}));
+    const sheet = await screen.findByRole('dialog', { name: '还没有能用的简历' }, WAIT);
+    fireEvent.click(within(sheet).getByRole('button', { name: '去填简历' }));
+    await waitFor(() => expect(nav()).toBeTruthy(), WAIT);
+    expect(tab('简历').getAttribute('aria-current')).toBe('page');
+    await waitFor(() => expect(fake.callsOf('setVisible')).toContainEqual({ visible: false }), WAIT);
+    const pill = screen.getByRole('button', { name: '回到网申页面：jobs.example.com' });
+    expect(pill.querySelector('svg')?.getAttribute('data-icon')).toBe('window');
+    // The pill stays on every tab.
+    fireEvent.click(tab('设置'));
+    await heading('设置');
+    fireEvent.click(screen.getByRole('button', { name: '回到网申页面：jobs.example.com' }));
+    await screen.findByRole('button', { name: '关闭网申页面' }, WAIT);
+    expect(screen.queryByRole('navigation', { name: '主导航' })).toBeNull();
+    await waitFor(() => expect(fake.callsOf('setVisible').at(-1)).toEqual({ visible: true }), WAIT);
+    expect(fake.callsOf('close')).toHaveLength(0);
+  });
+
+  it('the sample form from onboarding step 2: closing comes back to step 2, onboarding not done', async () => {
+    const fake = createFakeFillBrowser();
+    stores();
+    start({ fillBrowser: fake });
+    await welcomeInChinese();
+    press('继续');
+    await heading(START_TITLE);
+    press(/^先试试示例表单/);
+    await screen.findByRole('button', { name: '关闭网申页面' }, WAIT);
+    await waitFor(() => expect(fake.callsOf('open').map((o) => o.url)).toEqual(['https://appassets.androidplatform.net/demo/form.html']), WAIT);
+    expect(screen.getByRole('button', { name: '网页信息：示例表单（App 自带）' })).toBeTruthy();
+    press('关闭网申页面');
+    await heading(START_TITLE);
+    const state = await appState.load();
+    expect(state?.onboardingDone ?? false).toBe(false);
+    expect(state?.recentPages ?? []).toEqual([]);
+  });
+
+  it('the page title lands on its recent entry', async () => {
+    const fake = createFakeFillBrowser();
+    await openPasted(fake);
+    load(fake);
+    act(() => fake.emit('title', { title: '示例科技 校园招聘', generation: 1 }));
+    await waitFor(async () => expect((await appState.load())?.recentPages[0]?.title).toBe('示例科技 校园招聘'), WAIT);
+  });
+
+  it('delete all closes the open session first, then clears site data', async () => {
+    const fake = createFakeFillBrowser();
+    await openPasted(fake, makeProfile([]));
+    load(fake);
+    act(() => fake.emit('fabTap', {}));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '还没有能用的简历' }, WAIT)).getByRole('button', { name: '去填简历' }));
+    await waitFor(() => expect(nav()).toBeTruthy(), WAIT);
+    fireEvent.click(tab('设置'));
+    await heading('设置');
+    press(/^删除这台手机上的全部数据/);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '删除全部数据？' }, WAIT)).getByRole('button', { name: '永久删除' }));
+    await heading(ANY_WELCOME);
+    const order = fake.calls.map((c) => c.method).filter((m) => m === 'close' || m === 'clearSiteData');
+    expect(order[0]).toBe('close');
+    expect(order).toContain('clearSiteData');
+    expect(screen.queryByRole('button', { name: /^回到网申页面/ })).toBeNull();
+  });
+
+  it('Settings offers 清除网站登录状态 when the fill browser exists', async () => {
+    const fake = createFakeFillBrowser();
+    stores(makeProfile(), { version: 1, onboardingDone: true });
+    start({ fillBrowser: fake });
+    await heading('首页');
+    fireEvent.click(tab('设置'));
+    await heading('设置');
+    press(/^清除网站登录状态/);
+    fireEvent.click(within(screen.getByRole('dialog', { name: '清除所有网站的登录状态？' })).getByRole('button', { name: '清除' }));
+    expect(await screen.findByText('已清除网站登录状态', undefined, WAIT)).toBeTruthy();
+    expect(fake.callsOf('clearSiteData')).toHaveLength(1);
   });
 });
 

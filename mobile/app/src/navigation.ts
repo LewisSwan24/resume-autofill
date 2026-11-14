@@ -1,4 +1,5 @@
-// Where the app is: which tab is shown, what each tab has open, the onboarding step, and a pending jump to a field.
+// Where the app is: which tab is shown, what each tab has open, the onboarding step, a pending jump to a field, and
+// the fill browser (open, or hidden behind the tabs while the person adds data).
 // Pure, so the back-key order and tab rules are tested without rendering. Inactive tabs are unmounted; their
 // sub-state lives here, so nothing hidden can hold a back-key layer.
 import type { ModuleName } from '../../../src/editor';
@@ -17,6 +18,25 @@ export interface FocusTarget {
   nonce: number;
 }
 
+/** What the fill browser opens (the session's BrowserTarget). */
+export interface BrowserTarget {
+  url: string;
+  demo: boolean;
+  /** The recent-page entry the page was opened from, for its title. Never set for the demo. */
+  recentId?: string;
+}
+
+/** Where an open came from: decides where closing goes back to. */
+export type BrowserSource = 'paste' | 'recent' | 'demo-home' | 'demo-onboarding';
+export type BrowserOpen = BrowserTarget & { source: BrowserSource };
+
+export interface BrowserNav {
+  target: BrowserTarget;
+  /** True while the person is on the tabs and the session waits (the return pill shows). */
+  hidden: boolean;
+  returnTo: 'home' | 'onboarding';
+}
+
 export interface NavState {
   tab: Tab;
   /** Open module on the 简历 tab. */
@@ -25,9 +45,11 @@ export interface NavState {
   focus: FocusTarget | null;
   settingsPage: SettingsPage;
   onboardingStep: 1 | 2;
+  /** The fill browser, while a session exists. */
+  browser: BrowserNav | null;
 }
 
-export const INITIAL_NAV: NavState = { tab: 'home', module: null, focus: null, settingsPage: 'root', onboardingStep: 1 };
+export const INITIAL_NAV: NavState = { tab: 'home', module: null, focus: null, settingsPage: 'root', onboardingStep: 1, browser: null };
 
 export type NavAction =
   | { type: 'tab'; tab: Tab }
@@ -36,6 +58,10 @@ export type NavAction =
   | { type: 'focusDone' }
   | { type: 'settingsPage'; page: SettingsPage }
   | { type: 'onboardingStep'; step: 1 | 2 }
+  | { type: 'openBrowser'; target: BrowserOpen }
+  | { type: 'hideBrowser' }
+  | { type: 'showBrowser' }
+  | { type: 'closeBrowser' }
   | { type: 'reset' };
 
 let lastNonce = 0;
@@ -59,6 +85,17 @@ export function navReduce(state: NavState, action: NavAction): NavState {
       return { ...state, settingsPage: action.page };
     case 'onboardingStep':
       return { ...state, onboardingStep: action.step };
+    case 'openBrowser': {
+      const { source, ...target } = action.target;
+      return { ...state, browser: { target, hidden: false, returnTo: source === 'demo-onboarding' ? 'onboarding' : 'home' } };
+    }
+    case 'hideBrowser':
+      // 「去填简历」: the 简历 tab root shows with the tab bar; the page waits behind the return pill.
+      return state.browser ? { ...state, tab: 'resume', module: null, focus: null, browser: { ...state.browser, hidden: true } } : state;
+    case 'showBrowser':
+      return state.browser?.hidden ? { ...state, browser: { ...state.browser, hidden: false } } : state;
+    case 'closeBrowser':
+      return state.browser ? { ...state, browser: null } : state;
     case 'reset':
       return INITIAL_NAV;
   }

@@ -188,6 +188,98 @@ describe('privacy guards', () => {
     expect(permissions).toEqual(['android.permission.INTERNET']);
   });
 
+  describe('fill browser', () => {
+    const fillFiles = [
+      'FillBrowserPlugin.java', 'FillBrowserHost.java', 'PageWebViewClient.java', 'PageChromeClient.java',
+      'FrameRegistry.java', 'NavigationPolicy.java', 'FabView.java', 'ChooserStreamProvider.java',
+      'WebViewSupport.java', 'DemoPathHandler.java',
+    ];
+    const read = (name: string) => readFileSync(join(javaDir, name), 'utf8');
+    /** Body of the first method whose signature contains `signature`, up to its closing brace at 4 spaces. */
+    const method = (source: string, signature: string) => {
+      const at = source.indexOf(signature);
+      expect(at, signature).toBeGreaterThan(-1);
+      const rest = source.slice(at);
+      return rest.slice(0, rest.indexOf('\n    }'));
+    };
+
+    it('the fill browser classes exist and never import android.util.Log', () => {
+      const names = javaFiles().map((f) => relative(javaDir, f));
+      expect(names).toEqual(expect.arrayContaining(fillFiles));
+      const files = fillFiles.map((n) => join(javaDir, n));
+      expect(offenders(files, /\bandroid\.util\.Log\b|\bLog\.[deivw]\s*\(|\bSystem\.(out|err)\b|printStackTrace/)).toEqual([]);
+    });
+
+    it('page console messages never reach logcat', () => {
+      const body = code(method(read('PageChromeClient.java'), 'boolean onConsoleMessage('));
+      expect(body).toMatch(/return\s+true\s*;/);
+      expect(body).not.toMatch(/return\s+(false|super)/);
+    });
+
+    it('SSL errors are always refused, never proceeded', () => {
+      expect(offenders(javaFiles(), /\.proceed\s*\(/)).toEqual([]);
+      const body = code(method(read('PageWebViewClient.java'), 'void onReceivedSslError('));
+      expect(body).toMatch(/handler\.cancel\(\s*\)/);
+      expect(body).not.toMatch(/super\.onReceivedSslError/);
+    });
+
+    it('no JavaScript interface, no eval, no debugging switch, no file or mixed-content holes, no direct call', () => {
+      const banned =
+        /\baddJavascriptInterface\b|\bevaluateJavascript\b|\bsetWebContentsDebuggingEnabled\b|setAllowFileAccess\(\s*true|setAllowFileAccessFromFileURLs\(\s*true|setAllowUniversalAccessFromFileURLs\(\s*true|MIXED_CONTENT_ALWAYS_ALLOW|MIXED_CONTENT_COMPATIBILITY_MODE|\bACTION_CALL\b/;
+      expect(offenders(javaFiles(), banned)).toEqual([]);
+      const host = code(read('FillBrowserHost.java'));
+      expect(host).toMatch(/setAllowFileAccess\(\s*false\s*\)/);
+      expect(host).toMatch(/setAllowUniversalAccessFromFileURLs\(\s*false\s*\)/);
+      expect(host).toMatch(/MIXED_CONTENT_NEVER_ALLOW/);
+      expect(host).toMatch(/setSupportMultipleWindows\(\s*false\s*\)/);
+    });
+
+    it('page permission requests are denied', () => {
+      const chrome = code(read('PageChromeClient.java'));
+      expect(code(method(read('PageChromeClient.java'), 'void onPermissionRequest('))).toMatch(/\.deny\(\s*\)/);
+      expect(chrome).not.toMatch(/\.grant\(/);
+      expect(code(method(read('PageChromeClient.java'), 'void onGeolocationPermissionsShowPrompt('))).toMatch(
+        /\.invoke\(\s*\w+\s*,\s*false\s*,\s*false\s*\)/,
+      );
+    });
+
+    it('FillBrowserPlugin puts no call data into reject messages', () => {
+      const source = read('FillBrowserPlugin.java');
+      const args = rejectArguments(source);
+      expect(args.length).toBeGreaterThan(0);
+      for (const arg of args) {
+        const rest = arg.replace(/"(?:\\.|[^"\\])*"/g, '');
+        const words = rest.match(/[A-Za-z_]\w*/g) ?? [];
+        expect(words.filter((w) => !/^[A-Z][A-Z0-9_]*$/.test(w)), `call.reject(${arg})`).toEqual([]);
+      }
+      for (const m of source.matchAll(/\bcall\.reject\(\s*"([^"]*)"/g)) {
+        expect(['no_browser', 'bad_args', 'not_found', 'failed']).toContain(m[1]);
+      }
+    });
+
+    it('the chooser provider is not exported and network security trusts system anchors only', () => {
+      const manifest = readFileSync(join(repo, 'mobile/android/app/src/main/AndroidManifest.xml'), 'utf8');
+      const permissions = [...manifest.matchAll(/<uses-permission android:name="([^"]+)"/g)].map((m) => m[1]);
+      expect(permissions).toEqual(['android.permission.INTERNET']);
+      const provider = [...manifest.matchAll(/<provider\b[^>]*>/g)].map((m) => m[0]).find((p) => p.includes('ChooserStreamProvider'));
+      expect(provider, 'the chooser provider is declared').toBeDefined();
+      expect(provider!).toMatch(/android:exported="false"/);
+      expect(provider!).toMatch(/android:authorities="\$\{applicationId\}\.chooser"/);
+      expect(provider!).not.toMatch(/grantUriPermissions="true"/);
+      expect(manifest).toMatch(/android:networkSecurityConfig="@xml\/network_security_config"/);
+      const nsc = readFileSync(join(repo, 'mobile/android/app/src/main/res/xml/network_security_config.xml'), 'utf8');
+      const sources = [...nsc.matchAll(/<certificates\s+src="([^"]+)"/g)].map((m) => m[1]);
+      expect(sources).toEqual(['system']);
+      expect(nsc).not.toMatch(/overridePins|debug-overrides|src="user"/);
+    });
+
+    it('the chooser provider never writes to disk', () => {
+      const source = code(read('ChooserStreamProvider.java'));
+      expect(source).toMatch(/createReliablePipe\(/);
+      expect(source).not.toMatch(/\bFileOutputStream\b|\bgetCacheDir\b|\bgetFilesDir\b|\bcreateTempFile\b|\bRandomAccessFile\b/);
+    });
+  });
+
   it('MainActivity saves only a boolean about the incoming file', () => {
     const raw = readFileSync(join(javaDir, 'MainActivity.java'), 'utf8');
     const source = code(raw);

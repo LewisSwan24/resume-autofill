@@ -485,7 +485,12 @@ textarea {
   transition: background-color 120ms ease-out;
 }
 
-.m-icon-button:active,
+/* Back / forward with no history: dimmed, like every other disabled control. */
+.m-icon-button:disabled {
+  opacity: var(--raf-opacity-disabled);
+}
+
+.m-icon-button:not(:disabled):active,
 .m-segment:active,
 .m-entry__toggle:active,
 .m-choice:active,
@@ -824,8 +829,17 @@ textarea {
   box-shadow: inset 0 2px 0 var(--raf-color-primary);
 }
 
+/* The tab bar and, while a page waits, the return pill above it: in the flow at the bottom, so they take room and never
+   cover the last row, and they grow with the font. */
+.m-shell__bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
+/* --m-bottom-h is the bottom bar's measured height (App), safe area included. */
 .m-shell .m-toast-region {
-  bottom: calc(var(--m-tabbar-h, 64px) + 16px + env(safe-area-inset-bottom));
+  bottom: calc(var(--m-bottom-h, 64px) + 16px);
 }
 
 .m-shell--keyboard .m-toast-region {

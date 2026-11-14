@@ -1,5 +1,6 @@
-// Home, block C: recent application pages, newest first. A row opens a sheet with the full link to copy; each row
-// can be removed, and the list cleared after a confirm. Undo for both lives in the toast (HomeScreen).
+// Home, block C: recent application pages, newest first. A row opens the page in the fill browser; its ⋯ button opens
+// a sheet with the full link (open, copy, remove). The list can be cleared after a confirm. Undo for remove and clear
+// lives in the toast (HomeScreen).
 import { useId, useState } from 'react';
 import { useLanguage } from '../../../../src/i18n';
 import { ConfirmSheet } from '../dialogs';
@@ -12,15 +13,17 @@ import { relativeTime } from './relativeTime';
 export interface RecentPagesProps {
   pages: readonly RecentPage[];
   now: number;
+  onOpen: (page: RecentPage) => void;
   onRemove: (page: RecentPage) => void;
   onClear: () => void;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
 }
 
-export function RecentPages({ pages, now, onRemove, onClear, showToast }: RecentPagesProps) {
+export function RecentPages({ pages, now, onOpen, onRemove, onClear, showToast }: RecentPagesProps) {
   const t = useMT();
   const language = useLanguage();
   const headingId = useId();
+  const rowId = useId();
   const [openId, setOpenId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const open = pages.find((p) => p.id === openId) ?? null;
@@ -49,19 +52,25 @@ export function RecentPages({ pages, now, onRemove, onClear, showToast }: Recent
         <p className="m-empty">{t('m.recent.empty')}</p>
       ) : (
         <ul className="m-card m-recent__list" aria-label={t('m.recent.title')}>
-          {pages.map((p) => (
+          {pages.map((p, i) => (
             <li key={p.id} className="m-recent__row">
-              <button type="button" className="m-recent__open" onClick={() => setOpenId(p.id)}>
+              <button
+                type="button"
+                className="m-recent__open"
+                aria-label={t('m.recent.open', { host: p.host })}
+                aria-describedby={`${rowId}-${i}`}
+                onClick={() => onOpen(p)}
+              >
                 <span className="m-row__tile">
                   <Icon name="link-45deg" />
                 </span>
-                <span className="m-row__text">
+                <span className="m-row__text" id={`${rowId}-${i}`}>
                   <span className="m-recent__host">{p.host}</span>
                   {p.title ? <span className="m-row__caption">{p.title}</span> : null}
                   <span className="m-recent__meta">{relativeTime(p.addedAt, now, language)}</span>
                 </span>
               </button>
-              <IconButton icon="x-lg" label={t('m.recent.remove', { host: p.host })} onClick={() => onRemove(p)} />
+              <IconButton icon="three-dots" label={t('m.recent.more', { host: p.host })} onClick={() => setOpenId(p.id)} />
             </li>
           ))}
         </ul>
@@ -73,11 +82,15 @@ export function RecentPages({ pages, now, onRemove, onClear, showToast }: Recent
             <p className="m-recent__host">{open.host}</p>
             {open.title ? <p className="m-sheet-text">{open.title}</p> : null}
             <p className="m-url">{open.url}</p>
-            <p className="m-notice">
-              <Icon name="info-circle" />
-              <span>{t('m.recent.browserSoon')}</span>
-            </p>
             <div className="m-actions">
+              <SheetAction
+                icon="window"
+                label={t('m.recent.openOne')}
+                onClick={() => {
+                  setOpenId(null);
+                  onOpen(open);
+                }}
+              />
               <SheetAction icon="copy" label={t('m.recent.copy')} onClick={() => void copy(open.url)} />
               <SheetAction
                 icon="x-lg"

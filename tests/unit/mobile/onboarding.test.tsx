@@ -14,6 +14,7 @@ function renderStep(step: 1 | 2, over: Partial<OnboardingProps> = {}) {
     onStartBlank: vi.fn(),
     onImport: vi.fn(),
     onImportResume: vi.fn(),
+    onTryDemo: vi.fn(),
     showToast: vi.fn(),
     ...over,
   };
@@ -90,6 +91,26 @@ describe('Onboarding', () => {
     expect(p.onImportResume).toHaveBeenCalledTimes(1);
     expect(p.showToast).not.toHaveBeenCalled();
     expect(p.onImport).not.toHaveBeenCalled();
+  });
+
+  it('step 2 offers 「先试试示例表单」 last, which calls onTryDemo and nothing else', () => {
+    const p = renderStep(2);
+    const options = screen.getAllByRole('button').filter((b) => b.classList.contains('m-onb__option'));
+    expect(options.map((b) => b.querySelector('.m-row__name')?.textContent)).toEqual([
+      '从电脑导入', '从空白开始', '导入 PDF / Word 简历', '先试试示例表单',
+    ]);
+    const demo = screen.getByRole('button', { name: /^先试试示例表单/ });
+    expect(demo.querySelector('svg')?.getAttribute('data-icon')).toBe('play-circle');
+    expect(within(demo).getByText('用虚构的张三演示一次填写，不碰真实网站。')).toBeTruthy();
+    fireEvent.click(demo);
+    expect(p.onTryDemo).toHaveBeenCalledTimes(1);
+    expect(p.onSkip).not.toHaveBeenCalled();
+    expect(p.onImport).not.toHaveBeenCalled();
+  });
+
+  it('without a fill browser there is no demo option', () => {
+    renderStep(2, { onTryDemo: undefined });
+    expect(screen.queryByRole('button', { name: /^先试试示例表单/ })).toBeNull();
   });
 
   it('the language switch on the welcome step calls onLanguage', () => {

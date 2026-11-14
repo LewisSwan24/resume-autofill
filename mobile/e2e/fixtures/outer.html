@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Device test page (fill browser): a form on 127.0.0.1:4180 with a cross-origin iframe on localhost:4181.
+     No scripts, nothing is sent anywhere. -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>外层示例页</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 16px; }
+      label { display: block; margin: 12px 0 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 8px; font: inherit; }
+      iframe { border: 1px solid #888; margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>示例公司 网申（外层）</h1>
+    <form>
+      <h2>基本信息</h2>
+      <label for="name">姓名</label>
+      <input id="name" name="name" type="text" autocomplete="off" />
+      <label for="email">邮箱</label>
+      <input id="email" name="email" type="email" autocomplete="off" />
+    </form>
+    <iframe src="http://localhost:4181/inner.html" title="其他信息" width="100%" height="400"></iframe>
+  </body>
+</html>

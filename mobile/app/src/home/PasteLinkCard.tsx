@@ -1,5 +1,5 @@
 // Home, block B: paste an application link. While typing it says which site will open; errors wait for a submit.
-// A valid link goes to the recent pages list (the built-in fill browser comes in a later version).
+// A valid link goes to the top of the recent pages and opens in the fill browser.
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Icon } from '../Icon';
 import { useMT } from '../i18n';
@@ -9,14 +9,14 @@ import { parseApplicationLink, type ParsedLink, type PasteError } from './pasteL
 const PREVIEW_DELAY_MS = 150;
 
 export interface PasteLinkCardProps {
-  /** Store the link; resolves false when saving failed (the caller has said so). */
-  onSave: (link: Extract<ParsedLink, { ok: true }>) => Promise<boolean>;
+  /** Save the link to recent pages and open it in the fill browser (it opens even when saving failed). */
+  onOpen: (link: Extract<ParsedLink, { ok: true }>) => Promise<void>;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
 }
 
 const canReadClipboard = () => typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
 
-export function PasteLinkCard({ onSave, showToast }: PasteLinkCardProps) {
+export function PasteLinkCard({ onOpen, showToast }: PasteLinkCardProps) {
   const t = useMT();
   const id = useId();
   const liveId = `${id}-live`;
@@ -48,11 +48,9 @@ export function PasteLinkCard({ onSave, showToast }: PasteLinkCardProps) {
     }
     setBusy(true);
     try {
-      if (await onSave(parsed)) {
-        setValue('');
-        setPreview(null);
-        showToast({ text: t('m.paste.saved') });
-      }
+      await onOpen(parsed);
+      setValue('');
+      setPreview(null);
     } finally {
       setBusy(false);
     }

@@ -5,7 +5,8 @@
   "description": "Resume Autofill mobile app (Capacitor). React, zod and Vite come from the repository root.",
   "type": "module",
   "scripts": {
-    "build": "vite build --config app/vite.config.ts",
+    "build": "vite build --config app/vite.config.ts && vite build --config inject/vite.config.ts && node scripts/copy-page-assets.mjs",
+    "build:inject": "vite build --config inject/vite.config.ts && node scripts/copy-page-assets.mjs",
     "dev": "vite --config app/vite.config.ts",
     "sync": "npm run build && cap sync android"
   },

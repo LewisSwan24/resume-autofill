@@ -4,16 +4,21 @@
 // password), delete all leaves nothing behind, the back key order, recent pages are encrypted, and 200% font scale.
 // Resume import: a PDF opened with the app and a Word file shared to it (through the manifest's intent filters), a
 // stored attachment read back, files it cannot read, and the review at 200% font scale and in dark mode.
-import { mkdirSync, readFileSync } from 'node:fs';
+// Fill browser: the sample form fills, reports and undoes; a cross-origin iframe is filled; an SSL error is refused;
+// app schemes are not followed; the keyboard does not cover a field; a stored PDF is uploaded through the file chooser
+// (test pages from fixtures/server.ts).
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { _android, expect, test, type AndroidDevice, type Page } from '@playwright/test';
+import { _android, chromium, expect, test, type AndroidDevice, type Browser, type Page } from '@playwright/test';
 import { MODULES, enumOptions, exportProfile, type FieldMeta, type ModuleMeta } from '../../src/editor';
 import { translate } from '../../src/i18n';
 // The export pieces, not transfer.ts's buildExport: that one pulls in the page's icons (svg?raw), which Node cannot load.
 import { encryptExport } from '../app/src/data/exportCrypto';
 import { mt } from '../app/src/i18n';
 import { ProfileSchema, ResumeSchema } from '../../src/schema';
+import { PORTS, startServers, type TestServers } from './fixtures/server';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APK = path.join(HERE, '..', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
@@ -48,9 +53,18 @@ test.afterAll(async () => {
 async function launch(): Promise<Page> {
   await device.shell(`am force-stop ${PKG}`);
   await device.shell(`am start -n ${PKG}/.MainActivity`);
-  const page = await (await device.webView({ pkg: PKG })).page();
-  await page.getByRole('heading', { level: 1 }).first().waitFor();
-  return page;
+  // Right after a force-stop, Playwright can still hand out the killed process's WebView (its page then reports
+  // "closed"): ask again for the new one.
+  for (let attempt = 0; ; attempt++) {
+    const page = await (await device.webView({ pkg: PKG })).page();
+    try {
+      await page.getByRole('heading', { level: 1 }).first().waitFor();
+      return page;
+    } catch (error) {
+      if (attempt >= 2 || !/closed/i.test(String(error))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
 }
 
 const WELCOME = '你好，先说三件事';
@@ -531,6 +545,8 @@ test('delete all removes the encrypted files and the key', async () => {
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
   await page.getByRole('button', { name: '打开', exact: true }).click();
+  // 打开 opens the page in the fill browser; closing it comes back to Home with the link listed.
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
   await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
   await expect.poll(() => privateFiles()).toEqual(expect.arrayContaining(['profile.enc', 'state.enc', 'attachments']));
 
@@ -578,6 +594,8 @@ test('recent pages survive a restart and are not stored in plain text', async ()
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
   await page.getByRole('button', { name: '打开', exact: true }).click();
+  // 打开 opens the page in the fill browser; closing it comes back to Home with the link listed.
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
   await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
 
   page = await launch();
@@ -917,4 +935,387 @@ test('the review at 200% font scale and in dark mode: nothing cut off; screensho
     await device.shell('settings put system font_scale 1.0');
     await device.shell('cmd uimode night no');
   }
+});
+
+// ---- The fill browser ----
+
+const DEMO = 'https://appassets.androidplatform.net/demo/form.html';
+const SAMPLE_WORDS = ['张三', 'zhangsan@example.com', '示例大学'];
+let servers: TestServers | null = null;
+
+/** Host adb for what `device.shell` cannot do (port reverse, port forward). Emulator serial only (see beforeAll). */
+function hostAdb(...args: string[]): string {
+  const serial = process.env.RAF_SERIAL!;
+  const sdk = process.env.ANDROID_HOME ?? path.join(process.env.LOCALAPPDATA ?? '', 'Android', 'Sdk');
+  const adb = existsSync(path.join(sdk, 'platform-tools', 'adb.exe')) ? path.join(sdk, 'platform-tools', 'adb.exe') : 'adb';
+  return execFileSync(adb, ['-s', serial, ...args], { encoding: 'utf8' });
+}
+
+/** The test pages on 4180 / 4181 / 4443, reachable from the emulator as 127.0.0.1 and localhost. */
+async function startServer() {
+  if (servers) return;
+  servers = await startServers();
+  for (const port of Object.values(PORTS)) hostAdb('reverse', `tcp:${port}`, `tcp:${port}`);
+}
+
+test.afterAll(async () => {
+  if (!servers) return;
+  await servers.close();
+  servers = null;
+  try {
+    hostAdb('reverse', '--remove-all');
+  } catch {
+    // The device may be gone already.
+  }
+});
+
+/** Fresh app data, onboarding skipped, Chinese interface, on Home. */
+async function freshHome(): Promise<Page> {
+  await device.shell(`pm clear ${PKG}`);
+  const page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await page.getByRole('button', { name: '跳过', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  return page;
+}
+
+/** Paste a link on Home and open it in the fill browser. */
+async function openLink(page: Page, url: string) {
+  await toTab(page, '首页');
+  await page.getByLabel('网申链接').fill(url);
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible();
+}
+
+let cdpBrowser: Browser | null = null;
+
+/**
+ * The page WebView's own CDP page (the fill browser's page, not the app's UI). Both WebViews live in the app's process
+ * and share one DevTools socket, so the page usually shows up next to the UI page; when Playwright's Android wrapper
+ * only exposes one page per socket, connect to the socket directly over a forwarded port.
+ */
+async function contentPage(page: Page, urlPrefix: string): Promise<Page> {
+  const until = Date.now() + 15_000;
+  while (Date.now() < until) {
+    const found = page.context().pages().find((p) => p.url().startsWith(urlPrefix));
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const pid = (await device.shell(`pidof ${PKG}`)).toString().trim().split(/\s+/)[0];
+      hostAdb('forward', 'tcp:9333', `localabstract:webview_devtools_remote_${pid}`);
+      cdpBrowser ??= await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 20_000 });
+      const pollUntil = Date.now() + 15_000;
+      while (Date.now() < pollUntil) {
+        const found = cdpBrowser
+          .contexts()
+          .flatMap((c) => c.pages())
+          .find((p) => p.url().startsWith(urlPrefix));
+        if (found) return found;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch {
+      await cdpBrowser?.close().catch(() => undefined);
+      cdpBrowser = null;
+    }
+  }
+  throw new Error(`no CDP page for ${urlPrefix}`);
+}
+
+test.afterEach(async () => {
+  await cdpBrowser?.close().catch(() => undefined);
+  cdpBrowser = null;
+});
+
+interface DescNode {
+  desc: string;
+  x: number;
+  y: number;
+}
+
+/** Views of the app with a content description (the native FAB), read with uiautomator. */
+async function describedNodes(): Promise<DescNode[]> {
+  const xml = (await device.shell('uiautomator dump /sdcard/raf-ui.xml >/dev/null 2>&1; cat /sdcard/raf-ui.xml')).toString('utf8');
+  const nodes: DescNode[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    const desc = /\bcontent-desc="([^"]*)"/.exec(match[0])?.[1] ?? '';
+    const bounds = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(/\bbounds="([^"]*)"/.exec(match[0])?.[1] ?? '');
+    if (!desc || !bounds) continue;
+    const [x1, y1, x2, y2] = bounds.slice(1).map(Number) as [number, number, number, number];
+    nodes.push({ desc, x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) });
+  }
+  return nodes;
+}
+
+async function waitForFab(match: RegExp, timeoutMs = 30_000): Promise<DescNode> {
+  const until = Date.now() + timeoutMs;
+  let seen: string[] = [];
+  while (Date.now() < until) {
+    const nodes = await describedNodes();
+    const node = nodes.find((n) => match.test(n.desc));
+    if (node) return node;
+    seen = nodes.map((n) => n.desc);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`no view described ${match}; last seen: ${JSON.stringify(seen)}`);
+}
+
+/**
+ * A real touch on an element of a content page (a gesture, unlike a CDP click, so links count as user-initiated).
+ * Measured with evaluate, not a locator: after a link the app refused (weixin:), Playwright still waits for that
+ * navigation to finish, and locator actions on the page would hang.
+ */
+async function realTap(target: Page, selector: string) {
+  const box = await target.evaluate((sel) => {
+    const el = document.querySelector(sel)!;
+    el.scrollIntoView({ block: 'center' });
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  }, selector);
+  const cdp = await target.context().newCDPSession(target);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + box.height / 2, gestureSourceType: 'touch' });
+  await cdp.detach().catch(() => undefined);
+}
+
+async function tapFab(match = /一键填写|继续填写/) {
+  const fab = await waitForFab(match);
+  await device.shell(`input tap ${fab.x} ${fab.y}`);
+  return fab;
+}
+
+/** Nothing of the sample resume in the chromium or crash log. */
+async function expectCleanLogcat() {
+  const log = (await device.shell('logcat -d -s chromium:* AndroidRuntime:*')).toString('utf8');
+  for (const word of SAMPLE_WORDS) expect(log.includes(word), `logcat holds ${word}`).toBe(false);
+}
+
+/** Fill-browser tests read the device log at the end; start each from an empty one. */
+async function clearLogcat() {
+  await device.shell('logcat -c');
+}
+
+test('fill browser: the sample form fills, reports and undoes', async () => {
+  await clearLogcat();
+  const page = await freshHome();
+  await page.getByRole('button', { name: /^没有链接？试试示例表单/ }).click();
+  await expect(page.getByRole('button', { name: '网页信息：示例表单（App 自带）' })).toBeVisible();
+  const content = await contentPage(page, DEMO);
+  await content.locator('#name').waitFor();
+
+  await tapFab();
+  const report = page.getByRole('dialog', { name: '填写报告' });
+  await expect(report).toBeVisible({ timeout: 60_000 });
+  const filledTab = report.getByRole('tab', { name: /^已填 \d+$/ });
+  const filled = Number((await filledTab.textContent())!.replace(/\D/g, ''));
+  expect(filled).toBeGreaterThanOrEqual(10);
+  await expect(report.getByText(/App 不会替你提交/)).toBeVisible();
+
+  await expect(content.locator('#name')).toHaveValue('张三');
+  await expect(content.locator('#email')).toHaveValue('zhangsan@example.com');
+  await expect(content.locator('#school-1')).toHaveValue('示例大学');
+  const extra = content.frames().find((f) => f.url().endsWith('/demo/extra.html'));
+  expect(extra, 'same-origin iframe').toBeTruthy();
+  await expect(extra!.locator('#emergency-name')).not.toHaveValue('');
+  expect(await content.locator('#agree').isChecked()).toBe(false);
+  expect(await content.locator('#notice').isVisible()).toBe(false);
+
+  // A row on 待你看 (or 已填 when nothing needs the person) scrolls its field into view.
+  const attention = report.getByRole('tab', { name: /^待你看 \d+$/ });
+  if ((await attention.textContent())!.replace(/\D/g, '') !== '0') await attention.click();
+  else await filledTab.click();
+  await content.evaluate(() => window.scrollTo(0, 0));
+  const row = report.getByRole('button', { name: /^在网页上找到「/ }).last();
+  const label = (await row.getAttribute('aria-label'))!;
+  await row.click();
+  // The page scrolls the field to the centre (and may focus it): either way it is on screen now.
+  await expect
+    .poll(
+      () =>
+        content.evaluate(() => {
+          const el = document.activeElement;
+          if (el && el !== document.body) {
+            const r = el.getBoundingClientRect();
+            return r.bottom > 0 && r.top < window.innerHeight;
+          }
+          return window.scrollY > 0;
+        }),
+      { message: `located ${label}`, timeout: 10_000 },
+    )
+    .toBe(true);
+
+  await report.getByRole('button', { name: '撤销这次填写' }).click();
+  await expect(report.getByText(/^已恢复 \d+ 项$/)).toBeVisible({ timeout: 15_000 });
+  await expect(content.locator('#name')).toHaveValue('');
+  await expect(content.locator('#email')).toHaveValue('');
+  await expectCleanLogcat();
+});
+
+test('fill browser: a cross-origin iframe checks in and gets filled', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshResume();
+  await fillSample(page);
+  await openModule(page, CONTACT);
+  await page.getByLabel(zh('options.field.phone'), { exact: true }).fill('13800000000');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+  const education = EDITABLE.find((m) => m.module === 'education')!;
+  await openModule(page, education);
+  await page.getByRole('button', { name: zh('options.add', { name: zh(education.labelKey) }) }).click();
+  await page.getByLabel(zh('options.field.school'), { exact: true }).fill('示例大学');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+
+  await openLink(page, 'http://127.0.0.1:4180/outer.html');
+  const outer = await contentPage(page, 'http://127.0.0.1:4180/outer.html');
+  await outer.locator('#name').waitFor();
+  // Both frames counted before the tap: 2 fields outside, 2 in the iframe.
+  await waitForFab(/可以填 4 项/);
+  await tapFab();
+  const report = page.getByRole('dialog', { name: '填写报告' });
+  await expect(report).toBeVisible({ timeout: 60_000 });
+
+  await expect(outer.locator('#name')).toHaveValue('张三');
+  await expect(outer.locator('#email')).toHaveValue('zhangsan@example.com');
+  const inner = outer.frames().find((f) => f.url().startsWith('http://localhost:4181/inner.html'));
+  expect(inner, 'cross-origin iframe').toBeTruthy();
+  await expect(inner!.locator('#phone')).toHaveValue('13800000000');
+  await expect(inner!.locator('#school')).toHaveValue('示例大学');
+  await report.getByRole('tab', { name: /^已填 \d+$/ }).click();
+  await expect(report.getByRole('button', { name: '在网页上找到「手机」' })).toBeVisible();
+  await expect(report.getByRole('button', { name: '在网页上找到「姓名」' })).toBeVisible();
+
+  // The page title lands on the recent entry.
+  await report.getByRole('button', { name: '完成', exact: true }).click();
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
+  await page.getByRole('dialog', { name: '关闭这个网申页面？' }).getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('外层示例页');
+  await expectCleanLogcat();
+});
+
+test('fill browser: an SSL error page is refused', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+  await openLink(page, 'https://127.0.0.1:4443/');
+  const error = page.getByRole('alert');
+  await expect(error.getByRole('heading', { name: '这个网站的安全证书有问题' })).toBeVisible({ timeout: 30_000 });
+  await expect(error.getByRole('button')).toHaveText(['重试', '关闭']);
+  expect(page.context().pages().some((p) => p.url().startsWith('https://127.0.0.1:4443'))).toBe(false);
+  await error.getByRole('button', { name: '重试' }).click();
+  await expect(page.getByRole('alert').getByRole('heading', { name: '这个网站的安全证书有问题' })).toBeVisible({ timeout: 30_000 });
+  await expectCleanLogcat();
+});
+
+test('fill browser: external schemes are not followed', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+  await openLink(page, 'http://127.0.0.1:4180/links.html');
+  const links = await contentPage(page, 'http://127.0.0.1:4180/links.html');
+  await links.locator('#weixin').waitFor();
+
+  await realTap(links, '#weixin');
+  const app = page.getByRole('dialog', { name: '这个链接要打开别的 App' });
+  await expect(app).toBeVisible();
+  await expect(app).toContainText('微信');
+  await expect(app.locator('button:not([aria-label="关闭"])')).toHaveText(['复制链接']);
+  expect(await inFront()).toBe(true);
+  await app.getByRole('button', { name: '关闭' }).click();
+
+  await realTap(links, '#tel');
+  const call = page.getByRole('dialog', { name: '打开拨号？' });
+  await expect(call).toContainText('10086');
+  await call.getByRole('button', { name: '取消' }).click();
+  await expect(call).toHaveCount(0);
+  expect(await inFront()).toBe(true);
+
+  // A navigation with no gesture behind it. Playwright's evaluate runs as a user gesture, so send the script over
+  // CDP with userGesture off, and first wait out Chromium's transient activation (5 s) from the taps above.
+  await new Promise((resolve) => setTimeout(resolve, 6000));
+  const cdp = await links.context().newCDPSession(links);
+  await cdp.send('Runtime.evaluate', { expression: "location.href = 'weixin://dl/x'", userGesture: false });
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const dialogs = await page.getByRole('dialog').evaluateAll((els) => els.map((el) => (el.textContent ?? '').slice(0, 60)));
+  expect(dialogs).toEqual([]);
+  expect(await inFront()).toBe(true);
+  // Control: the same script with a gesture does reach the app, so the quiet above was the gesture rule at work.
+  await cdp.send('Runtime.evaluate', { expression: "location.href = 'weixin://dl/x'", userGesture: true });
+  await expect(page.getByRole('dialog', { name: '这个链接要打开别的 App' })).toBeVisible();
+  await cdp.detach().catch(() => undefined);
+  expect(await inFront()).toBe(true);
+  await expectCleanLogcat();
+});
+
+test('fill browser: the keyboard does not cover a field near the bottom', async () => {
+  await clearLogcat();
+  const page = await freshHome();
+  await page.getByRole('button', { name: /^没有链接？试试示例表单/ }).click();
+  const content = await contentPage(page, DEMO);
+  const about = content.locator('#about');
+  await about.waitFor();
+  await waitForFab(/一键填写/);
+  await about.scrollIntoViewIfNeeded();
+  const box = (await about.boundingBox())!;
+  // A real touch, so the on-screen keyboard comes up.
+  const cdp = await content.context().newCDPSession(content);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 20), gestureSourceType: 'touch' });
+  await expect.poll(() => content.evaluate(() => document.activeElement?.id), { timeout: 10_000 }).toBe('about');
+  await device.shell('input text hello');
+  await expect(about).toHaveValue(/hello/);
+  await expect
+    .poll(
+      async () => {
+        const nodes = await describedNodes();
+        return nodes.some((n) => /一键填写/.test(n.desc));
+      },
+      { timeout: 10_000, message: 'the FAB hides with the keyboard' },
+    )
+    .toBe(false);
+  const fits = await about.evaluate((el) => el.getBoundingClientRect().bottom <= (window.visualViewport?.height ?? window.innerHeight) + 1);
+  expect(fits).toBe(true);
+  await device.shell('input keyevent 4');
+  await expectCleanLogcat();
+});
+
+test('fill browser: a stored PDF goes into the page through the file chooser, and no plain copy lands on disk', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshResume();
+  await openModule(page, ATTACHMENTS);
+  const marker = `RAF-UPLOAD-${Date.now()}`;
+  const pdf = Buffer.from(`%PDF-1.4\n% ${marker}\n%%EOF\n`);
+  await page.getByLabel(`${zh('options.attach.resume')} – 选择文件`).setInputFiles({ name: '示例简历.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+
+  await openLink(page, 'http://127.0.0.1:4180/upload.html');
+  const upload = await contentPage(page, 'http://127.0.0.1:4180/upload.html');
+  await upload.locator('#cv').waitFor();
+  await realTap(upload, '#cv');
+  const chooser = page.getByRole('dialog', { name: '选择要上传的文件' });
+  await expect(chooser).toBeVisible({ timeout: 15_000 });
+  await expect(chooser.getByText('这个网页要：PDF', { exact: true })).toBeVisible();
+  await chooser.getByRole('button', { name: /示例简历\.pdf/ }).click();
+  await expect(chooser).toHaveCount(0);
+
+  // Chromium reads the file through the app's one-time content:// stream: the page gets the whole file.
+  await expect
+    .poll(() => upload.evaluate(() => (document.querySelector('#cv') as HTMLInputElement).files?.length ?? 0), { timeout: 15_000 })
+    .toBe(1);
+  const got = await upload.evaluate(async () => {
+    const file = (document.querySelector('#cv') as HTMLInputElement).files![0]!;
+    return { name: file.name, size: file.size, text: await file.text() };
+  });
+  expect(got.name).toBe('示例简历.pdf');
+  expect(got.size).toBe(pdf.length);
+  expect(got.text).toContain(marker);
+
+  // The decrypted bytes went through a pipe, never a file: nothing in the app's private folders holds them.
+  const hits = (await device.shell(`run-as ${PKG} sh -c 'grep -rl ${marker} . 2>/dev/null; true'`)).toString().trim();
+  expect(hits).toBe('');
+  await expectCleanLogcat();
 });

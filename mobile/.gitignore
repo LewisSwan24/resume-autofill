@@ -4,3 +4,8 @@ android/app/src/main/assets/public/
 android/app/src/main/assets/capacitor.config.json
 android/app/src/main/assets/capacitor.plugins.json
 android/capacitor-cordova-android-plugins/
+# The page engine bundle and its copies in the APK assets (built by npm run build)
+inject/dist/
+android/app/src/main/assets/raf/
+# The self-signed certificate for the fill browser SSL test (made by e2e/fixtures/server.ts)
+e2e/fixtures/certs/

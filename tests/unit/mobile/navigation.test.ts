@@ -6,7 +6,7 @@ const at = (patch: Partial<NavState>): NavState => ({ ...INITIAL_NAV, ...patch }
 
 describe('navReduce', () => {
   it('starts on home', () => {
-    expect(INITIAL_NAV).toEqual({ tab: 'home', module: null, focus: null, settingsPage: 'root', onboardingStep: 1 });
+    expect(INITIAL_NAV).toEqual({ tab: 'home', module: null, focus: null, settingsPage: 'root', onboardingStep: 1, browser: null });
   });
 
   it("switching tabs keeps each tab's sub-state", () => {
@@ -54,6 +54,51 @@ describe('navReduce', () => {
   it('reset returns to the initial state', () => {
     const busy = at({ tab: 'settings', module: 'work', settingsPage: 'privacy', onboardingStep: 2 });
     expect(navReduce(busy, { type: 'reset' })).toEqual(INITIAL_NAV);
+  });
+});
+
+describe('navReduce: the fill browser', () => {
+  const paste = { url: 'https://jobs.example.com/a', demo: false, recentId: 'p1', source: 'paste' as const };
+
+  it('starts with no browser', () => {
+    expect(INITIAL_NAV.browser).toBeNull();
+  });
+
+  it('openBrowser shows it, from Home or from onboarding', () => {
+    const s = navReduce(INITIAL_NAV, { type: 'openBrowser', target: paste });
+    expect(s.browser).toEqual({ target: { url: 'https://jobs.example.com/a', demo: false, recentId: 'p1' }, hidden: false, returnTo: 'home' });
+    const demo = navReduce(at({ onboardingStep: 2 }), {
+      type: 'openBrowser',
+      target: { url: 'https://appassets.androidplatform.net/demo/form.html', demo: true, source: 'demo-onboarding' },
+    });
+    expect(demo.browser).toMatchObject({ hidden: false, returnTo: 'onboarding', target: { demo: true } });
+    expect(demo.onboardingStep).toBe(2);
+  });
+
+  it('hideBrowser keeps the session and goes to the 简历 tab root; showBrowser brings it back', () => {
+    const open = navReduce(at({ module: 'basics' }), { type: 'openBrowser', target: paste });
+    const hidden = navReduce(open, { type: 'hideBrowser' });
+    expect(hidden).toMatchObject({ tab: 'resume', module: null, browser: { hidden: true, target: { url: paste.url } } });
+    const shown = navReduce(navReduce(hidden, { type: 'tab', tab: 'settings' }), { type: 'showBrowser' });
+    expect(shown).toMatchObject({ tab: 'settings', browser: { hidden: false } });
+  });
+
+  it('closeBrowser drops it; with nothing open, hide/show/close change nothing', () => {
+    const open = navReduce(INITIAL_NAV, { type: 'openBrowser', target: paste });
+    expect(navReduce(open, { type: 'closeBrowser' }).browser).toBeNull();
+    expect(navReduce(INITIAL_NAV, { type: 'hideBrowser' })).toBe(INITIAL_NAV);
+    expect(navReduce(INITIAL_NAV, { type: 'showBrowser' })).toBe(INITIAL_NAV);
+    expect(navReduce(INITIAL_NAV, { type: 'closeBrowser' })).toBe(INITIAL_NAV);
+  });
+
+  it('opening another link replaces the target; reset clears the browser', () => {
+    const open = navReduce(INITIAL_NAV, { type: 'openBrowser', target: paste });
+    const next = navReduce(navReduce(open, { type: 'hideBrowser' }), {
+      type: 'openBrowser',
+      target: { url: 'https://careers.example.com/', demo: false, source: 'recent', recentId: 'p2' },
+    });
+    expect(next.browser).toMatchObject({ hidden: false, target: { url: 'https://careers.example.com/', recentId: 'p2' } });
+    expect(navReduce(next, { type: 'reset' })).toEqual(INITIAL_NAV);
   });
 });
 

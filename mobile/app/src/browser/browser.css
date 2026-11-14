@@ -1,0 +1,473 @@
+/* The fill browser's chrome, Lively Icons: tokens from src/ui/theme.css and the m-* variables of
+ * styles.css only; 1px lines instead of shadows; 44px targets; text wraps at 200% font. The native page WebView
+ * sits exactly over .m-br__viewport, so nothing visible is ever drawn inside it while the page shows. */
+
+.m-br {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  background: var(--raf-color-bg);
+  color: var(--raf-color-text);
+}
+
+/* ------------------------------------------------------------ top bar */
+
+.m-br-top {
+  flex: none;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--raf-color-border);
+  background: var(--raf-color-surface);
+}
+
+.m-br-top__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 6px 8px;
+}
+
+.m-br-host {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--m-hit);
+  padding: 4px 14px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 999px;
+  background: var(--raf-color-bg);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  --m-icon: 18px;
+}
+
+.m-br-host:active {
+  background: var(--raf-color-surface-hover);
+}
+
+/* Two lines at most, broken anywhere; never an ellipsis (the page-info sheet shows it whole). In `lh`, not `em`:
+ * Android's font size setting zooms text in the WebView but not em lengths, so 2.7em held only one zoomed line. */
+.m-br-host__text {
+  display: block;
+  min-width: 0;
+  max-height: 2lh;
+  overflow: hidden;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.m-br-host__warn {
+  color: var(--raf-color-warning);
+}
+
+.m-br-progress {
+  height: 2px;
+  overflow: hidden;
+}
+
+.m-br-progress__bar {
+  height: 100%;
+  background: var(--raf-color-primary);
+  transition: width 160ms linear;
+}
+
+.m-br-notice {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--raf-color-border);
+  background: var(--raf-color-surface);
+  --m-icon: 18px;
+}
+
+.m-br-notice > span {
+  flex: 1 1 12em;
+}
+
+/* ------------------------------------------------------------ page area */
+
+.m-br__viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.m-br__starting {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 24px;
+  color: var(--raf-color-text-muted);
+  text-align: center;
+}
+
+.m-br-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.m-br-error__tile {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 20px;
+  background: var(--raf-color-surface);
+  --m-icon: 36px;
+}
+
+.m-br-error__title {
+  margin: 0;
+  font-family: var(--m-font-title);
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.m-br-error__text {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.m-br-error__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* ------------------------------------------------------------ docked sheets */
+
+.m-br__dock {
+  flex: none;
+}
+
+.m-br-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: 70dvh;
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--raf-color-border);
+  border-radius: 12px 12px 0 0;
+  background: var(--raf-color-surface);
+}
+
+.m-br-sheet .m-sheet__title:focus {
+  outline: none;
+}
+
+.m-br-sheet .m-sheet__title:focus-visible {
+  outline: 2px solid var(--raf-color-focus);
+  outline-offset: 2px;
+}
+
+.m-br-sheet__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.m-br-subtitle {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.m-br-target,
+.m-br-info__host {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-br-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m-br-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 12px;
+  background: var(--raf-color-surface);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.m-br-file:disabled {
+  color: var(--raf-color-text-muted);
+}
+
+/* ------------------------------------------------------------ report */
+
+.m-br-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 12px;
+}
+
+.m-br-tab {
+  flex: 1 1 auto;
+  min-height: var(--m-hit);
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+
+.m-br-tab[aria-selected='true'] {
+  background: var(--raf-color-selected);
+  color: var(--raf-color-on-selected);
+}
+
+.m-br-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m-br-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--raf-color-border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  --m-icon: 18px;
+}
+
+button.m-br-row:active {
+  background: var(--raf-color-surface-hover);
+}
+
+.m-br-row__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.m-br-row__status {
+  font-size: 13px;
+  color: var(--raf-color-text-muted);
+}
+
+.m-br-row__value {
+  font-size: 14px;
+  color: var(--raf-color-text-muted);
+}
+
+.m-br-row--success .m-br-row__icon {
+  color: var(--raf-color-success);
+}
+
+.m-br-row--warning .m-br-row__icon {
+  color: var(--raf-color-warning);
+}
+
+.m-br-row--danger .m-br-row__icon {
+  color: var(--raf-color-danger);
+}
+
+.m-br-disclose {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--m-hit);
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+}
+
+.m-br-handed {
+  margin: 0;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
+
+.m-br-report__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+/* ------------------------------------------------------------ toasts, live region, toolbar */
+
+.m-br-toasts {
+  flex: none;
+  padding: 0 12px;
+}
+
+.m-br-toasts:empty {
+  display: none;
+}
+
+.m-br-toasts .m-toast {
+  margin: 8px auto;
+}
+
+.m-br-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.m-br-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: wrap; /* docked fill + report chips at a large font */
+  justify-content: space-around;
+  gap: 4px;
+  min-height: 56px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--raf-color-border);
+  background: var(--raf-color-surface);
+}
+
+.m-br--keyboard .m-br-toolbar {
+  display: none;
+}
+
+.m-br-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: var(--m-hit);
+  min-height: var(--m-hit);
+  padding: 0 12px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 999px;
+  background: var(--raf-color-surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+
+.m-br-chip--fill {
+  border-color: var(--raf-color-primary);
+  background: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
+}
+
+.m-br-badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--raf-color-warning);
+  color: var(--raf-color-surface);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.m-br-toolbar__spacer {
+  width: var(--m-hit);
+}
+
+/* ------------------------------------------------------------ return pill, Home demo link */
+
+.m-br-return {
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px;
+  pointer-events: none;
+}
+
+/* Like the tab bar, the pill gives the keyboard's room to the field being edited. */
+.m-shell--keyboard .m-br-return {
+  display: none;
+}
+
+.m-br-return__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: var(--m-hit);
+  padding: 6px 16px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 999px;
+  background: var(--raf-color-surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+}
+
+.m-home-demo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  margin: 4px 16px 12px;
+}
+
+.m-home-demo .m-button--text {
+  min-height: var(--m-hit);
+  padding: 0;
+  text-align: start;
+}
+
+.m-home-demo .m-help {
+  margin: 0;
+}

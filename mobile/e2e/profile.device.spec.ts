@@ -167,6 +167,57 @@ test('every field of every module is saved on the phone and comes back after the
   }
 });
 
+const ATTACHMENTS = MODULES.find((m) => m.container === 'attachments')!;
+const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+/** Raw bytes of a file in the app's private folder. */
+async function privateFile(name: string): Promise<Buffer> {
+  return device.shell(`run-as ${PKG} cat files/attachments/${name}`);
+}
+
+test('attachments are stored encrypted, come back after a kill, and are cleared from the phone once deleted', async () => {
+  let page = await freshResume();
+  await openModule(page, ATTACHMENTS);
+  const marker = `RAF-MARKER-${Date.now()}`;
+  const resumeLabel = zh('options.attach.resume');
+  const photoLabel = zh('options.attach.photo');
+  await page.getByLabel(`${resumeLabel} – 选择文件`).setInputFiles({
+    name: '示例简历.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(`%PDF-1.4\n% ${marker}\n%%EOF\n`),
+  });
+  await page.getByLabel(`${photoLabel} – 选择文件`).setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1X1, 'base64') });
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  const thumb = page.getByRole('img', { name: 'face.png' });
+  await expect.poll(() => thumb.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(1);
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+
+  // On disk: a .meta and a .data file per attachment, none of them carrying the name or the contents in the clear.
+  const names = (await device.shell(`run-as ${PKG} ls files/attachments`)).toString().split(/\s+/).filter(Boolean).sort();
+  expect(names).toHaveLength(4);
+  expect(names.filter((n) => n.endsWith('.meta'))).toHaveLength(2);
+  for (const name of names) {
+    const raw = await privateFile(name);
+    expect(raw.includes(Buffer.from(marker)), name).toBe(false);
+    expect(raw.includes(Buffer.from('示例简历')), name).toBe(false);
+    expect(raw.includes(Buffer.from('%PDF')), name).toBe(false);
+    expect(raw[0], `${name} format byte`).toBe(1);
+  }
+
+  page = await launch();
+  await openModule(page, ATTACHMENTS);
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'face.png' })).toBeVisible();
+
+  // Delete the resume PDF, do not undo: after the undo window its two files leave the phone.
+  await page.getByRole('button', { name: `更多操作：${resumeLabel}` }).click();
+  await page.getByRole('dialog', { name: resumeLabel }).getByRole('button', { name: '删除' }).click();
+  await expect(page.getByLabel(`${resumeLabel} – 选择文件`)).toBeAttached();
+  await expect
+    .poll(async () => (await device.shell(`run-as ${PKG} ls files/attachments`)).toString().split(/\s+/).filter(Boolean).length, { timeout: 20_000 })
+    .toBe(2);
+});
+
 test('an edit made just before Home survives the app being killed', async () => {
   let page = await freshResume();
   const basics = EDITABLE.find((m) => m.module === 'basics')!;

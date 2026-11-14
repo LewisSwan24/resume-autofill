@@ -32,6 +32,11 @@ const zh = {
   'm.loadFailed': '读不出简历资料：{message}',
   'm.zhTag': '中',
   'm.enTag': 'EN',
+  'm.attached': '已上传 {n} 个',
+  'm.attach.choose': '选择文件',
+  'm.attach.replace': '换一个文件',
+  'm.attach.remove': '删除',
+  'm.attach.hint': '文件加密保存在这台手机上，只在你填写表单时使用。',
 } as const;
 
 export type MobileKey = keyof typeof zh;
@@ -65,6 +70,11 @@ const en: Record<MobileKey, string> = {
   'm.loadFailed': "Couldn't read your resume data: {message}",
   'm.zhTag': '中',
   'm.enTag': 'EN',
+  'm.attached': '{n} uploaded',
+  'm.attach.choose': 'Choose file',
+  'm.attach.replace': 'Choose another file',
+  'm.attach.remove': 'Delete',
+  'm.attach.hint': 'Files are kept encrypted on this phone and used only when you fill in a form.',
 };
 
 const MOBILE: Record<Language, Record<string, string>> = { zh, en };

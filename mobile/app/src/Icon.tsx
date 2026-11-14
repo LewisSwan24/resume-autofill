@@ -31,6 +31,12 @@ import translate from 'bootstrap-icons/icons/translate.svg?raw';
 import trash from 'bootstrap-icons/icons/trash.svg?raw';
 import trophy from 'bootstrap-icons/icons/trophy.svg?raw';
 import xLg from 'bootstrap-icons/icons/x-lg.svg?raw';
+import arrowRepeat from 'bootstrap-icons/icons/arrow-repeat.svg?raw';
+import fileEarmarkPdf from 'bootstrap-icons/icons/file-earmark-pdf.svg?raw';
+import fileEarmarkText from 'bootstrap-icons/icons/file-earmark-text.svg?raw';
+import image from 'bootstrap-icons/icons/image.svg?raw';
+import paperclip from 'bootstrap-icons/icons/paperclip.svg?raw';
+import upload from 'bootstrap-icons/icons/upload.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -65,12 +71,18 @@ const ICONS = {
   trash,
   trophy,
   'x-lg': xLg,
+  'arrow-repeat': arrowRepeat,
+  'file-earmark-pdf': fileEarmarkPdf,
+  'file-earmark-text': fileEarmarkText,
+  image,
+  paperclip,
+  upload,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;
 
 /** The icon of each module in the module list. */
-export const MODULE_ICONS: Record<Exclude<ModuleName, 'attachments'>, IconName> = {
+export const MODULE_ICONS: Record<ModuleName, IconName> = {
   basics: 'person',
   contact: 'telephone',
   workRights: 'passport',
@@ -89,6 +101,7 @@ export const MODULE_ICONS: Record<Exclude<ModuleName, 'attachments'>, IconName> 
   diversity: 'globe2',
   about: 'chat-quote',
   customAnswers: 'chat-left-text',
+  attachments: 'paperclip',
 };
 
 const INNER = Object.fromEntries(

@@ -669,3 +669,91 @@ textarea {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------ attachments */
+
+.m-slots {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m-slot {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.m-slot__label {
+  padding: 0;
+  font-weight: 600;
+}
+
+.m-slot .m-help {
+  color: var(--raf-color-text-muted);
+}
+
+.m-slot .m-help--error {
+  color: var(--raf-color-danger);
+}
+
+.m-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.m-file__thumb {
+  flex: none;
+  width: 40px;
+  height: 52px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.m-file__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.m-file__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-file__meta {
+  color: var(--raf-color-text-muted);
+  font-size: 12px;
+}
+
+/* A label styled as a button around a hidden file input: a real tap on it opens the picker. */
+.m-picker {
+  position: relative;
+  cursor: pointer;
+}
+
+.m-picker__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.m-picker:has(.m-picker__input:focus-visible) {
+  outline: 2px solid var(--raf-color-primary);
+  outline-offset: 2px;
+}
+
+.m-picker--off {
+  opacity: 0.5;
+  pointer-events: none;
+}

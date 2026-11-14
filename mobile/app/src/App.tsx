@@ -5,6 +5,7 @@ import {
   MODULES,
   getByPath,
   issuesForResume,
+  referencedFileIds,
   updateResume,
   type ArrayModuleName,
   type ModuleMeta,
@@ -17,6 +18,8 @@ import { Icon, MODULE_ICONS } from './Icon';
 import { useMT } from './i18n';
 import { ModuleBody, entrySummary } from './ModuleScreen';
 import { ResumeSwitcher, startResume } from './ResumeSwitcher';
+import { AttachmentsBody, attachedCount } from './AttachmentsScreen';
+import { sweepFiles, type FileStore } from './store/fileStore';
 import type { ProfileStore } from './store/profileStore';
 import { BackStackContext, IconButton, SaveStatusLine, Toast, createBackStack, type ToastMessage } from './ui';
 import { useProfileEditor } from './useProfileEditor';
@@ -29,16 +32,27 @@ export interface Platform {
   onPause(handler: () => void): () => void;
 }
 
-/** The modules this page edits: all of the extension editor's, except attachments, which get their own page. */
-export const PROFILE_MODULES: readonly ModuleMeta[] = MODULES.filter((m) => m.container !== 'attachments');
+/** The modules this page edits: all of the extension editor's, in its order (attachments last). */
+export const PROFILE_MODULES: readonly ModuleMeta[] = MODULES;
+
+/** A deleted file can be brought back from the toast for 8 s; only after that may the sweep clear it. */
+export const SWEEP_DELAY_MS = 9000;
+/** A file just stored, not yet in the resume, is kept from the sweep this long. */
+const HOLD_MS = 60_000;
 
 interface Props {
   store: ProfileStore;
+  files: FileStore;
   platform?: Platform;
   autosaveDelayMs?: number;
+  sweepDelayMs?: number;
 }
 
 function moduleCaption(meta: ModuleMeta, resume: Resume, t: ReturnType<typeof useMT>): string {
+  if (meta.container === 'attachments') {
+    const n = attachedCount(resume);
+    return n === 0 ? t('m.notFilled') : t('m.attached', { n });
+  }
   if (meta.repeatable) {
     const entries = resume[meta.module as ArrayModuleName] as unknown as Record<string, unknown>[];
     if (entries.length === 0) return t('m.notFilled');
@@ -51,7 +65,7 @@ function moduleCaption(meta: ModuleMeta, resume: Resume, t: ReturnType<typeof us
   return filled === 0 ? t('m.notFilled') : t('m.filled', { n: filled });
 }
 
-export default function App({ store, platform, autosaveDelayMs }: Props) {
+export default function App({ store, files, platform, autosaveDelayMs, sweepDelayMs = SWEEP_DELAY_MS }: Props) {
   const t = useMT();
   const language = useLanguage();
   const editor = useProfileEditor(store, autosaveDelayMs);
@@ -88,6 +102,55 @@ export default function App({ store, platform, autosaveDelayMs }: Props) {
       offPause();
     };
   }, [platform, backStack, open, editor.flush]);
+
+  // ------------------------------------------------------------ attachment files no resume points at
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const held = useRef(new Map<string, number>());
+  const hold = useCallback((id: string) => void held.current.set(id, Date.now()), []);
+  const flush = editor.flush;
+  const sweep = useCallback(async () => {
+    try {
+      await flush(); // so the stored profile is the one on screen
+      const current = profileRef.current;
+      if (!current) return;
+      const stored = await store.load();
+      const keep = new Set([...referencedFileIds(current), ...referencedFileIds(stored)]);
+      const now = Date.now();
+      for (const [id, at] of held.current) {
+        if (now - at < HOLD_MS) keep.add(id);
+        else held.current.delete(id);
+      }
+      await sweepFiles(files, keep);
+    } catch {
+      // Not sure what is still in use: keep everything; the next start tries again.
+    }
+  }, [flush, store, files]);
+  const refsKey = profile ? JSON.stringify([...referencedFileIds(profile)].sort()) : null;
+  const previousRefs = useRef<Set<string> | null>(null);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    if (refsKey === null) return;
+    const refs = new Set(JSON.parse(refsKey) as string[]);
+    for (const id of refs) held.current.delete(id); // in a resume now: from here on the resumes decide
+    const before = previousRefs.current;
+    previousRefs.current = refs;
+    if (before === null) {
+      void sweep(); // on start: whatever an earlier run left behind
+      return;
+    }
+    if ([...before].some((id) => !refs.has(id))) {
+      const timer = setTimeout(() => {
+        timers.current.delete(timer);
+        void sweep();
+      }, sweepDelayMs);
+      timers.current.add(timer);
+    }
+  }, [refsKey, sweep, sweepDelayMs]);
+  useEffect(() => {
+    const pending = timers.current;
+    return () => pending.forEach(clearTimeout);
+  }, []);
 
   const showToast = useCallback((next: Omit<ToastMessage, 'id'>) => setToast({ ...next, id: Date.now() }), []);
   const hideToast = useCallback(() => setToast(null), []);
@@ -126,6 +189,7 @@ export default function App({ store, platform, autosaveDelayMs }: Props) {
 
     const issues = issuesForResume(editor.issues, index);
     const editResume: ResumeEdit = (change) => edit((p: Profile) => updateResume(p, resume.id, change));
+    const editResumeNow: ResumeEdit = (change) => edit((p: Profile) => updateResume(p, resume.id, change), { immediate: true });
     const meta = moduleName ? PROFILE_MODULES.find((m) => m.module === moduleName) : undefined;
 
     if (meta) {
@@ -136,7 +200,11 @@ export default function App({ store, platform, autosaveDelayMs }: Props) {
             <h1 className="m-title">{t(meta.labelKey)}</h1>
           </header>
           <SaveStatusLine status={editor.status} />
-          <ModuleBody key={`${resume.id}:${meta.module}`} meta={meta} resume={resume} issues={issues} edit={editResume} showToast={showToast} />
+          {meta.container === 'attachments' ? (
+            <AttachmentsBody key={resume.id} resume={resume} files={files} edit={editResumeNow} showToast={showToast} onStored={hold} />
+          ) : (
+            <ModuleBody key={`${resume.id}:${meta.module}`} meta={meta} resume={resume} issues={issues} edit={editResume} showToast={showToast} />
+          )}
         </>
       );
     }
@@ -150,7 +218,7 @@ export default function App({ store, platform, autosaveDelayMs }: Props) {
             <li key={m.module}>
               <button type="button" className="m-row" onClick={() => open(m.module)}>
                 <span className="m-row__tile">
-                  <Icon name={MODULE_ICONS[m.module as keyof typeof MODULE_ICONS]} />
+                  <Icon name={MODULE_ICONS[m.module]} />
                 </span>
                 <span className="m-row__text">
                   <span className="m-row__name">{t(m.labelKey)}</span>

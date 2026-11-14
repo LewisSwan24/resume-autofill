@@ -1,5 +1,5 @@
 // Entry of the mobile app's web UI. Wires the page to the phone: the encrypted ProfileVault store and the Android
-// back key / pause events on a device; localStorage and page visibility when previewed in a desktop browser.
+// back key / pause events on a device; localStorage, IndexedDB and page visibility when previewed in a desktop browser.
 import './fonts.css';
 import '../../../src/ui/theme.css';
 import './styles.css';
@@ -8,11 +8,14 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App, { type Platform } from './App';
+import { createIndexedDbFileStore, createVaultFileStore, type FileVaultPlugin } from './store/fileStore';
 import { createLocalStorageStore, createVaultStore, type VaultPlugin } from './store/profileStore';
 
 const native = Capacitor.isNativePlatform();
 
-const store = native ? createVaultStore(registerPlugin<VaultPlugin>('ProfileVault')) : createLocalStorageStore(localStorage);
+const vault = native ? registerPlugin<VaultPlugin & FileVaultPlugin>('ProfileVault') : null;
+const store = vault ? createVaultStore(vault) : createLocalStorageStore(localStorage);
+const files = vault ? createVaultFileStore(vault) : createIndexedDbFileStore();
 
 function onHidden(handler: () => void): () => void {
   const listener = () => {
@@ -48,6 +51,6 @@ const platform: Platform = {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App store={store} platform={platform} />
+    <App store={store} files={files} platform={platform} />
   </StrictMode>,
 );

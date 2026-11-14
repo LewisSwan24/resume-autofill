@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App, { type Platform } from '../../../mobile/app/src/App';
+import { createMemoryFileStore } from '../../../mobile/app/src/store/fileStore';
 import { createMemoryStore, type ProfileStore } from '../../../mobile/app/src/store/profileStore';
 import { MODULES, enumLabel, type FieldMeta, type ModuleMeta } from '../../../src/editor';
 import { setLanguage, translate } from '../../../src/i18n';
@@ -50,7 +51,7 @@ let device: ReturnType<typeof fakePlatform>;
 async function renderApp(profile: Profile = makeProfile(), delay = DELAY) {
   store = createMemoryStore(profile);
   device = fakePlatform();
-  const view = render(<App store={store} platform={device.platform} autosaveDelayMs={delay} />);
+  const view = render(<App store={store} files={createMemoryFileStore()} platform={device.platform} autosaveDelayMs={delay} />);
   await screen.findByRole('heading', { level: 1, name: '简历资料' });
   return view;
 }
@@ -98,13 +99,14 @@ afterEach(() => {
 });
 
 describe('Profile page – module list', () => {
-  it('lists every module the extension editor edits, in its order, without attachments', async () => {
+  it('lists every module the extension editor edits, in its order, attachments last', async () => {
     await renderApp();
     const names = within(screen.getByRole('list', { name: '简历模块' }))
       .getAllByRole('button')
       .map((b) => b.querySelector('.m-row__name')!.textContent);
-    expect(names).toEqual(EDITABLE.map((m) => zh(m.labelKey)));
-    expect(EDITABLE).toHaveLength(18);
+    expect(names).toEqual(MODULES.map((m) => zh(m.labelKey)));
+    expect(MODULES).toHaveLength(19);
+    expect(names.at(-1)).toBe('附件');
   });
 
   it('offers to start a resume when there is none, and saves the new one', async () => {

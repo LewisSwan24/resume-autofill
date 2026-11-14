@@ -1,0 +1,23 @@
+{
+  "name": "resume-autofill-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Resume Autofill mobile app (Capacitor). React, zod and Vite come from the repository root.",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --config app/vite.config.ts",
+    "dev": "vite --config app/vite.config.ts",
+    "sync": "npm run build && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@fontsource/lexend": "5.3.0",
+    "@fontsource/shantell-sans": "5.3.0",
+    "@fontsource/zcool-kuaile": "5.3.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

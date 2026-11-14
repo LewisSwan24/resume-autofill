@@ -281,7 +281,7 @@ export const en: Record<MessageKey, string> = {
   'fab.error.title': "Couldn't autofill",
   'fab.error.generic': 'The extension did not respond. Reload the page and try again.',
   'fab.error.noReport': 'Autofill started, but no result came back. Give it another try.',
-  'fab.error.openOptions': 'Open settings',
+  'fab.error.openOptions': 'Open your profile',
   'fab.card.title': 'Autofill result',
   'fab.card.close': 'Close',
   'fab.card.allDone': 'All detected fields were filled.',
@@ -290,6 +290,7 @@ export const en: Record<MessageKey, string> = {
   // Outcome words and the stat-badge words come from status.* (src/ui/status.ts); only the "no data" sentence lives here.
   'fab.card.noData.one': '{n} field has no data in your resume.',
   'fab.card.noData.other': '{n} fields have no data in your resume.',
+  'fab.card.addMissing': 'Add them to your profile',
   // FAB caption after a fill, e.g. "44 filled · 2 need review · 1 not filled" (one part per card badge)
   'fab.result.filled': '{n} filled',
   'fab.result.review': '{n} need review',
@@ -305,7 +306,7 @@ export const en: Record<MessageKey, string> = {
   'panel.switchError': "Couldn't switch resumes. Nothing was changed, so give it another try.",
   'panel.switchResume': 'Switch to {target}',
   'panel.switchResumeHint': 'Fill with the {target} resume',
-  'panel.switchResumeNone': 'There is no resume in the other language yet. Add one on the settings page, or link the two you have.',
+  'panel.switchResumeNone': 'There is no resume in the other language yet. Add one on the profile page, or link the two you have.',
   'panel.loading': 'Just a moment',
   'panel.emptyTitle': 'Nothing here yet',
   'panel.empty': 'Press the Autofill button on the page. Results will show up here.',
@@ -351,7 +352,7 @@ export const en: Record<MessageKey, string> = {
   'status.group.failed': 'Not filled',
   'status.group.nodata': 'No data in resume',
   // fab.error.* codes returned by the background
-  'fab.error.no_resume': 'No resume is available yet. Create or select one in settings first.',
+  'fab.error.no_resume': 'No resume is available yet. Create or select one on the profile page first.',
   'fab.error.no_frames': 'This page has nothing to fill. Reload the page and try again.',
   'fab.error.busy': 'Autofill is already running. Hang on a moment.',
   'panel.addMissing': 'Add it to your profile',

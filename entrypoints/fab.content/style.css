@@ -361,6 +361,18 @@
   gap: var(--raf-space-1) var(--raf-space-2);
 }
 
+/* "N fields have no data" and its way to the profile page, on one line when it fits. */
+.raf-card__nodata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+}
+.raf-card__nodata > .raf-card__note {
+  flex: 1 1 12em;
+  margin: 0;
+}
 .raf-card__note,
 .raf-card__list-title {
   font-size: var(--raf-font-size-sm);

@@ -1,0 +1,12 @@
+{
+  "appId": "app.raf.dev",
+  "appName": "网申简历填写",
+  "webDir": "app/dist",
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "native",
+      "initialViewportFitValueHint": "cover"
+    }
+  },
+  "loggingBehavior": "none"
+}

@@ -492,7 +492,7 @@ describe('Side panel – one-click switches', () => {
     await renderPanel({ profile });
     const button = (await screen.findByRole('button', { name: 'Switch to English' })) as HTMLButtonElement;
     expect(button.getAttribute('aria-disabled')).toBe('true');
-    expect(button.title).toMatch(/settings page/);
+    expect(button.title).toMatch(/profile page/);
   });
 });
 

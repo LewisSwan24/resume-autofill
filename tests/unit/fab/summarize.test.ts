@@ -79,3 +79,27 @@ describe('summarize', () => {
     expect(Object.keys(s.items[0]!).sort()).toEqual(['fieldId', 'frameId', 'label', 'outcome']);
   });
 });
+
+describe('summarize – the first field with no data', () => {
+  it('is the first no_data field, in page order, that names a resume field', () => {
+    const s = summarize(
+      report([
+        field('a', 'filled', { fieldKey: 'contact.email' }),
+        field('b', 'no_data'), // no field key: nowhere to send the user
+        field('c', 'no_data', { fieldKey: 'education.gpa', source: 'education[1].gpa' }),
+        field('d', 'no_data', { fieldKey: 'contact.wechat' }),
+      ]),
+    );
+    expect(s.firstMissing).toEqual({ fieldKey: 'education.gpa', source: 'education[1].gpa' });
+  });
+
+  it('is absent when no field with data missing names a resume field', () => {
+    expect(summarize(report([field('a', 'filled'), field('b', 'no_data')])).firstMissing).toBeUndefined();
+    expect(summarize(report([field('a', 'filled', { fieldKey: 'contact.email' })])).firstMissing).toBeUndefined();
+  });
+
+  it('carries a path into the resume, never a value', () => {
+    const s = summarize(report([field('a', 'no_data', { fieldKey: 'contact.email', value: 'secret' })]));
+    expect(s.firstMissing).toEqual({ fieldKey: 'contact.email' });
+  });
+});

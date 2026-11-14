@@ -1,0 +1,12 @@
+/*
+ * Fonts bundled into the app (no network), per decision D12: the Lively Icons artifact's set.
+ *  - Lexend 400 + 600 for all UI text (Latin; Chinese falls to the phone's own font, Noto Sans SC on Android).
+ *  - Shantell Sans 700 for page titles (Latin), ZCOOL KuaiLe 400 for Chinese in page titles. Titles only.
+ */
+@import '@fontsource/lexend/latin-400.css';
+@import '@fontsource/lexend/latin-ext-400.css';
+@import '@fontsource/lexend/latin-600.css';
+@import '@fontsource/lexend/latin-ext-600.css';
+@import '@fontsource/shantell-sans/latin-700.css';
+@import '@fontsource/shantell-sans/latin-ext-700.css';
+@import '@fontsource/zcool-kuaile/400.css';

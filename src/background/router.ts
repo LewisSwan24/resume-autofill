@@ -6,6 +6,8 @@
 import { browser } from 'wxt/browser';
 import { isFromExtension, isFromExtensionPage, isValidMessage, sendToFrame, type FillRequestResponse, type Sender } from '../messaging';
 import type { FieldReport } from '../engine/types';
+import { targetOfField, type ProfileTarget } from '../editor/fieldTarget';
+import { openProfileAt } from '../ui/pages';
 import { runFillRequest } from './fill';
 import { isSectionRow } from './merge';
 import { relayApply, relayFocus, type ApplyInput } from './relay';
@@ -25,7 +27,8 @@ export interface RouterDeps {
   currentTotal(tabId: number): Promise<number>;
   /** Must call `sidePanel.open` synchronously (user gesture). */
   openSidePanel(tabId: number): void;
-  openOptions(): void;
+  /** Open the profile page, at one input when there is a target. */
+  openOptions(target: ProfileTarget | null): void;
 }
 
 export const defaultRouterDeps: RouterDeps = {
@@ -41,13 +44,13 @@ export const defaultRouterDeps: RouterDeps = {
     // No `await` before this call: `sidePanel.open` needs the user gesture of the click.
     browser.sidePanel?.open?.({ tabId })?.catch(() => undefined);
   },
-  openOptions: () => {
-    browser.runtime.openOptionsPage().catch(() => undefined);
-  },
+  openOptions: (target) => openProfileAt(target),
 };
 
 const isIndex = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
 const optionalString = (x: unknown): x is string | undefined => x === undefined || typeof x === 'string';
+/** A field key or source path from a page: short, or ignored. */
+const isPath = (x: unknown): x is string => typeof x === 'string' && x.length > 0 && x.length <= 200;
 const errorMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** Build the listener for `browser.runtime.onMessage`. Returns `true` only when it will call `sendResponse` later. */
@@ -120,7 +123,10 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
       }
 
       case 'ui:openOptions': {
-        deps.openOptions();
+        // Anything malformed still opens the page, just not at an input.
+        const { fieldKey, source } = message;
+        const sourceOk = source === undefined || isPath(source);
+        deps.openOptions(isPath(fieldKey) && sourceOk ? targetOfField(fieldKey, source) : null);
         return false;
       }
 

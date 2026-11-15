@@ -6,8 +6,9 @@ import { IconButton } from '../ui';
 /** Each section's paragraphs, in order. */
 const SECTIONS: ReadonlyArray<{ id: string; icon: IconName; body: readonly string[] }> = [
   // Where things live: the resume (encrypted) and, since the fill browser, the sites' own sign-ins (the WebView's).
-  { id: 'where', icon: 'lock', body: ['m.privacy.where.body', 'm.privacy.browser'] },
-  { id: 'upload', icon: 'shield', body: ['m.privacy.upload.body'] },
+  // The tracker and the launcher's shortcuts are stored too; the clipboard and reminders never go online.
+  { id: 'where', icon: 'lock', body: ['m.privacy.where.body', 'm.privacy.tracker', 'm.privacy.shortcuts', 'm.privacy.browser'] },
+  { id: 'upload', icon: 'shield', body: ['m.privacy.upload.body', 'm.privacy.clipboard', 'm.privacy.reminders'] },
   { id: 'submit', icon: 'send-slash', body: ['m.privacy.submit.body'] },
   { id: 'fill', icon: 'input-cursor-text', body: ['m.privacy.handOver'] },
   { id: 'export', icon: 'download', body: ['m.privacy.export.body'] },

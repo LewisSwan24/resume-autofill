@@ -4,4 +4,10 @@
     <string name="title_activity_main">网申简历填写</string>
     <string name="package_name">app.raf.dev</string>
     <string name="custom_url_scheme">app.raf.dev</string>
+    <string name="shortcut_paste_short">粘贴链接</string>
+    <string name="shortcut_paste_long">粘贴网申链接</string>
+    <string name="shortcut_demo_short">示例表单</string>
+    <string name="shortcut_demo_long">试试示例表单</string>
+    <string name="shortcut_deleted">这条网申记录已删除</string>
+    <string name="notification_channel">网申截止提醒</string>
 </resources>

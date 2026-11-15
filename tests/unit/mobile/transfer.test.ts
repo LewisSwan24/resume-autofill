@@ -75,7 +75,7 @@ describe('export', () => {
 describe('import', () => {
   it('readImport: plain profile / encrypted envelope / not JSON → invalid_json / JSON that is not a profile → invalid_profile', async () => {
     const p = profile([filled]);
-    expect(readImport(exportProfile(p))).toEqual({ kind: 'profile', profile: p });
+    expect(readImport(exportProfile(p))).toEqual({ kind: 'profile', profile: p, tracker: { kind: 'none' } });
     const env = await encryptExport(exportProfile(p), 'example-pass-123', { iterations: 100_000 });
     expect(readImport(env)).toEqual({ kind: 'encrypted', envelope: env });
     expect(readImport('{ nope')).toEqual({ kind: 'error', code: 'invalid_json' });
@@ -100,7 +100,7 @@ describe('import', () => {
   it('unlockImport: right password → profile; wrong → throws wrong_password; envelope wrapping a non-profile → invalid_profile', async () => {
     const p = profile([filled]);
     const env = await encryptExport(exportProfile(p), 'example-pass-123', { iterations: 100_000 });
-    expect(await unlockImport(env, 'example-pass-123')).toEqual({ kind: 'profile', profile: p });
+    expect(await unlockImport(env, 'example-pass-123')).toEqual({ kind: 'profile', profile: p, tracker: { kind: 'none' } });
     await expect(unlockImport(env, 'wrong-password')).rejects.toMatchObject({ code: 'wrong_password' });
     await expect(unlockImport(env, 'wrong-password')).rejects.toBeInstanceOf(ExportCryptoError);
     const junk = await encryptExport('{"hello":1}', 'example-pass-123', { iterations: 100_000 });

@@ -1,7 +1,6 @@
 package app.raf.dev;
 
-import android.security.keystore.KeyGenParameterSpec;
-import android.security.keystore.KeyProperties;
+import android.content.Context;
 import android.util.AtomicFile;
 import android.util.Base64;
 
@@ -12,20 +11,13 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import androidx.core.app.NotificationManagerCompat;
+
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.KeyStore;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
-
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
 
 /**
  * The resume profile on the phone: one JSON string, encrypted with AES-256-GCM under a key that lives in the
@@ -40,14 +32,13 @@ import javax.crypto.spec.GCMParameterSpec;
  * removes it.
  *
  * App state (onboarding, fill language, recent application pages) is one more JSON string in {@code state.enc},
- * sealed the same way under the same key. {@link #wipe} deletes all of it and the key itself.
+ * sealed the same way under the same key. {@link #wipe} deletes all of it and the key itself, together with the
+ * deadline reminders (alarms, reminders.enc, posted notifications) and the launcher shortcuts.
  *
- * File layout: [1 byte format version = 1][1 byte IV length][IV][ciphertext + GCM tag].
+ * The sealing itself lives in {@link VaultCrypto} (file layout described there).
  */
 @CapacitorPlugin(name = "ProfileVault")
 public class ProfileVaultPlugin extends Plugin {
-    private static final String KEYSTORE = "AndroidKeyStore";
-    private static final String KEY_ALIAS = "raf.profile.v1";
     private static final String FILE_NAME = "profile.enc";
     private static final String STATE_FILE_NAME = "state.enc";
     private static final String ATTACHMENT_DIR = "attachments";
@@ -57,9 +48,6 @@ public class ProfileVaultPlugin extends Plugin {
     private static final Pattern ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
     /** AtomicFile's own side files while writing ("x.new") or before it commits ("x.bak"). */
     private static final Pattern ATOMIC_SIDE = Pattern.compile("\\.(new|bak)$");
-    private static final String TRANSFORMATION = "AES/GCM/NoPadding";
-    private static final byte FORMAT_VERSION = 1;
-    private static final int TAG_BITS = 128;
 
     private final Object lock = new Object();
     private final Object fileLock = new Object();
@@ -87,7 +75,7 @@ public class ProfileVaultPlugin extends Plugin {
         }
         synchronized (lock) {
             try {
-                writeSealed(profileFile(), encrypt(data.getBytes(StandardCharsets.UTF_8)));
+                writeSealed(profileFile(), data.getBytes(StandardCharsets.UTF_8));
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Could not save the profile: " + e.getClass().getSimpleName(), e);
@@ -120,7 +108,7 @@ public class ProfileVaultPlugin extends Plugin {
         }
         synchronized (lock) {
             try {
-                writeSealed(stateFile(), encrypt(data.getBytes(StandardCharsets.UTF_8)));
+                writeSealed(stateFile(), data.getBytes(StandardCharsets.UTF_8));
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Could not save the app state: " + e.getClass().getSimpleName(), e);
@@ -148,6 +136,20 @@ public class ProfileVaultPlugin extends Plugin {
         synchronized (lock) {
             synchronized (fileLock) {
                 boolean clean = true;
+                Context context = getContext();
+                // Reminders first: their alarms are found through reminders.enc, which needs the key.
+                try {
+                    ReminderScheduler.cancelAll(context);
+                } catch (RuntimeException e) {
+                    clean = false;
+                }
+                ReminderStore.delete(context);
+                NotificationManagerCompat.from(context).cancelAll();
+                try {
+                    AppShortcutsPlugin.clearEverything(context);
+                } catch (RuntimeException e) {
+                    clean = false;
+                }
                 deleteSealed(profileFile());
                 deleteSealed(stateFile());
                 File dir = attachmentDir();
@@ -156,16 +158,10 @@ public class ProfileVaultPlugin extends Plugin {
                     for (File f : found) f.delete();
                 }
                 dir.delete();
-                try {
-                    KeyStore store = KeyStore.getInstance(KEYSTORE);
-                    store.load(null);
-                    if (store.containsAlias(KEY_ALIAS)) store.deleteEntry(KEY_ALIAS);
-                    clean = !store.containsAlias(KEY_ALIAS);
-                } catch (Exception e) {
-                    clean = false;
-                }
+                clean = VaultCrypto.deleteKey() && clean;
                 File[] left = dir.listFiles();
                 clean = clean
+                    && !ReminderStore.exists(context)
                     && !sealedExists(profileFile())
                     && !sealedExists(stateFile())
                     && !dir.exists()
@@ -191,8 +187,8 @@ public class ProfileVaultPlugin extends Plugin {
             try {
                 File dir = attachmentDir();
                 if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("No attachments folder");
-                writeSealed(new File(dir, id + DATA), encrypt(Base64.decode(data, Base64.NO_WRAP)));
-                writeSealed(new File(dir, id + META), encrypt(meta.getBytes(StandardCharsets.UTF_8)));
+                writeSealed(new File(dir, id + DATA), Base64.decode(data, Base64.NO_WRAP));
+                writeSealed(new File(dir, id + META), meta.getBytes(StandardCharsets.UTF_8));
                 call.resolve();
             } catch (Exception e) {
                 call.reject("Could not save the file: " + e.getClass().getSimpleName(), e);
@@ -294,79 +290,19 @@ public class ProfileVaultPlugin extends Plugin {
         return new File(getContext().getFilesDir(), STATE_FILE_NAME);
     }
 
-    /** Delete a sealed file with AtomicFile's side files ("x.new", "x.bak"). */
     private static void deleteSealed(File target) {
-        new AtomicFile(target).delete();
-        new File(target.getPath() + ".new").delete();
-        new File(target.getPath() + ".bak").delete();
+        VaultCrypto.deleteSealed(target);
     }
 
     private static boolean sealedExists(File target) {
-        return target.exists()
-            || new File(target.getPath() + ".new").exists()
-            || new File(target.getPath() + ".bak").exists();
+        return VaultCrypto.sealedExists(target);
     }
 
-    private static void writeSealed(File target, byte[] sealed) throws IOException {
-        AtomicFile file = new AtomicFile(target);
-        FileOutputStream out = file.startWrite();
-        try {
-            out.write(sealed);
-            file.finishWrite(out);
-        } catch (IOException e) {
-            file.failWrite(out);
-            throw e;
-        }
+    private static void writeSealed(File target, byte[] plain) throws Exception {
+        VaultCrypto.writeSealed(target, plain);
     }
 
-    /** The decrypted contents of a file, or null when it does not exist (AtomicFile also restores a ".bak"). */
-    private byte[] readSealed(File target) throws GeneralSecurityException, IOException {
-        if (!target.exists() && !new File(target.getPath() + ".bak").exists()) return null;
-        return decrypt(new AtomicFile(target).readFully());
-    }
-
-    private SecretKey key() throws GeneralSecurityException, IOException {
-        KeyStore store = KeyStore.getInstance(KEYSTORE);
-        store.load(null);
-        KeyStore.Entry entry = store.getEntry(KEY_ALIAS, null);
-        if (entry instanceof KeyStore.SecretKeyEntry) {
-            return ((KeyStore.SecretKeyEntry) entry).getSecretKey();
-        }
-        KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE);
-        generator.init(
-            new KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build()
-        );
-        return generator.generateKey();
-    }
-
-    private byte[] encrypt(byte[] plain) throws GeneralSecurityException, IOException {
-        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-        cipher.init(Cipher.ENCRYPT_MODE, key()); // the Keystore picks a fresh random IV
-        byte[] iv = cipher.getIV();
-        byte[] body = cipher.doFinal(plain);
-        return ByteBuffer.allocate(2 + iv.length + body.length)
-            .put(FORMAT_VERSION)
-            .put((byte) iv.length)
-            .put(iv)
-            .put(body)
-            .array();
-    }
-
-    private byte[] decrypt(byte[] sealed) throws GeneralSecurityException, IOException {
-        ByteBuffer buffer = ByteBuffer.wrap(sealed);
-        if (sealed.length < 2 || buffer.get() != FORMAT_VERSION) throw new GeneralSecurityException("Unknown format");
-        int ivLength = buffer.get() & 0xff;
-        if (ivLength == 0 || ivLength > buffer.remaining()) throw new GeneralSecurityException("Bad IV");
-        byte[] iv = new byte[ivLength];
-        buffer.get(iv);
-        byte[] body = new byte[buffer.remaining()];
-        buffer.get(body);
-        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-        cipher.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(TAG_BITS, iv));
-        return cipher.doFinal(body);
+    private static byte[] readSealed(File target) throws Exception {
+        return VaultCrypto.readSealed(target);
     }
 }

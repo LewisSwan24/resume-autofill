@@ -1,16 +1,16 @@
-// Home (首页): the resume used for filling, the paste-a-link box (opens the fill browser), the sample form, and recent
-// application pages. Recent pages live in app state (state.enc), not in the profile; every change is saved at once and
-// can be undone from the toast. The sample form is never written to recent pages.
+// Home (首页): the copied-link card when there is one, the resume used for filling, the paste-a-link box,
+// the sample form, and the applications sections (快截止了 / 正在填写). Opening a link goes through App's openLink,
+// which records it in the tracker; the sample form is never recorded. The old recent-pages list is no longer shown.
+import type { ReactNode } from 'react';
 import type { Locale, Profile } from '../../../../src/schema';
 import { DEMO_URL } from '../browser/model/constants';
 import { Icon } from '../Icon';
 import { useMT } from '../i18n';
+import type { FoundLink } from '../incoming/route';
 import type { BrowserOpen } from '../navigation';
-import type { AppState, RecentPage } from '../store/appStateStore';
-import { addRecentPage, clearRecentPages, removeRecentPage, restoreRecentPages } from '../store/recentPages';
+import type { AppState } from '../store/appStateStore';
 import type { ToastMessage } from '../ui';
-import { PasteLinkCard } from './PasteLinkCard';
-import { RecentPages } from './RecentPages';
+import { PasteLinkCard, type PasteFocusRequest } from './PasteLinkCard';
 import { ResumeSummaryCard } from './ResumeSummaryCard';
 import type { JumpTarget } from './summary';
 
@@ -18,7 +18,6 @@ export interface HomeScreenProps {
   profile: Profile | null;
   loadError: string | null;
   appState: AppState;
-  updateAppState: (change: (s: AppState) => AppState) => Promise<boolean>;
   /** No target: the 简历 tab root. */
   onJump: (resumeId: string, target?: JumpTarget) => void;
   onStartResume: (locale: Locale) => void;
@@ -26,9 +25,19 @@ export interface HomeScreenProps {
   /** Read a PDF or Word resume. */
   onImportResume?: () => void;
   onOpenSettings: () => void;
-  /** Open a page (or the sample form) in the fill browser. */
+  /** The sample form. */
   onOpenBrowser: (target: BrowserOpen) => void;
+  /** App's openLink: records the page in the tracker and opens it (it opens even when saving failed). */
+  onOpenLink: (link: FoundLink, source: 'paste') => Promise<void> | void;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  /** 「打开刚复制的链接？」, above the resume card. */
+  clipboardCard?: ReactNode;
+  /** 快截止了 / 正在填写 (tracker/HomeApplications), below the sample form. */
+  applications?: ReactNode;
+  /** The 粘贴链接 shortcut or 去粘贴链接: focus the paste box (and, for the shortcut, fill it from the clipboard). */
+  pasteFocus?: PasteFocusRequest | null;
+  readClipboard?: () => Promise<string | null>;
+  onPasteFocusDone?: () => void;
   now?: () => number;
 }
 
@@ -36,55 +45,21 @@ export function HomeScreen({
   profile,
   loadError,
   appState,
-  updateAppState,
   onJump,
   onStartResume,
   onImport,
   onImportResume,
   onOpenSettings,
   onOpenBrowser,
+  onOpenLink,
   showToast,
-  now = Date.now,
+  clipboardCard,
+  applications,
+  pasteFocus,
+  readClipboard,
+  onPasteFocusDone,
 }: HomeScreenProps) {
   const t = useMT();
-
-  /** Save a change; on failure say so (the hook has already put the stored list back on screen). */
-  const save = async (change: (s: AppState) => AppState) => {
-    const ok = await updateAppState(change);
-    if (!ok) showToast({ text: t('m.saveStateFailed') });
-    return ok;
-  };
-
-  const undoTo = (pages: readonly RecentPage[]) => ({
-    label: t('options.undo'),
-    onClick: () => void save((s) => restoreRecentPages(s, pages)),
-  });
-
-  const remove = async (page: RecentPage) => {
-    const before = appState.recentPages;
-    if (await save((s) => removeRecentPage(s, page.id))) {
-      showToast({ text: t('m.recent.removed', { host: page.host }), action: undoTo(before) });
-    }
-  };
-
-  /** Put the page on top of recent pages (same id when listed) and open it; a failed save still opens it, and says so
-   * after the browser is asked to open, so the words land where the person will be looking (the browser's toast slot). */
-  const openPage = async (page: { url: string; host: string; title?: string }, source: 'paste' | 'recent') => {
-    let recentId: string | undefined;
-    const ok = await updateAppState((s) => {
-      const next = addRecentPage(s, page, now());
-      recentId = next.recentPages[0]?.id;
-      return next;
-    });
-    onOpenBrowser({ url: page.url, demo: false, ...(recentId ? { recentId } : {}), source });
-    if (!ok) showToast({ text: t('m.saveStateFailed') });
-  };
-
-  const clear = async () => {
-    const before = appState.recentPages;
-    if (await save(clearRecentPages)) showToast({ text: t('m.recent.cleared'), action: undoTo(before) });
-  };
-
   return (
     <>
       <header className="m-header">
@@ -92,6 +67,7 @@ export function HomeScreen({
           {t('m.home.title')}
         </h1>
       </header>
+      {clipboardCard}
       <ResumeSummaryCard
         profile={profile}
         loadError={loadError}
@@ -102,7 +78,17 @@ export function HomeScreen({
         onImportResume={onImportResume}
         onOpenSettings={onOpenSettings}
       />
-      <PasteLinkCard showToast={showToast} onOpen={(link) => openPage({ url: link.url, host: link.host, title: link.title }, 'paste')} />
+      <PasteLinkCard
+        showToast={showToast}
+        onOpen={async (link) => {
+          const found: FoundLink = { url: link.url, host: link.host, insecure: link.insecure };
+          if (link.title) found.title = link.title;
+          await onOpenLink(found, 'paste');
+        }}
+        focusRequest={pasteFocus ?? null}
+        readClipboard={readClipboard}
+        onFocusDone={onPasteFocusDone}
+      />
       <div className="m-home-demo">
         <button
           type="button"
@@ -117,14 +103,7 @@ export function HomeScreen({
           {t('m.home.demoHint')}
         </p>
       </div>
-      <RecentPages
-        pages={appState.recentPages}
-        now={now()}
-        onOpen={(p) => void openPage({ url: p.url, host: p.host }, 'recent')}
-        onRemove={(p) => void remove(p)}
-        onClear={() => void clear()}
-        showToast={showToast}
-      />
+      {applications}
     </>
   );
 }

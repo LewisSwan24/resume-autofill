@@ -7,12 +7,15 @@
 // Fill browser: the sample form fills, reports and undoes; a cross-origin iframe is filled; an SSL error is refused;
 // app schemes are not followed; the keyboard does not cover a field; a stored PDF is uploaded through the file chooser
 // (test pages from fixtures/server.ts).
+// Ways in and the tracker: a VIEW link, shared text, launcher shortcuts and a copied link open pages and
+// become application records; a deadline reminder is scheduled, survives a simulated reboot and fires; export carries
+// the records; delete all clears records, reminders and shortcuts. Each checks the device log for private words.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _android, chromium, expect, test, type AndroidDevice, type Browser, type Page } from '@playwright/test';
-import { MODULES, enumOptions, exportProfile, type FieldMeta, type ModuleMeta } from '../../src/editor';
+import { MODULES, enumOptions, exportProfile, parseProfileJson, type FieldMeta, type ModuleMeta } from '../../src/editor';
 import { translate } from '../../src/i18n';
 // The export pieces, not transfer.ts's buildExport: that one pulls in the page's icons (svg?raw), which Node cannot load.
 import { encryptExport } from '../app/src/data/exportCrypto';
@@ -88,10 +91,18 @@ async function startBlank(page: Page) {
   await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
 }
 
-const tabButton = (page: Page, name: '首页' | '简历' | '设置') =>
+const tabButton = (page: Page, name: '首页' | '网申' | '简历' | '设置') =>
   page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name, exact: true });
 
-async function toTab(page: Page, name: '首页' | '简历' | '设置') {
+/**
+ * The paste box's own 打开. The system clipboard outlives `pm clear`, so a link copied by an earlier test can put the
+ * clipboard card, with its own 打开, on Home as well.
+ */
+function pasteOpenButton(page: Page) {
+  return page.locator('form').filter({ has: page.getByLabel('网申链接') }).getByRole('button', { name: '打开', exact: true });
+}
+
+async function toTab(page: Page, name: '首页' | '网申' | '简历' | '设置') {
   const tab = tabButton(page, name);
   if ((await tab.getAttribute('aria-current')) !== 'page') await tab.click();
   await expect(tab).toHaveAttribute('aria-current', 'page');
@@ -544,10 +555,10 @@ test('delete all removes the encrypted files and the key', async () => {
   await backToList(page);
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
-  await page.getByRole('button', { name: '打开', exact: true }).click();
-  // 打开 opens the page in the fill browser; closing it comes back to Home with the link listed.
+  await pasteOpenButton(page).click();
+  // 打开 opens the page in the fill browser; closing it comes back to Home with the page recorded.
   await page.getByRole('button', { name: '关闭网申页面' }).click();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await expect(page.getByRole('button', { name: /^全部网申记录（1）/ })).toBeVisible();
   await expect.poll(() => privateFiles()).toEqual(expect.arrayContaining(['profile.enc', 'state.enc', 'attachments']));
 
   await deleteAllData(page);
@@ -589,18 +600,19 @@ test('the back key: sheet, module, home, then out', async () => {
   await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
 });
 
-test('recent pages survive a restart and are not stored in plain text', async () => {
+test('application records survive a restart and are not stored in plain text', async () => {
   let page = await freshResume();
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
-  await page.getByRole('button', { name: '打开', exact: true }).click();
-  // 打开 opens the page in the fill browser; closing it comes back to Home with the link listed.
+  await pasteOpenButton(page).click();
+  // 打开 opens the page in the fill browser; closing it comes back to Home with the page recorded.
   await page.getByRole('button', { name: '关闭网申页面' }).click();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await expect(page.getByRole('button', { name: /^全部网申记录（1）/ })).toBeVisible();
 
   page = await launch();
   await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await toTab(page, '网申');
+  await expect(page.getByRole('main')).toContainText('jobs.example.com');
   const raw = await device.shell(`run-as ${PKG} cat files/state.enc`);
   expect(raw.length).toBeGreaterThan(0);
   expect(raw.includes(Buffer.from('jobs.example.com'))).toBe(false);
@@ -984,7 +996,7 @@ async function freshHome(): Promise<Page> {
 async function openLink(page: Page, url: string) {
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill(url);
-  await page.getByRole('button', { name: '打开', exact: true }).click();
+  await pasteOpenButton(page).click();
   await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible();
 }
 
@@ -1187,12 +1199,19 @@ test('fill browser: a cross-origin iframe checks in and gets filled', async () =
   await expect(report.getByRole('button', { name: '在网页上找到「手机」' })).toBeVisible();
   await expect(report.getByRole('button', { name: '在网页上找到「姓名」' })).toBeVisible();
 
-  // The page title lands on the recent entry.
+  // The page title lands on the application record (its guessed company).
   await report.getByRole('button', { name: '完成', exact: true }).click();
   await page.getByRole('button', { name: '关闭网申页面' }).click();
   await page.getByRole('dialog', { name: '关闭这个网申页面？' }).getByRole('button', { name: '关闭', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('外层示例页');
+  // After a fill, closing the page asks once whether it was submitted; the app never decides that itself.
+  const ask = page.getByRole('dialog', { name: '提交了吗？' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: '还没有', exact: true }).click();
+  await expect(ask).toHaveCount(0);
+  await toTab(page, '网申');
+  await expect(page.getByRole('main')).toContainText('外层示例页');
+  await expect(page.getByRole('main')).toContainText('填写中');
   await expectCleanLogcat();
 });
 
@@ -1318,4 +1337,392 @@ test('fill browser: a stored PDF goes into the page through the file chooser, an
   const hits = (await device.shell(`run-as ${PKG} sh -c 'grep -rl ${marker} . 2>/dev/null; true'`)).toString().trim();
   expect(hits).toBe('');
   await expectCleanLogcat();
+});
+
+// ---- Ways in and the application tracker ----
+
+const JOB = `http://127.0.0.1:${PORTS.outer}/job.html`;
+const OUTER = `http://127.0.0.1:${PORTS.outer}/outer.html`;
+/** What must never reach the device log: record and resume content, and the job page's address. */
+const PRIVATE_WORDS = ['示例科技', '张三', 'zhangsan@example.com', '127.0.0.1:4180/job.html'];
+
+/** A VIEW intent as another app's 「在默认浏览器打开」 sends it (aimed at this app, as the chooser would). */
+async function viewUrl(url: string, extraFlags = '') {
+  await device.shell(`am start -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${url}' ${extraFlags} -p ${PKG}`);
+}
+
+/**
+ * A text shared to the app (no single quotes in `text`). Through the host's adb, not `device.shell`: Playwright's adb
+ * client sizes the command in UTF-16 units, so a command holding Chinese reaches the device cut short.
+ */
+async function shareText(text: string) {
+  hostAdb('shell', `am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT '${text}' -p ${PKG}`);
+}
+
+/** A launcher shortcut's intent, started explicitly. */
+async function shortcut(action: string, extras = '') {
+  await device.shell(`am start -a ${action} -n ${PKG}/.MainActivity ${extras}`);
+}
+
+async function dumpsys(name: string): Promise<string> {
+  return (await device.shell(`dumpsys ${name}`)).toString('utf8');
+}
+
+/**
+ * Whether a reminder alarm is pending. Only the 「N pending alarms:」 block counts: `dumpsys alarm` also keeps a
+ * removal history and fired-alarm stats that name the tag long after the alarm is gone.
+ */
+const hasReminderAlarm = async () => {
+  const dump = await dumpsys('alarm');
+  const start = /^\s*\d+ pending alarms:/m.exec(dump);
+  if (!start) throw new Error('dumpsys alarm has no pending alarms block');
+  const rest = dump.slice(start.index + start[0].length);
+  const end = /^ {2}\S/m.exec(rest);
+  return (end ? rest.slice(0, end.index) : rest).includes(`${PKG}.REMINDER`);
+};
+
+/** Milliseconds since the epoch on the emulator's clock. */
+async function emulatorNow(): Promise<number> {
+  return Number((await device.shell('date +%s')).toString().trim()) * 1000;
+}
+
+/** The emulator's local time plus `minutes`, as HH:MM. */
+async function emulatorClockPlus(minutes: number): Promise<string> {
+  const [h, m] = (await device.shell('date +%H:%M')).toString().trim().split(':').map(Number) as [number, number];
+  const total = (h * 60 + m + minutes) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** Nothing of a record or the resume in the WebView, crash or activity-manager log. */
+async function expectNoPrivateWordsInLogcat() {
+  const log = (await device.shell('logcat -d -s chromium:* AndroidRuntime:* ActivityManager:*')).toString('utf8');
+  for (const word of PRIVATE_WORDS) expect(log.includes(word), `logcat holds ${word}`).toBe(false);
+}
+
+async function closePage(page: Page) {
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
+  const confirm = page.getByRole('dialog', { name: '关闭这个网申页面？' });
+  if (await confirm.isVisible().catch(() => false)) await confirm.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toHaveCount(0);
+}
+
+/** Every text and accessible name of this app's views on screen (Playwright may hold a finished activity's page). */
+async function appWords(): Promise<string[]> {
+  const xml = (await device.shell('uiautomator dump /sdcard/raf-ui.xml >/dev/null 2>&1; cat /sdcard/raf-ui.xml')).toString('utf8');
+  const words: string[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    if (!match[0].includes(`package="${PKG}"`)) continue;
+    for (const attr of ['text', 'content-desc']) {
+      const value = new RegExp(`\\b${attr}="([^"]*)"`).exec(match[0])?.[1];
+      if (value) words.push(value);
+    }
+  }
+  return words;
+}
+
+/** The 网申 tab's detail of the record named `name`. */
+async function openRecord(page: Page, name: string) {
+  await toTab(page, '网申');
+  const back = page.getByRole('button', { name: '返回网申记录' });
+  if (await back.isVisible().catch(() => false)) await back.click();
+  await page.getByRole('button', { name: new RegExp(`^${esc(name)}`) }).first().click();
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+}
+
+async function setDeadline(page: Page, chip: '今天' | '明天') {
+  await page.getByRole('button', { name: /^截止日期/ }).click();
+  const sheet = page.getByRole('dialog', { name: '设置截止日期' });
+  await sheet.getByRole('button', { name: chip, exact: true }).click();
+  await sheet.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+}
+
+/** Settings → 截止提醒: the time, and whether the day-before reminder is on. */
+async function setReminderTime(page: Page, time: string, dayBefore?: boolean) {
+  await toTab(page, '设置');
+  await page.getByRole('button', { name: /^截止提醒/ }).click();
+  const sheet = page.getByRole('dialog', { name: '截止提醒' });
+  await sheet.getByLabel('提醒时间').fill(time);
+  if (dayBefore !== undefined) await sheet.getByRole('checkbox', { name: '截止前一天' }).setChecked(dayBefore);
+  await sheet.getByRole('button', { name: '关闭', exact: true }).click();
+}
+
+/** Open the job page by VIEW, wait for its form, close it: the record exists (its company comes from the title). */
+async function recordJobPage(page: Page) {
+  await viewUrl(JOB);
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+  const job = await contentPage(page, JOB);
+  await job.locator('#name').waitFor();
+  await closePage(page);
+}
+
+test('ways in: a VIEW link opens the fill browser and becomes an application record', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+
+  // Our browser, not some other: the self-signed page is refused with our own certificate error.
+  await viewUrl(`https://127.0.0.1:${PORTS.tls}/`);
+  await expect(page.getByRole('button', { name: `网页信息：127.0.0.1:${PORTS.tls}` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('alert').getByRole('heading', { name: '这个网站的安全证书有问题' })).toBeVisible({ timeout: 30_000 });
+  await closePage(page);
+
+  await recordJobPage(page);
+  await toTab(page, '网申');
+  const row = page.getByRole('button', { name: /^示例科技/ });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(row).toContainText('想投');
+
+  // A javascript: link sent straight to the activity: refused, no browser.
+  await device.shell(`am start -n ${PKG}/.MainActivity -a android.intent.action.VIEW -d 'javascript:alert(1)'`);
+  await expect(page.getByText('只能打开 http 或 https 开头的网页链接。')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toHaveCount(0);
+
+  // Leave with back; Recents starts the activity again with the old intent plus FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY.
+  for (let i = 0; i < 5 && (await inFront()); i += 1) {
+    await pressBack();
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
+  await viewUrl(JOB, '-f 0x00100000');
+  await expect.poll(async () => (await appWords()).some((w) => /^(首页|网申记录)$/.test(w)), { timeout: 30_000 }).toBe(true);
+  await new Promise((r) => setTimeout(r, 4_000));
+  expect((await appWords()).filter((w) => /关闭网申页面|网页信息/.test(w))).toEqual([]);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('ways in: a shared text opens its link, asks when it has two, and says when it has none', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+
+  await shareText(`【示例科技校园招聘】网申入口 ${JOB}`);
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('已打开：示例科技校园招聘 网申入口')).toBeVisible({ timeout: 15_000 });
+  await closePage(page);
+
+  await shareText(`第一个 ${JOB} 第二个 ${OUTER}`);
+  const choice = page.getByRole('dialog', { name: '打开哪个链接？' });
+  await expect(choice).toBeVisible({ timeout: 15_000 });
+  const rows = choice.getByRole('button', { name: '打开 127.0.0.1' });
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).click();
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+  const outer = await contentPage(page, OUTER);
+  expect(outer.url()).toMatch(/\/outer\.html$/);
+  await closePage(page);
+
+  await shareText('明天下午面试');
+  await expect(page.getByText('分享的内容里没有网页链接。')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toHaveCount(0);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('ways in: launcher shortcuts open the demo, the paste box and the last application', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+
+  await shortcut('app.raf.dev.action.OPEN_DEMO');
+  await expect(page.getByRole('button', { name: '网页信息：示例表单（App 自带）' })).toBeVisible({ timeout: 30_000 });
+  await closePage(page);
+
+  await recordJobPage(page);
+  // The dynamic 继续：… shortcut is synced a second after the record changed.
+  await expect.poll(async () => (await dumpsys('shortcut')).includes('last-application'), { timeout: 20_000 }).toBe(true);
+  const dump = await dumpsys('shortcut');
+  expect(dump).toContain(PKG);
+  const recordId = /recordId=([A-Za-z0-9-]{1,64})/.exec(dump)?.[1];
+  if (recordId) {
+    await shortcut('app.raf.dev.action.OPEN_APPLICATION', `--es recordId ${recordId}`);
+    await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+    expect((await contentPage(page, JOB)).url()).toMatch(/\/job\.html$/);
+    await closePage(page);
+  } else {
+    test.info().annotations.push({
+      type: 'skipped step',
+      description: 'dumpsys shortcut does not print the intent extras (no recordId=), so opening the last application by its real id was not checked',
+    });
+  }
+
+  await shortcut('app.raf.dev.action.OPEN_APPLICATION', '--es recordId no-such-id');
+  await expect(page.getByText('这条网申记录已经删了。')).toBeVisible({ timeout: 15_000 });
+
+  await toTab(page, '设置');
+  await shortcut('app.raf.dev.action.PASTE_LINK');
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel('网申链接')).toBeFocused({ timeout: 10_000 });
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('ways in: a copied link is offered when the app comes back', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+  const copy = async (text: string) =>
+    page
+      .evaluate((t) => navigator.clipboard.writeText(t), text)
+      .then(() => true)
+      .catch((error: unknown) => String(error));
+  const copied = await copy(OUTER);
+  test.skip(copied !== true, `the WebView could not write the clipboard (${String(copied)}); the clipboard card was not checked on the device`);
+  const comeBack = async () => {
+    await device.shell('input keyevent 3');
+    await new Promise((r) => setTimeout(r, 1_000));
+    await device.shell(`am start -n ${PKG}/.MainActivity`);
+  };
+
+  await comeBack();
+  const card = page.getByRole('region', { name: '打开刚复制的链接？' });
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await expect(card).toContainText('127.0.0.1');
+  await card.getByRole('button', { name: '不打开这个链接' }).click();
+  await expect(card).toHaveCount(0);
+
+  await comeBack();
+  await new Promise((r) => setTimeout(r, 3_000));
+  await expect(page.getByRole('region', { name: '打开刚复制的链接？' })).toHaveCount(0);
+
+  await toTab(page, '设置');
+  await page.getByRole('switch', { name: '发现刚复制的链接' }).uncheck();
+  expect(await copy(JOB)).toBe(true);
+  await comeBack();
+  await toTab(page, '首页');
+  await new Promise((r) => setTimeout(r, 3_000));
+  await expect(page.getByRole('region', { name: '打开刚复制的链接？' })).toHaveCount(0);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('tracker: a deadline reminder posts a notification and comes back after a simulated reboot', async () => {
+  await clearLogcat();
+  await startServer();
+  let page = await freshHome();
+  await recordJobPage(page);
+  await openRecord(page, '示例科技');
+  await setDeadline(page, '今天');
+  await setReminderTime(page, await emulatorClockPlus(2), false);
+
+  await openRecord(page, '示例科技');
+  await page.getByRole('switch', { name: '截止前提醒我' }).click();
+  const ask = page.getByRole('dialog', { name: '允许发通知？' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: '继续', exact: true }).click();
+  await tapInSystemUi((node) => /^(允许|Allow)$/.test(node.text), 'the system Allow button');
+  await expect(page.getByRole('switch', { name: '截止前提醒我' })).toBeChecked({ timeout: 15_000 });
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+
+  // Reboot simulation: a force-stop drops the alarms; the boot path puts them back from reminders.enc, without the UI.
+  await device.shell(`am force-stop ${PKG}`);
+  await expect.poll(hasReminderAlarm, { timeout: 10_000 }).toBe(false);
+  await device.shell(`am broadcast --include-stopped-packages -n ${PKG}/.DebugReminderReceiver -a app.raf.dev.debug.RESCHEDULE`);
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+
+  // Firing: due reminders are posted; the lock screen version has no company name.
+  const at = (await emulatorNow()) + 3 * 60_000;
+  await device.shell(`am broadcast -n ${PKG}/.DebugReminderReceiver -a app.raf.dev.debug.FIRE_DUE --el at ${at}`);
+  await expect.poll(async () => (await dumpsys('notification --noredact')).includes('今天截止：示例科技'), { timeout: 20_000 }).toBe(true);
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(false);
+
+  // Cancel: a new future reminder, then deleting the record removes its alarm and its notification.
+  page = await launch();
+  await setReminderTime(page, await emulatorClockPlus(5));
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+  await openRecord(page, '示例科技');
+  await page.getByRole('button', { name: /^删除这条记录/ }).click();
+  await expect(page.getByText(/^已删除「示例科技」的网申记录/)).toBeVisible();
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(false);
+  await expect.poll(async () => (await dumpsys('notification --noredact')).includes('今天截止：示例科技'), { timeout: 20_000 }).toBe(false);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('tracker: export carries the records, the extension reads the resume part, and delete all clears records, reminders and shortcuts', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshResume();
+  await device.shell(`pm grant ${PKG} android.permission.POST_NOTIFICATIONS`);
+  await recordJobPage(page);
+  await openRecord(page, '示例科技');
+  await setDeadline(page, '明天');
+  await page.getByRole('switch', { name: '截止前提醒我' }).click();
+  await expect(page.getByRole('switch', { name: '截止前提醒我' })).toBeChecked({ timeout: 15_000 });
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await dumpsys('shortcut')).includes('last-application'), { timeout: 20_000 }).toBe(true);
+
+  const exported = await exportThroughPicker(page);
+  const text = exported.buffer.toString('utf8');
+  expect(parseProfileJson(text).ok).toBe(true);
+  expect((JSON.parse(text) as { mobileTracker: { applications: unknown[] } }).mobileTracker.applications).toHaveLength(1);
+  await device.shell('rm -f /sdcard/Download/resume-autofill-profile-*');
+
+  await deleteAllData(page);
+  await page.getByRole('radio', { name: '中' }).click();
+  await page.getByRole('button', { name: '跳过', exact: true }).click();
+  await toTab(page, '网申');
+  await expect(page.getByText('还没有网申记录')).toBeVisible();
+  expect(await privateFiles()).not.toContain('reminders.enc');
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(false);
+  await expect.poll(async () => (await dumpsys('shortcut')).includes('last-application'), { timeout: 20_000 }).toBe(false);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('tracker: the new screens fit at 200% font; light and dark screenshots for a human look', async () => {
+  mkdirSync(RESULTS, { recursive: true });
+  await clearLogcat();
+  await startServer();
+  /** Home, the 网申 list and detail, the deadline sheet, both new Settings sheets and the link choice sheet. */
+  const walk = async (page: Page, at: (name: string) => Promise<void>) => {
+    await toTab(page, '首页');
+    await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+    await at('home');
+    await toTab(page, '网申');
+    await expect(page.getByRole('button', { name: /^示例科技/ }).first()).toBeVisible();
+    await at('tracker-list');
+    await openRecord(page, '示例科技');
+    await at('tracker-detail');
+    await page.getByRole('button', { name: /^截止日期/ }).click();
+    await expect(page.getByRole('dialog', { name: '设置截止日期' })).toBeVisible();
+    await at('deadline-sheet');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '设置截止日期' })).toHaveCount(0);
+    await toTab(page, '设置');
+    await page.getByRole('button', { name: /^截止提醒/ }).click();
+    await expect(page.getByRole('dialog', { name: '截止提醒' })).toBeVisible();
+    await at('reminder-settings');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '截止提醒' })).toHaveCount(0);
+    await page.getByRole('button', { name: /^用本 App 打开网申链接/ }).click();
+    await expect(page.getByRole('dialog', { name: '用本 App 打开网申链接' })).toBeVisible();
+    await at('open-links-sheet');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '用本 App 打开网申链接' })).toHaveCount(0);
+    await shareText(`第一个 ${JOB} 第二个 ${OUTER}`);
+    await expect(page.getByRole('dialog', { name: '打开哪个链接？' })).toBeVisible({ timeout: 15_000 });
+    await at('link-choice-sheet');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '打开哪个链接？' })).toHaveCount(0);
+  };
+  try {
+    let page = await freshHome();
+    await recordJobPage(page);
+    await openRecord(page, '示例科技');
+    await setDeadline(page, '明天');
+
+    await device.shell('settings put system font_scale 2.0');
+    page = await launch();
+    await walk(page, (name) => expectFits(page, `${name} at 200%`));
+
+    await device.shell('settings put system font_scale 1.0');
+    for (const mode of ['no', 'yes'] as const) {
+      await device.shell(`cmd uimode night ${mode}`);
+      page = await launch();
+      await page.emulateMedia({ colorScheme: null });
+      await expect.poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(mode === 'yes');
+      const look = mode === 'yes' ? 'dark' : 'light';
+      await walk(page, (name) => page.screenshot({ path: path.join(RESULTS, `it4-${name}-${look}.png`) }).then(() => undefined));
+    }
+    await expectNoPrivateWordsInLogcat();
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+  }
 });

@@ -791,7 +791,7 @@ textarea {
   bottom: 0;
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--raf-color-border);
   background: var(--raf-color-surface);
@@ -1804,4 +1804,134 @@ button.m-settings-row:active {
   align-items: center;
   min-height: var(--m-hit);
   cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ ways in */
+
+/* Read by screen readers, not shown (the choice sheet's full URLs). */
+.m-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 「打开刚复制的链接？」 at the top of Home: a card like the others, 1px line, no shadow. */
+.m-clip {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.m-clip__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.m-clip__host,
+.m-clip__hosts {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-clip__hosts {
+  padding-left: 1.2em;
+}
+
+.m-clip__page {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.m-clip__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.m-clip__actions .m-button {
+  min-height: var(--m-hit);
+}
+
+/* 「打开哪个链接？」: one row per link, host bold and wrapping, the rest of the URL clipped to two lines. */
+.m-link-choices {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 8px;
+}
+
+.m-link-choices > li + li {
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.m-link-choice {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--m-hit);
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: var(--raf-color-text);
+  font: inherit;
+  text-align: left;
+}
+
+.m-link-choice:active {
+  background: var(--raf-color-surface-hover);
+}
+
+.m-link-choice__host {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-link-choice__title {
+  overflow-wrap: anywhere;
+}
+
+.m-link-choice__url {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--raf-color-text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 「用本 App 打开网申链接」: numbered steps that wrap at any font size. */
+.m-links__steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+/* A settings row whose control is a switch: the whole row is the label, at least 44px tall. */
+label.m-settings-row {
+  cursor: pointer;
+}
+
+label.m-settings-row .m-check {
+  min-height: var(--m-hit);
+  min-width: var(--m-hit);
+  justify-content: center;
 }

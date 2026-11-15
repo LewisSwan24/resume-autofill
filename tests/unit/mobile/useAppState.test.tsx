@@ -49,10 +49,38 @@ describe('useAppState', () => {
   });
 
   it('corrupt stored state: starts from defaults and overwrites it', async () => {
-    const store = createMemoryAppStateStore({ version: 9, junk: true });
+    const store = createMemoryAppStateStore({ version: 0, junk: true });
     const { result } = renderHook(() => useAppState(store, { hasResumes: true }));
     await waitFor(() => expect(result.current.state).toEqual(defaultAppState({ onboardingDone: true })));
     await waitFor(async () => expect(await store.load()).toEqual(defaultAppState({ onboardingDone: true })));
+  });
+
+  it('a newer stored version is never overwritten; changes stay in memory and readOnly is true', async () => {
+    const newer = { version: 3, onboardingDone: true, somethingNew: [1, 2] };
+    const store = createMemoryAppStateStore(newer);
+    const save = vi.spyOn(store, 'save');
+    const { result } = renderHook(() => useAppState(store, { hasResumes: false }));
+    await waitFor(() => expect(result.current.state).toEqual(defaultAppState({ onboardingDone: true })));
+    expect(result.current.readOnly).toBe(true);
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.update((s) => ({ ...s, fillLanguage: 'en' }));
+    });
+    expect(ok).toBe(true);
+    expect(result.current.state?.fillLanguage).toBe('en');
+    expect(save).not.toHaveBeenCalled();
+    await expect(store.load()).rejects.toThrow(); // still the newer file, untouched
+  });
+
+  it('a stored v1 state loads migrated, and readOnly is false', async () => {
+    const store = createMemoryAppStateStore({
+      version: 1,
+      onboardingDone: true,
+      recentPages: [{ id: 'p1', url: 'https://jobs.example.com/apply/1', host: 'jobs.example.com', addedAt: 1 }],
+    });
+    const { result } = renderHook(() => useAppState(store, { hasResumes: true }));
+    await waitFor(() => expect(result.current.state?.applications.map((r) => r.id)).toEqual(['p1']));
+    expect(result.current.readOnly).toBe(false);
   });
 
   it('update shows the change at once and stores it', async () => {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { updateRecentTitle } from '../../../../mobile/app/src/browser/model/recentTitle';
-import { defaultAppState, type AppState } from '../../../../mobile/app/src/store/appStateStore';
+import { AppStateV1Schema, type AppStateV1 as AppState } from '../../../../mobile/app/src/store/appStateMigrate';
+
+// Legacy helper on the v1 shape.
+const defaultAppState = (o: Partial<AppState> = {}): AppState => AppStateV1Schema.parse({ version: 1, ...o });
 
 const state = (): AppState =>
   defaultAppState({

@@ -5,10 +5,11 @@ import { useMemo, useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SettingsScreen, type SettingsScreenProps } from '../../../mobile/app/src/settings/SettingsScreen';
 import { decryptExport } from '../../../mobile/app/src/data/exportCrypto';
-import { createMemoryAppStateStore, type AppState, type AppStateStore } from '../../../mobile/app/src/store/appStateStore';
+import { ApplicationRecordSchema, createMemoryAppStateStore, type AppState, type AppStateStore } from '../../../mobile/app/src/store/appStateStore';
 import { createMemoryFileStore, type FileStore } from '../../../mobile/app/src/store/fileStore';
 import { BackStackContext, Toast, createBackStack, type ToastMessage } from '../../../mobile/app/src/ui';
 import { useAppState } from '../../../mobile/app/src/useAppState';
+import { createFakeBrowserRole, type FakeBrowserRole } from '../../../mobile/app/src/native/browserRole';
 import type { SettingsPage } from '../../../mobile/app/src/navigation';
 import { parseProfileJson } from '../../../src/editor';
 import { setLanguage, useLanguage, type Language } from '../../../src/i18n';
@@ -37,6 +38,8 @@ interface Fakes {
   loadError?: string | null;
   title?: string;
   clearSiteData?: () => Promise<void>;
+  clipboardAvailable?: boolean;
+  browserRole?: FakeBrowserRole | null;
 }
 
 let store: AppStateStore;
@@ -92,6 +95,8 @@ async function renderSettings(f: Fakes = {}) {
       onWipe={spies.onWipe}
       loadError={f.loadError ?? null}
       clearSiteData={f.clearSiteData}
+      clipboardAvailable={f.clipboardAvailable}
+      browserRole={f.browserRole ?? null}
     />,
   );
   await screen.findByRole('heading', { level: 1, name: f.title ?? '设置' });
@@ -296,6 +301,16 @@ describe('Settings: about and privacy', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
   });
+
+  it('the privacy page covers the tracker, the clipboard, reminders and shortcuts', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: /^隐私说明/ }));
+    await screen.findByRole('heading', { level: 1, name: '隐私说明' });
+    for (const start of ['网申记录（公司、岗位', '只有你回到 App、剪贴板里有新的链接时', '截止提醒由手机系统按时发出', '加到桌面的图标和长按 App 图标']) {
+      expect(screen.getByText((text) => text.startsWith(start))).toBeTruthy();
+    }
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(6);
+  });
 });
 
 describe('Settings: site sign-ins', () => {
@@ -346,7 +361,8 @@ describe('Settings: delete all', () => {
     const files = createMemoryFileStore();
     await files.put({ name: 'a.pdf', type: 'application/pdf', bytes: new Uint8Array([1]) });
     await files.put({ name: 'b.jpg', type: 'image/jpeg', bytes: new Uint8Array([2]) });
-    const page = (id: string) => ({ id, url: `https://jobs.example.com/${id}`, host: 'jobs.example.com', addedAt: 1 });
+    const page = (id: string) =>
+      ApplicationRecordSchema.parse({ id, url: `https://jobs.example.com/${id}`, host: 'jobs.example.com', statusAt: 1, createdAt: 1, openedAt: 1, updatedAt: 1 });
     await renderSettings({
       files,
       onWipe,
@@ -356,18 +372,19 @@ describe('Settings: delete all', () => {
         { id: 'r3', title: '简历三' },
         { id: 'r4', title: '简历四' },
       ]),
-      state: { recentPages: [page('p1'), page('p2'), page('p3')] },
+      state: { version: 2, applications: [page('p1'), page('p2'), page('p3')] } as Partial<AppState>,
     });
     fireEvent.click(screen.getByRole('button', { name: /^删除这台手机上的全部数据/ }));
     return screen.getByRole('dialog', { name: '删除全部数据？' });
   }
 
-  it('the sheet names what will go: resume titles, file count, recent page count, settings', async () => {
+  it('the sheet names what will go: resume titles, file count, records (delete-all lists records), settings', async () => {
     const sheet = await withData();
     expect(within(sheet).getByText('会从这台手机上永久删除：')).toBeTruthy();
     expect(within(sheet).getByText('4 份简历：简历一、简历二、简历三，还有 1 份')).toBeTruthy();
     expect(await within(sheet).findByText('2 个附件文件')).toBeTruthy();
-    expect(within(sheet).getByText('3 个最近的网申页面')).toBeTruthy();
+    expect(within(sheet).getByText('3 条网申记录和对应的提醒')).toBeTruthy();
+    expect(within(sheet).queryByText(/最近的网申页面/)).toBeNull();
     expect(within(sheet).getByText('设置和引导进度')).toBeTruthy();
     expect(within(sheet).getByText('删除后无法恢复。需要留底的话，先导出一份。')).toBeTruthy();
   });
@@ -457,5 +474,97 @@ describe('Settings: edge cases', () => {
     fireEvent.click(within(sheet).getAllByRole('button', { name: 'Close' })[0]!);
     fireEvent.click(screen.getByRole('button', { name: /^Delete all data on this phone/ }));
     expect(within(screen.getByRole('dialog', { name: 'Delete all data?' })).getByText('1 resume: My resume')).toBeTruthy();
+  });
+});
+
+describe('Settings: ways in', () => {
+  const phone = (role: FakeBrowserRole = createFakeBrowserRole()) => ({ clipboardAvailable: true, browserRole: role });
+
+  it('new rows', async () => {
+    await renderSettings(phone());
+    const general = screen.getAllByRole('list')[0]!;
+    const names = within(general)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '');
+    expect(names.findIndex((n) => n.includes('截止提醒'))).toBeGreaterThan(names.findIndex((n) => n.includes('填写时默认用')));
+    expect(names.findIndex((n) => n.includes('发现刚复制的链接'))).toBeGreaterThan(names.findIndex((n) => n.includes('截止提醒')));
+    expect(names.findIndex((n) => n.includes('用本 App 打开网申链接'))).toBeGreaterThan(names.findIndex((n) => n.includes('发现刚复制的链接')));
+    const sw = screen.getByRole('switch', { name: '发现刚复制的链接' });
+    expect((sw as HTMLInputElement).checked).toBe(true);
+    expect(sw.getAttribute('aria-describedby')).toBeTruthy();
+    expect(screen.getByRole('switch', { description: '回到 App 时，如果剪贴板里有新的网申链接，首页会问你要不要打开。' })).toBe(sw);
+    expect(screen.getByRole('button', { name: /^用本 App 打开网申链接/ }).textContent).toContain('在微信里选「在默认浏览器打开」');
+  });
+
+  it('the clipboard switch writes clipboard.offer', async () => {
+    await renderSettings(phone());
+    fireEvent.click(screen.getByRole('switch', { name: '发现刚复制的链接' }));
+    await waitFor(async () => expect((await store.load())!.clipboard.offer).toBe(false));
+    expect((screen.getByRole('switch', { name: '发现刚复制的链接' }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: '发现刚复制的链接' }));
+    await waitFor(async () => expect((await store.load())!.clipboard.offer).toBe(true));
+  });
+
+  it('OpenLinksSheet: state, steps, buttons', async () => {
+    const role = createFakeBrowserRole({ available: true, held: false });
+    await renderSettings(phone(role));
+    fireEvent.click(screen.getByRole('button', { name: /^用本 App 打开网申链接/ }));
+    const sheet = screen.getByRole('dialog', { name: '用本 App 打开网申链接' });
+    expect(await within(sheet).findByText('现在：默认浏览器是别的 App。')).toBeTruthy();
+    const steps = within(sheet).getAllByRole('listitem').map((li) => li.textContent);
+    expect(steps).toEqual([
+      '在微信里打开网申页面，点右上角「…」，选「在默认浏览器打开」。',
+      '在弹出的列表里选「网申简历填写」，点「仅此一次」：只有这一次用本 App 打开。',
+      '如果选「始终」，以后所有网页链接都会用本 App 打开。',
+    ]);
+    expect(within(sheet).getByText('想改回来：打开系统设置 › 应用 › 默认应用 › 浏览器，选回原来的浏览器。')).toBeTruthy();
+    expect(within(sheet).getByText('打开的不是网申页面？点地址栏，选「用系统浏览器打开」。')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: '打开默认应用设置' }));
+    await waitFor(() => expect(role.calls.some((c) => c.method === 'openDefaultAppsSettings')).toBe(true));
+    // Never asked for by the app itself: only behind this button.
+    expect(role.calls.some((c) => c.method === 'request')).toBe(false);
+    fireEvent.click(within(sheet).getByRole('button', { name: '设为默认浏览器' }));
+    expect(await within(sheet).findByText('现在：本 App 是手机的默认浏览器。')).toBeTruthy();
+    expect(within(sheet).queryByRole('button', { name: '设为默认浏览器' })).toBeNull();
+  });
+
+  it('OpenLinksSheet: no role on this phone shows no state line and no default button; a settings failure says so', async () => {
+    const role = createFakeBrowserRole({ available: false });
+    role.openDefaultAppsSettings = async () => ({ opened: false });
+    await renderSettings(phone(role));
+    fireEvent.click(screen.getByRole('button', { name: /^用本 App 打开网申链接/ }));
+    const sheet = screen.getByRole('dialog', { name: '用本 App 打开网申链接' });
+    await waitFor(() => expect(role.calls.some((c) => c.method === 'state')).toBe(true));
+    expect(within(sheet).queryByText(/^现在：/)).toBeNull();
+    expect(within(sheet).queryByRole('button', { name: '设为默认浏览器' })).toBeNull();
+    fireEvent.click(within(sheet).getByRole('button', { name: '打开默认应用设置' }));
+    await waitFor(() => expect(toastText()).toBe('打不开系统设置，请手动打开。'));
+  });
+
+  it('截止提醒 shows the reminder settings and opens their sheet', async () => {
+    await renderSettings(phone());
+    const row = screen.getByRole('button', { name: /^截止提醒/ });
+    expect(row.textContent).toContain('09:00，前一天和当天');
+    expect(row.querySelector('svg')?.getAttribute('data-icon')).toBe('bell');
+    fireEvent.click(row);
+    expect(screen.getByRole('dialog', { name: '截止提醒' })).toBeTruthy();
+  });
+
+  it('截止提醒 says which days are on, or 不提醒', async () => {
+    await renderSettings({ ...phone(), state: { version: 2, reminders: { time: '20:00', dayBefore: true, dayOf: false, defaultOn: false } } as never });
+    expect(screen.getByRole('button', { name: /^截止提醒/ }).textContent).toContain('20:00，前一天');
+    cleanup();
+    await renderSettings({ ...phone(), state: { version: 2, reminders: { time: '09:00', dayBefore: false, dayOf: false, defaultOn: false } } as never });
+    expect(screen.getByRole('button', { name: /^截止提醒/ }).textContent).toContain('不提醒');
+  });
+
+  it('the browser preview hides the phone-only rows', async () => {
+    await renderSettings();
+    // Reminders still have a row: their sheet says they need the phone.
+    fireEvent.click(screen.getByRole('button', { name: /^截止提醒/ }));
+    expect(within(screen.getByRole('dialog', { name: '截止提醒' })).getByText('提醒要在手机上才能用。')).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('dialog', { name: '截止提醒' })).getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('switch', { name: '发现刚复制的链接' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^用本 App 打开网申链接/ })).toBeNull();
   });
 });

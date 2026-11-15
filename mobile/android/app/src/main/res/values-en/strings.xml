@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_paste_short">Paste a link</string>
+    <string name="shortcut_paste_long">Paste an application link</string>
+    <string name="shortcut_demo_short">Sample form</string>
+    <string name="shortcut_demo_long">Try the sample form</string>
+    <string name="shortcut_deleted">This application was deleted</string>
+    <string name="notification_channel">Application deadlines</string>
+</resources>

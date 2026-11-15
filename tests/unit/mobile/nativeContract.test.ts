@@ -82,3 +82,73 @@ describe('FillBrowser native contract', () => {
     expect(source).toMatch(/public boolean onRenderProcessGone\([^)]*\)\s*\{[\s\S]*?recreate[\s\S]*?return true;/);
   });
 });
+
+describe('ways-in and reminder plugins', () => {
+  const nativeDir = join(repo, 'mobile/app/src/native');
+  /** Java class, TS contract file, the METHODS / EVENTS export names, and the events the Java side emits. */
+  const PLUGINS = [
+    { name: 'IncomingIntent', java: 'IncomingIntentPlugin.java', ts: 'incomingIntent.ts', methods: 'INCOMING_INTENT_METHODS', events: 'INCOMING_INTENT_EVENTS' },
+    { name: 'ClipboardPeek', java: 'ClipboardPeekPlugin.java', ts: 'clipboardPeek.ts', methods: 'CLIPBOARD_METHODS', events: 'CLIPBOARD_EVENTS' },
+    { name: 'Reminders', java: 'RemindersPlugin.java', ts: 'reminders.ts', methods: 'REMINDERS_METHODS', events: 'REMINDERS_EVENTS' },
+    { name: 'AppShortcuts', java: 'AppShortcutsPlugin.java', ts: 'appShortcuts.ts', methods: 'SHORTCUTS_METHODS', events: 'SHORTCUTS_EVENTS' },
+    { name: 'BrowserRole', java: 'BrowserRolePlugin.java', ts: 'browserRole.ts', methods: 'BROWSER_ROLE_METHODS', events: 'BROWSER_ROLE_EVENTS' },
+  ] as const;
+  const javaOf = (file: string) => {
+    const path = join(javaDir, file);
+    expect(existsSync(path), file).toBe(true);
+    return stripComments(readFileSync(path, 'utf8'));
+  };
+  const load = async (file: string) =>
+    (await import(/* @vite-ignore */ pathToFileURL(join(nativeDir, file)).href)) as Record<string, readonly string[] | undefined>;
+
+  it("each new plugin's @CapacitorPlugin name matches its registerPlugin name", () => {
+    for (const p of PLUGINS) {
+      const annotation = /@CapacitorPlugin\(\s*name\s*=\s*"(\w+)"/.exec(javaOf(p.java));
+      expect(annotation?.[1], p.java).toBe(p.name);
+      const ts = readFileSync(join(nativeDir, p.ts), 'utf8');
+      expect([...ts.matchAll(/registerPlugin<\w+>\(\s*'(\w+)'\s*\)/g)].map((m) => m[1]), p.ts).toEqual([p.name]);
+    }
+  });
+
+  it("each plugin's @PluginMethod set equals its TS METHODS list", async () => {
+    for (const p of PLUGINS) {
+      const found = [...javaOf(p.java).matchAll(/@PluginMethod(?:\([^)]*\))?\s+public\s+void\s+(\w+)\s*\(\s*PluginCall\b/g)].map((m) => m[1]!);
+      const mod = await load(p.ts);
+      expect(mod[p.methods], `${p.ts} ${p.methods}`).toBeDefined();
+      expect(sorted(found), p.java).toEqual(sorted(mod[p.methods]!));
+    }
+  });
+
+  it("each plugin's notifyListeners event names equal its TS EVENTS list", async () => {
+    for (const p of PLUGINS) {
+      const calls = [...javaOf(p.java).matchAll(/notifyListeners\(\s*([^,]*),/g)].map((m) => m[1]!.trim());
+      expect(calls.filter((c) => !/^"\w+"$/.test(c)), p.java).toEqual([]);
+      const mod = await load(p.ts);
+      expect(sorted(calls.map((c) => c.slice(1, -1))), p.java).toEqual(sorted(mod[p.events] ?? []));
+    }
+    expect((await load('incomingIntent.ts')).INCOMING_INTENT_EVENTS).toEqual(['incomingIntent']);
+    expect((await load('clipboardPeek.ts')).CLIPBOARD_EVENTS).toEqual(['focus']);
+  });
+
+  it('MainActivity registers all nine plugins before super.onCreate', () => {
+    const source = javaOf('MainActivity.java');
+    const onCreate = source.slice(source.indexOf('public void onCreate('));
+    const superAt = onCreate.indexOf('super.onCreate(');
+    expect(superAt).toBeGreaterThan(-1);
+    const registered = [...onCreate.slice(0, superAt).matchAll(/registerPlugin\(\s*(\w+)\.class\s*\)/g)].map((m) => m[1]!);
+    expect(sorted(registered)).toEqual(sorted([
+      'ProfileVaultPlugin', 'DocumentSaverPlugin', 'IncomingFilePlugin', 'FillBrowserPlugin',
+      'IncomingIntentPlugin', 'ClipboardPeekPlugin', 'RemindersPlugin', 'AppShortcutsPlugin', 'BrowserRolePlugin',
+    ]));
+    expect([...source.matchAll(/registerPlugin\(/g)]).toHaveLength(9);
+  });
+
+  it('window focus reaches ClipboardPeekPlugin through the bridge', () => {
+    const source = javaOf('MainActivity.java');
+    const focus = source.slice(source.indexOf('void onWindowFocusChanged('));
+    const body = focus.slice(0, focus.indexOf('\n    }'));
+    expect(body).toMatch(/super\.onWindowFocusChanged\(/);
+    expect(body).toMatch(/getPlugin\(\s*"ClipboardPeek"\s*\)/);
+    expect(body).toMatch(/notifyFocus\(\s*\)/);
+  });
+});

@@ -1,4 +1,4 @@
-// The bottom tab bar: 首页, 简历, 设置. It measures itself so the toast can sit above it (--m-tabbar-h) and grows
+// The bottom tab bar: 首页, 网申, 简历, 设置. It measures itself so the toast can sit above it (--m-tabbar-h) and grows
 // when the labels wrap at a large font size. The shell hides it while the on-screen keyboard is open.
 import { useEffect, useRef, useState } from 'react';
 import { Icon, type IconName } from './Icon';
@@ -7,6 +7,7 @@ import type { Tab } from './navigation';
 
 const TABS: ReadonlyArray<{ tab: Tab; icon: IconName; labelKey: string }> = [
   { tab: 'home', icon: 'house', labelKey: 'm.tab.home' },
+  { tab: 'applications', icon: 'list-check', labelKey: 'm.tab.apps' },
   { tab: 'resume', icon: 'person-vcard', labelKey: 'm.tab.resume' },
   { tab: 'settings', icon: 'gear', labelKey: 'm.tab.settings' },
 ];

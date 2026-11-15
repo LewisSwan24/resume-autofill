@@ -77,6 +77,14 @@ import wifiOff from 'bootstrap-icons/icons/wifi-off.svg?raw';
 import questionCircle from 'bootstrap-icons/icons/question-circle.svg?raw';
 import shieldExclamation from 'bootstrap-icons/icons/shield-exclamation.svg?raw';
 import xCircle from 'bootstrap-icons/icons/x-circle.svg?raw';
+import listCheck from 'bootstrap-icons/icons/list-check.svg?raw';
+import calendarEvent from 'bootstrap-icons/icons/calendar-event.svg?raw';
+import bellIcon from 'bootstrap-icons/icons/bell.svg?raw';
+import bellSlash from 'bootstrap-icons/icons/bell-slash.svg?raw';
+import searchIcon from 'bootstrap-icons/icons/search.svg?raw';
+import pinAngle from 'bootstrap-icons/icons/pin-angle.svg?raw';
+import clockHistory from 'bootstrap-icons/icons/clock-history.svg?raw';
+import signpostSplit from 'bootstrap-icons/icons/signpost-split.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -162,6 +170,15 @@ const ICONS = {
   'shield-exclamation': shieldExclamation,
   // The report's status word for a fill that failed (src/ui/status.ts, same meaning as in the extension).
   'x-circle': xCircle,
+  // The application tracker and the ways in (one meaning each).
+  'list-check': listCheck,
+  'calendar-event': calendarEvent,
+  'bell': bellIcon,
+  'bell-slash': bellSlash,
+  'search': searchIcon,
+  'pin-angle': pinAngle,
+  'clock-history': clockHistory,
+  'signpost-split': signpostSplit,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

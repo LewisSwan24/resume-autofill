@@ -1,4 +1,5 @@
-// Test pages for the fill browser's device tests: plain http on 4180 (outer.html, links.html, upload.html) and 4181
+// Test pages for the fill browser's device tests: plain http on 4180 (outer.html, links.html, upload.html, and job.html,
+// the application page the "ways in" and tracker tests open by VIEW, share and shortcut) and 4181
 // (inner.html, a different origin for the cross-origin iframe), and https on 4443 with a self-signed certificate (the
 // SSL error test; the app must refuse it). The emulator reaches them through `adb reverse`. Serves only the files
 // listed here.
@@ -14,7 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PORTS = { outer: 4180, inner: 4181, tls: 4443 } as const;
 
 const PAGES: Record<number, Record<string, string>> = {
-  [PORTS.outer]: { '/outer.html': 'outer.html', '/links.html': 'links.html', '/upload.html': 'upload.html' },
+  [PORTS.outer]: { '/outer.html': 'outer.html', '/links.html': 'links.html', '/upload.html': 'upload.html', '/job.html': 'job.html' },
   [PORTS.inner]: { '/inner.html': 'inner.html' },
   [PORTS.tls]: { '/': 'outer.html' },
 };

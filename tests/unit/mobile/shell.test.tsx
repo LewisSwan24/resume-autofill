@@ -1,4 +1,4 @@
-// Mobile app shell: onboarding on a first run, the three tabs, one back-key order for the whole app, jumping from a
+// Mobile app shell: onboarding on a first run, the four tabs, one back-key order for the whole app, jumping from a
 // missing item on Home to its field, and deleting everything. Full App with memory stores and a fake phone.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -173,11 +173,11 @@ describe('Shell – onboarding', () => {
 });
 
 describe('Shell – tabs and the back key', () => {
-  it('the tab bar has Home, Resumes and Settings; the current one is aria-current="page" and each shows its heading', async () => {
+  it('the tab bar has Home, Applications, Resumes and Settings; the current one is aria-current="page" and each shows its heading', async () => {
     stores(makeProfile(), { version: 1, onboardingDone: true });
     start();
     await heading('首页');
-    expect(within(nav()).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['首页', '简历', '设置']);
+    expect(within(nav()).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['首页', '网申', '简历', '设置']);
     expect(tab('首页').getAttribute('aria-current')).toBe('page');
     for (const [name, title] of [
       ['简历', '简历资料'],
@@ -330,13 +330,13 @@ describe('Shell – jumping from Home to a missing field', () => {
 });
 
 describe('Shell – data', () => {
-  it('a pasted link is stored in the app-state store, not the profile store', async () => {
+  it('a pasted link becomes an application record in the app-state store, not the profile store', async () => {
     stores(makeProfile(), { version: 1, onboardingDone: true });
     start();
     await heading('首页');
     fireEvent.change(screen.getByLabelText('网申链接'), { target: { value: 'https://jobs.example.com/apply/1' } });
     press('打开');
-    await waitFor(async () => expect((await appState.load())?.recentPages.map((p) => p.url)).toEqual(['https://jobs.example.com/apply/1']), WAIT);
+    await waitFor(async () => expect((await appState.load())?.applications.map((p) => p.url)).toEqual(['https://jobs.example.com/apply/1']), WAIT);
     expect(JSON.stringify(await stored())).not.toContain('jobs.example.com');
   });
 
@@ -349,7 +349,7 @@ describe('Shell – data', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'EN' }));
     await screen.findByRole('heading', { level: 1, name: 'Settings' }, WAIT);
     const bar = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(within(bar).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['Home', 'Resumes', 'Settings']);
+    expect(within(bar).getAllByRole('button').map((b) => b.textContent!.trim())).toEqual(['Home', 'Applications', 'Resumes', 'Settings']);
     await waitFor(async () => expect((await stored()).settings.uiLanguage).toBe('en'), WAIT);
   });
 
@@ -375,7 +375,7 @@ describe('Shell – data', () => {
     expect((await stored()).resumes).toEqual([]);
     expect(await files.list()).toEqual([]);
     const state = await appState.load();
-    expect(state === null || (state.onboardingDone === false && state.recentPages.length === 0)).toBe(true);
+    expect(state === null || (state.onboardingDone === false && state.applications.length === 0)).toBe(true);
     expect(screen.queryByRole('navigation', { name: '主导航' })).toBeNull();
   });
 
@@ -445,7 +445,7 @@ describe('Shell – the fill browser', () => {
     press('打开');
     expect(await screen.findByText('填写浏览器要在手机上用。', undefined, WAIT)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '关闭网申页面' })).toBeNull();
-    await waitFor(async () => expect((await appState.load())?.recentPages.map((p) => p.url)).toEqual([URL_A]), WAIT);
+    await waitFor(async () => expect((await appState.load())?.applications.map((p) => p.url)).toEqual([URL_A]), WAIT);
   });
 
   it('back key: a sheet first, then the page history, then closes the browser', async () => {
@@ -501,15 +501,15 @@ describe('Shell – the fill browser', () => {
     await heading(START_TITLE);
     const state = await appState.load();
     expect(state?.onboardingDone ?? false).toBe(false);
-    expect(state?.recentPages ?? []).toEqual([]);
+    expect(state?.applications ?? []).toEqual([]);
   });
 
-  it('the page title lands on its recent entry', async () => {
+  it('the page title lands on its application record', async () => {
     const fake = createFakeFillBrowser();
     await openPasted(fake);
     load(fake);
     act(() => fake.emit('title', { title: '示例科技 校园招聘', generation: 1 }));
-    await waitFor(async () => expect((await appState.load())?.recentPages[0]?.title).toBe('示例科技 校园招聘'), WAIT);
+    await waitFor(async () => expect((await appState.load())?.applications[0]).toMatchObject({ title: '示例科技 校园招聘', company: '示例科技' }), WAIT);
   });
 
   it('delete all closes the open session first, then clears site data', async () => {

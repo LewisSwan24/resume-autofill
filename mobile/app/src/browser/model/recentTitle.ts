@@ -1,6 +1,7 @@
 // The page title of a recent application page: written once the page loads, so the Home list reads
 // 「外层示例页」 instead of a bare host. Pure; the App stores the result through updateAppState (encrypted state.enc).
-import type { AppState } from '../../store/appStateStore';
+// Legacy: updateRecentTitle works on the v1 state only; v2 records use updateRecordTitle (tracker/model/records.ts).
+import type { AppStateV1 as AppState } from '../../store/appStateMigrate';
 
 const MAX_TITLE = 80;
 

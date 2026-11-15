@@ -16,11 +16,14 @@ export interface PageInfoSheetProps {
   isolated: boolean | null;
   onCopy: () => void;
   onOpenSystem: () => void;
+  /** Another browser, never this app. When given it takes the place of onOpenSystem's action: a plain VIEW
+   * would come straight back here once this app is the default browser. */
+  onOpenElsewhere?: () => void;
   onReload: () => void;
   onClose: () => void;
 }
 
-export function PageInfoSheet({ open, url, host, certProblem, isolated, onCopy, onOpenSystem, onReload, onClose }: PageInfoSheetProps) {
+export function PageInfoSheet({ open, url, host, certProblem, isolated, onCopy, onOpenSystem, onOpenElsewhere, onReload, onClose }: PageInfoSheetProps) {
   const t = useMT();
   const web = /^https?:/i.test(url) && host.kind !== 'demo';
   return (
@@ -65,7 +68,13 @@ export function PageInfoSheet({ open, url, host, certProblem, isolated, onCopy, 
         ) : null}
         <div className="m-actions">
           <SheetAction icon="copy" label={t('m.br.copyLink')} onClick={onCopy} />
-          {web ? <SheetAction icon="box-arrow-up-right" label={t('m.br.openSystem')} onClick={onOpenSystem} /> : null}
+          {web ? (
+            onOpenElsewhere ? (
+              <SheetAction icon="box-arrow-up-right" label={t('m.br.openElsewhere')} onClick={onOpenElsewhere} />
+            ) : (
+              <SheetAction icon="box-arrow-up-right" label={t('m.br.openSystem')} onClick={onOpenSystem} />
+            )
+          ) : null}
           <SheetAction icon="arrow-clockwise" label={t('m.br.reload')} onClick={onReload} />
         </div>
       </div>

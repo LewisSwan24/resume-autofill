@@ -116,6 +116,8 @@ public class IncomingFilePlugin extends Plugin {
 
     private void accept(Intent intent) {
         if (intent == null) return;
+        // One classifier for every intent: links, text and shortcuts go to IncomingIntentPlugin, files come here.
+        if (IncomingIntents.classify(intent).kind != IncomingIntents.Kind.FILE) return;
         String action = intent.getAction();
         Uri uri;
         String from;

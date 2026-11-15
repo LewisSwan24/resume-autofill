@@ -1,12 +1,26 @@
 // Mobile app navigation: which tab is shown, what each tab has open, jumps to a field, and the back key.
 import { describe, expect, it } from 'vitest';
-import { INITIAL_NAV, backFrom, navReduce, type NavState } from '../../../mobile/app/src/navigation';
+import { INITIAL_NAV, backFrom, navReduce, type BrowserSource, type NavState, type Tab } from '../../../mobile/app/src/navigation';
 
 const at = (patch: Partial<NavState>): NavState => ({ ...INITIAL_NAV, ...patch });
 
 describe('navReduce', () => {
   it('starts on home', () => {
-    expect(INITIAL_NAV).toEqual({ tab: 'home', module: null, focus: null, settingsPage: 'root', onboardingStep: 1, browser: null });
+    expect(INITIAL_NAV).toEqual({
+      tab: 'home',
+      module: null,
+      focus: null,
+      settingsPage: 'root',
+      onboardingStep: 1,
+      browser: null,
+      tracker: { applicationId: null, filter: 'all', query: '', sort: 'opened' },
+      pasteFocus: null,
+    });
+  });
+
+  it('four tabs', () => {
+    const tabs: Tab[] = ['home', 'applications', 'resume', 'settings'];
+    for (const tab of tabs) expect(navReduce(INITIAL_NAV, { type: 'tab', tab }).tab).toBe(tab);
   });
 
   it("switching tabs keeps each tab's sub-state", () => {
@@ -121,5 +135,80 @@ describe('backFrom', () => {
   it('during onboarding: step 2 → step 1; step 1 → null', () => {
     expect(backFrom(at({ onboardingStep: 2, tab: 'resume', module: 'basics' }), true)).toMatchObject({ onboardingStep: 1, module: 'basics' });
     expect(backFrom(at({ onboardingStep: 1, tab: 'resume', module: 'basics' }), true)).toBeNull();
+  });
+});
+
+describe('navReduce: the 网申 tab', () => {
+  it('openApplication / closeApplication', () => {
+    const open = navReduce(INITIAL_NAV, { type: 'openApplication', id: 'rec-1' });
+    expect(open).toMatchObject({ tab: 'applications', tracker: { applicationId: 'rec-1', filter: 'all' } });
+    const closed = navReduce(open, { type: 'closeApplication' });
+    expect(closed).toMatchObject({ tab: 'applications', tracker: { applicationId: null } });
+    expect(navReduce(closed, { type: 'closeApplication' })).toBe(closed);
+  });
+
+  it('back order: detail, list, home', () => {
+    const detail = navReduce(INITIAL_NAV, { type: 'openApplication', id: 'rec-1' });
+    const list = backFrom(detail, false)!;
+    expect(list).toMatchObject({ tab: 'applications', tracker: { applicationId: null } });
+    const home = backFrom(list, false)!;
+    expect(home).toMatchObject({ tab: 'home' });
+    expect(backFrom(home, false)).toBeNull();
+  });
+
+  it('tapping 网申 returns to the list', () => {
+    const detail = navReduce(INITIAL_NAV, { type: 'openApplication', id: 'rec-1' });
+    expect(navReduce(detail, { type: 'tab', tab: 'applications' }).tracker.applicationId).toBeNull();
+    // From another tab, the detail is still there to come back to.
+    const away = navReduce(detail, { type: 'tab', tab: 'home' });
+    expect(navReduce(away, { type: 'tab', tab: 'applications' }).tracker.applicationId).toBe('rec-1');
+  });
+
+  it('tracker filter, query and sort survive tab switches and reset clears them', () => {
+    let s = navReduce(INITIAL_NAV, { type: 'tab', tab: 'applications' });
+    s = navReduce(s, { type: 'tracker', patch: { filter: 'filling', query: '示例', sort: 'deadline' } });
+    s = navReduce(navReduce(s, { type: 'tab', tab: 'settings' }), { type: 'tab', tab: 'applications' });
+    expect(s.tracker).toEqual({ applicationId: null, filter: 'filling', query: '示例', sort: 'deadline' });
+    // Opening a record keeps the list's filter for the way back.
+    expect(navReduce(s, { type: 'openApplication', id: 'r' }).tracker).toMatchObject({ filter: 'filling', query: '示例' });
+    expect(navReduce(s, { type: 'reset' })).toEqual(INITIAL_NAV);
+  });
+
+  it('pasteFocus nonce', () => {
+    const away = at({ tab: 'settings' });
+    const first = navReduce(away, { type: 'pasteFocus' });
+    expect(first.tab).toBe('home');
+    expect(typeof first.pasteFocus).toBe('number');
+    const second = navReduce(first, { type: 'pasteFocus' });
+    expect(second.pasteFocus).not.toBe(first.pasteFocus);
+    expect(navReduce(second, { type: 'pasteFocusDone' }).pasteFocus).toBeNull();
+    const done = navReduce(second, { type: 'pasteFocusDone' });
+    expect(navReduce(done, { type: 'pasteFocusDone' })).toBe(done);
+  });
+
+  it('tracker and reminder sources return to the tracker', () => {
+    const url = 'https://jobs.example.com/a';
+    const ret = (source: BrowserSource, returnTo?: 'home' | 'onboarding' | 'tracker') =>
+      navReduce(INITIAL_NAV, { type: 'openBrowser', target: { url, demo: false, recentId: 'r', source, ...(returnTo ? { returnTo } : {}) } }).browser!.returnTo;
+    expect(ret('tracker')).toBe('tracker');
+    expect(ret('reminder')).toBe('tracker');
+    expect(ret('shortcut')).toBe('home');
+    expect(ret('view')).toBe('home');
+    expect(ret('share')).toBe('home');
+    expect(ret('clipboard')).toBe('home');
+    expect(ret('demo-onboarding')).toBe('onboarding');
+    // App passes onboarding for anything opened while onboarding shows.
+    expect(ret('view', 'onboarding')).toBe('onboarding');
+    // The stored target never carries the routing fields.
+    const s = navReduce(INITIAL_NAV, { type: 'openBrowser', target: { url, demo: false, recentId: 'r', source: 'view', returnTo: 'onboarding' } });
+    expect(s.browser!.target).toEqual({ url, demo: false, recentId: 'r' });
+  });
+
+  it('closing a page opened from the tracker goes back to the applications tab with the detail kept', () => {
+    const detail = navReduce(INITIAL_NAV, { type: 'openApplication', id: 'rec-1' });
+    const open = navReduce(detail, { type: 'openBrowser', target: { url: 'https://jobs.example.com/a', demo: false, recentId: 'rec-1', source: 'tracker' } });
+    const hidden = navReduce(open, { type: 'hideBrowser' });
+    const closed = navReduce(hidden, { type: 'closeBrowser' });
+    expect(closed).toMatchObject({ tab: 'applications', browser: null, tracker: { applicationId: 'rec-1' } });
   });
 });

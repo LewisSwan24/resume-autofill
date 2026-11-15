@@ -1,11 +1,15 @@
-// Settings (设置): interface language and the resume used for filling; export, import, clear site sign-ins and delete
-// everything; the privacy page and the about sheet. Each sheet registers on the back stack through the shared Sheet.
-import { useState, type ReactNode } from 'react';
+// Settings (设置): interface language and the resume used for filling, deadline reminders, the copied-link offer and
+// how to open job links in this app; export, import, clear site sign-ins and delete everything; the privacy page and
+// the about sheet. Each sheet registers on the back stack through the shared Sheet.
+import { useId, useState, type ReactNode } from 'react';
 import type { Language } from '../../../../src/i18n';
 import type { Profile } from '../../../../src/schema';
 import { Icon, type IconName } from '../Icon';
 import { useMT } from '../i18n';
 import type { SettingsPage } from '../navigation';
+import type { BrowserRolePlugin } from '../native/browserRole';
+import type { RemindersPlugin } from '../native/reminders';
+import { ReminderSettingsSheet } from '../tracker/ReminderSettingsSheet';
 import type { AppState } from '../store/appStateStore';
 import type { FileStore } from '../store/fileStore';
 import type { ToastMessage } from '../ui';
@@ -15,6 +19,7 @@ import { DeleteAllSheet } from './DeleteAllSheet';
 import { ExportSheet, type SaveDocument } from './ExportSheet';
 import { FILL_LANGUAGE_LABELS, FillLanguageSheet } from './FillLanguageSheet';
 import { LanguageSwitch } from './LanguageSwitch';
+import { OpenLinksSheet } from './OpenLinksSheet';
 import { PrivacyScreen } from './PrivacyScreen';
 
 export interface SettingsScreenProps {
@@ -39,9 +44,56 @@ export interface SettingsScreenProps {
   /** Clear the fill browser's cookies, web storage and cache; absent without the plugin (browser preview). */
   clearSiteData?: () => Promise<void>;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  /** The phone can look at the clipboard (ClipboardPeek); false in the browser preview, which hides the switch. */
+  clipboardAvailable?: boolean;
+  /** Absent in the browser preview, which hides 「用本 App 打开网申链接」. */
+  browserRole?: BrowserRolePlugin | null;
+  /** Deadline reminders; null in the browser preview (the sheet then says they need the phone). */
+  reminders?: RemindersPlugin | null;
+  /** useReminderSync's lastError, shown in the reminder sheet. */
+  reminderSyncFailed?: boolean;
 }
 
-type OpenSheet = 'fill' | 'export' | 'siteData' | 'wipe' | 'about' | null;
+/** 「09:00，前一天和当天」, or which day is on, or 不提醒. */
+function reminderValueKey(r: AppState['reminders']): string {
+  if (r.dayBefore && r.dayOf) return 'm.remind.value';
+  if (r.dayBefore) return 'm.remind.valueDayBefore';
+  if (r.dayOf) return 'm.remind.valueDayOf';
+  return 'm.remind.valueNone';
+}
+
+type OpenSheet = 'fill' | 'export' | 'siteData' | 'wipe' | 'about' | 'links' | 'reminders' | null;
+
+/** A setting that is on or off: a checkbox with role="switch", named by its label and described by its hint. */
+function SwitchRow({ icon, label, hint, checked, onChange }: { icon: IconName; label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+  const id = useId();
+  return (
+    <li>
+      <label className="m-settings-row" htmlFor={`${id}-input`}>
+        <Icon name={icon} />
+        <span className="m-settings-row__text">
+          <span className="m-settings-row__label" id={`${id}-label`}>
+            {label}
+          </span>
+          <span className="m-settings-row__value" id={`${id}-hint`}>
+            {hint}
+          </span>
+        </span>
+        <span className="m-check">
+          <input
+            id={`${id}-input`}
+            type="checkbox"
+            role="switch"
+            checked={checked}
+            aria-labelledby={`${id}-label`}
+            aria-describedby={`${id}-hint`}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+        </span>
+      </label>
+    </li>
+  );
+}
 
 function Row({
   icon,
@@ -110,6 +162,26 @@ export function SettingsScreen(props: SettingsScreenProps) {
           value={t(FILL_LANGUAGE_LABELS[appState.fillLanguage])}
           onClick={() => setSheet('fill')}
         />
+        <Row
+          icon="bell"
+          label={t('m.remind.title')}
+          value={t(reminderValueKey(appState.reminders), { time: appState.reminders.time })}
+          onClick={() => setSheet('reminders')}
+        />
+        {props.clipboardAvailable ? (
+          <SwitchRow
+            icon="clipboard"
+            label={t('m.clip.setting')}
+            hint={t('m.clip.settingHint')}
+            checked={appState.clipboard.offer}
+            onChange={(offer) => {
+              void updateAppState((s) => ({ ...s, clipboard: { ...s.clipboard, offer } })).then((ok) => {
+                if (!ok) showToast({ text: t('m.saveStateFailed') });
+              });
+            }}
+          />
+        ) : null}
+        {props.browserRole ? <Row icon="signpost-split" label={t('m.links.row')} value={t('m.links.rowHint')} onClick={() => setSheet('links')} /> : null}
       </ul>
 
       <h2 className="m-section-title">{t('m.settings.data')}</h2>
@@ -143,6 +215,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
         onClose={close}
         profile={profile}
         readStoredProfile={props.readStoredProfile}
+        appState={appState}
         saveDocument={props.saveDocument}
         showToast={showToast}
       />
@@ -155,11 +228,21 @@ export function SettingsScreen(props: SettingsScreenProps) {
         onClose={close}
         profile={profile}
         files={props.files}
-        recentCount={appState.recentPages.length}
+        recordCount={appState.applications.length}
         onExportFirst={() => setSheet('export')}
         onWipe={props.onWipe}
       />
       <AboutSheet open={sheet === 'about'} onClose={close} appInfo={props.appInfo} />
+      <ReminderSettingsSheet
+        open={sheet === 'reminders'}
+        onClose={close}
+        appState={appState}
+        updateAppState={updateAppState}
+        reminders={props.reminders ?? null}
+        showToast={showToast}
+        syncFailed={props.reminderSyncFailed}
+      />
+      {props.browserRole ? <OpenLinksSheet open={sheet === 'links'} onClose={close} browserRole={props.browserRole} showToast={showToast} /> : null}
     </>
   );
 }

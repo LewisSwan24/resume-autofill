@@ -35,6 +35,7 @@ import { buildReportModel, type ReportRow } from './model/reportModel';
 import { sampleFor } from './model/sampleResume';
 import type { Insets, NativeTheme } from './native';
 import { PageErrorView } from './PageErrorView';
+import type { BrowserRolePlugin } from '../native/browserRole';
 import { PageInfoSheet } from './PageInfoSheet';
 import { ReportSheet } from './ReportSheet';
 import { ResumeChoiceSheet, type ResumePick } from './ResumeChoiceSheet';
@@ -61,6 +62,8 @@ export interface BrowserScreenProps {
   onGoToResume: () => void;
   /** The app-wide toast, for what must outlive the browser screen. */
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  /** 「用系统浏览器打开」 in page info; absent in the browser preview and in older callers. */
+  browserRole?: Pick<BrowserRolePlugin, 'openInOtherBrowser'> | null;
 }
 
 type LocalSheet = 'report' | 'resume' | 'pageInfo' | null;
@@ -89,6 +92,7 @@ export function BrowserScreen({
   handleRef,
   onClose,
   onGoToResume,
+  browserRole = null,
 }: BrowserScreenProps) {
   const t = useMT();
   const { session, state, native } = open;
@@ -366,6 +370,16 @@ export function BrowserScreen({
     },
     [say, t],
   );
+  const openElsewhere = useCallback(async () => {
+    if (!browserRole) return;
+    setSheet(null);
+    try {
+      const { opened } = await browserRole.openInOtherBrowser({ url: state.url, title: t('m.br.openElsewhere') });
+      if (!opened) say({ text: t('m.br.noOtherBrowser') });
+    } catch {
+      say({ text: t('m.br.noOtherBrowser') });
+    }
+  }, [browserRole, state.url, say, t]);
   const openSystem = useCallback(async () => {
     try {
       const { opened } = await native.openExternal({ url: state.url });
@@ -492,6 +506,7 @@ export function BrowserScreen({
             isolated={state.isolated}
             onCopy={() => void copy(state.url)}
             onOpenSystem={() => void openSystem()}
+            onOpenElsewhere={browserRole ? () => void openElsewhere() : undefined}
             onReload={() => {
               setSheet(null);
               session.reloadOrStop();

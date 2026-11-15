@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static launcher shortcuts. They carry an action only: no URL, no record, nothing of the person's. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+  <shortcut android:shortcutId="paste" android:enabled="true" android:icon="@drawable/ic_shortcut_paste"
+      android:shortcutShortLabel="@string/shortcut_paste_short" android:shortcutLongLabel="@string/shortcut_paste_long">
+    <intent android:action="app.raf.dev.action.PASTE_LINK"
+        android:targetPackage="app.raf.dev" android:targetClass="app.raf.dev.ShortcutActivity" />
+  </shortcut>
+  <shortcut android:shortcutId="demo" android:enabled="true" android:icon="@drawable/ic_shortcut_demo"
+      android:shortcutShortLabel="@string/shortcut_demo_short" android:shortcutLongLabel="@string/shortcut_demo_long">
+    <intent android:action="app.raf.dev.action.OPEN_DEMO"
+        android:targetPackage="app.raf.dev" android:targetClass="app.raf.dev.ShortcutActivity" />
+  </shortcut>
+</shortcuts>

@@ -1,4 +1,4 @@
-// Delete everything on this phone: names what goes (resume titles, file count, recent pages, settings) before the
+// Delete everything on this phone: names what goes (resume titles, file count, 网申 records, settings) before the
 // one danger button. The wipe itself is App's (flush, wipe, remount); this sheet only asks and shows progress.
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../../../src/i18n';
@@ -17,7 +17,8 @@ export interface DeleteAllSheetProps {
   /** The stored profile cannot be read: it is still on the phone and is deleted too. */
   loadError?: string | null;
   files: FileStore;
-  recentCount: number;
+  /** 网申 records on the phone (their reminders go with them). */
+  recordCount: number;
   onExportFirst: () => void;
   onWipe: () => Promise<boolean>;
 }
@@ -31,7 +32,7 @@ export function DeleteAllSheet(props: DeleteAllSheetProps) {
   );
 }
 
-function DeleteAllBody({ onClose, profile, loadError, files, recentCount, onExportFirst, onWipe }: DeleteAllSheetProps) {
+function DeleteAllBody({ onClose, profile, loadError, files, recordCount, onExportFirst, onWipe }: DeleteAllSheetProps) {
   const t = useMT();
   const language = useLanguage();
   const [fileCount, setFileCount] = useState<number | null>(null);
@@ -78,7 +79,7 @@ function DeleteAllBody({ onClose, profile, loadError, files, recentCount, onExpo
       <ul className="m-sheet-list">
         <li>{resumeLine}</li>
         {fileCount !== null ? <li>{t('m.wipe.files', { n: fileCount })}</li> : null}
-        <li>{t('m.wipe.recent', { n: recentCount })}</li>
+        <li>{t('m.wipe.records', { n: recordCount })}</li>
         <li>{t('m.wipe.settings')}</li>
       </ul>
       <Notice tone="danger" icon="exclamation-triangle">

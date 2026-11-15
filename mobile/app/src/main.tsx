@@ -1,7 +1,9 @@
 // Entry of the mobile app's web UI. Wires the app to the phone: the encrypted ProfileVault stores, the wipe (which also
 // clears the fill browser's site data), the "create document" saver, files handed over by other apps (open with /
-// share), the native fill browser, app info and the Android back key / pause events on a device; localStorage,
-// IndexedDB, downloads and page visibility when previewed in a desktop browser (no fill browser there).
+// share), the native fill browser, app info and the Android back key / pause events on a device; links, shared text
+// and launcher shortcuts (IncomingIntent), the clipboard offer, deadline reminders, launcher shortcuts and the
+// browser role; localStorage, IndexedDB, downloads and page visibility when previewed in a desktop
+// browser (none of the phone-only plugins there).
 import './fonts.css';
 import '../../../src/ui/theme.css';
 import './styles.css';
@@ -11,6 +13,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App, { withSiteDataClear, type Platform } from './App';
 import { createNativeFillBrowser } from './browser/native';
+import { createNativeShortcuts } from './native/appShortcuts';
+import { createNativeBrowserRole } from './native/browserRole';
+import { createNativeClipboardPeek } from './native/clipboardPeek';
+import { createNativeIncomingIntent } from './native/incomingIntent';
+import { createNativeReminders } from './native/reminders';
 import { createNativeIncomingSource, type IncomingFilePlugin } from './resumeImport/incoming';
 import { createLocalStorageAppStateStore, createVaultAppStateStore, type AppStateVaultPlugin } from './store/appStateStore';
 import { createIndexedDbFileStore, createVaultFileStore, toBase64, type FileVaultPlugin } from './store/fileStore';
@@ -93,6 +100,16 @@ const platform: Platform = {
   },
   incoming: incomingPlugin ? createNativeIncomingSource(incomingPlugin) : undefined,
   ...(fillBrowser ? { fillBrowser } : {}),
+  // On a phone only; the browser preview gets none of them, and App hides what needs them.
+  ...(native
+    ? {
+        incomingIntent: createNativeIncomingIntent(),
+        clipboard: createNativeClipboardPeek(),
+        reminders: createNativeReminders(),
+        shortcuts: createNativeShortcuts(),
+        browserRole: createNativeBrowserRole(),
+      }
+    : {}),
 };
 
 createRoot(document.getElementById('root')!).render(

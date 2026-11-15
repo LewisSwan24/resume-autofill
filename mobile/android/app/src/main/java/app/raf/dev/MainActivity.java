@@ -26,6 +26,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RemindersPlugin.class);
         registerPlugin(AppShortcutsPlugin.class);
         registerPlugin(BrowserRolePlugin.class);
+        registerPlugin(ResumeKeyboardPlugin.class);
         // The app survives the shared WebView renderer dying (see FillBrowserPlugin.crashListener).
         bridgeBuilder.addWebViewListener(FillBrowserPlugin.crashListener(this));
         incomingHandled = savedInstanceState != null && savedInstanceState.getBoolean(KEY_INCOMING_HANDLED);
@@ -38,7 +39,10 @@ public class MainActivity extends BridgeActivity {
         outState.putBoolean(KEY_INCOMING_HANDLED, incomingHandled);
     }
 
-    /** Back in front: the clipboard card may look at the clip's description (Android 10+ allows clipboard reads only now). */
+    /**
+     * Back in front: the clipboard card may look at the clip's description (Android 10+ allows clipboard reads only now),
+     * and the resume keyboard's status may have changed.
+     */
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
@@ -46,6 +50,11 @@ public class MainActivity extends BridgeActivity {
         PluginHandle handle = bridge.getPlugin("ClipboardPeek");
         if (handle != null && handle.getInstance() instanceof ClipboardPeekPlugin) {
             ((ClipboardPeekPlugin) handle.getInstance()).notifyFocus();
+        }
+        // Back from the system input-method settings or picker: the setup screen re-reads the keyboard's status.
+        PluginHandle keyboard = bridge.getPlugin("ResumeKeyboard");
+        if (keyboard != null && keyboard.getInstance() instanceof ResumeKeyboardPlugin) {
+            ((ResumeKeyboardPlugin) keyboard.getInstance()).notifyStateChange();
         }
     }
 }

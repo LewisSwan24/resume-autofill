@@ -3,6 +3,7 @@
 // fallback offers to load it here.
 import { Icon } from '../Icon';
 import { useMT } from '../i18n';
+import { KeyboardHint } from '../keyboard/KeyboardHint';
 import { DockedSheet } from './DockedSheet';
 import type { ExternalDecision } from './model/urlPolicy';
 
@@ -13,6 +14,8 @@ export interface ExternalLinkSheetProps {
   onOpen: () => void;
   onCopy: (url: string) => void;
   onClose: () => void;
+  /** Close the sheet and open the resume keyboard's setup screen; absent without the plugin (no hint then). */
+  onKeyboardSetup?: () => void;
 }
 
 const ASK = {
@@ -21,7 +24,7 @@ const ASK = {
   sms: { title: 'm.br.ext.smsTitle', text: 'm.br.ext.smsText' },
 } as const;
 
-export function ExternalLinkSheet({ decision, onOpen, onCopy, onClose }: ExternalLinkSheetProps) {
+export function ExternalLinkSheet({ decision, onOpen, onCopy, onClose, onKeyboardSetup }: ExternalLinkSheetProps) {
   const t = useMT();
   const title = !decision
     ? ''
@@ -47,6 +50,7 @@ export function ExternalLinkSheet({ decision, onOpen, onCopy, onClose }: Externa
         <div className="m-sheet-stack">
           <p className="m-sheet-text">{t('m.br.ext.appText', { app: t(`m.br.ext.app.${decision.app ?? 'other'}`) })}</p>
           <p className="m-url">{decision.url}</p>
+          {decision.app === 'weixin' && onKeyboardSetup ? <KeyboardHint reason="wechat-scheme" onSetup={onKeyboardSetup} /> : null}
           <button type="button" className="m-button m-button--wide" onClick={() => onCopy(decision.url)}>
             <Icon name="copy" />
             <span>{t('m.br.copyLink')}</span>

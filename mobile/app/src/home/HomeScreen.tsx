@@ -38,6 +38,8 @@ export interface HomeScreenProps {
   pasteFocus?: PasteFocusRequest | null;
   readClipboard?: () => Promise<string | null>;
   onPasteFocusDone?: () => void;
+  /** The resume keyboard's setup screen, for the WeChat hint under the paste box; absent without the plugin. */
+  onKeyboardSetup?: () => void;
   now?: () => number;
 }
 
@@ -58,6 +60,7 @@ export function HomeScreen({
   pasteFocus,
   readClipboard,
   onPasteFocusDone,
+  onKeyboardSetup,
 }: HomeScreenProps) {
   const t = useMT();
   return (
@@ -88,6 +91,7 @@ export function HomeScreen({
         focusRequest={pasteFocus ?? null}
         readClipboard={readClipboard}
         onFocusDone={onPasteFocusDone}
+        onKeyboardSetup={onKeyboardSetup}
       />
       <div className="m-home-demo">
         <button

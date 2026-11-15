@@ -23,6 +23,7 @@ const V2_DEFAULTS = {
   applications: [],
   reminders: { time: '09:00', dayBefore: true, dayOf: true, defaultOn: false },
   clipboard: { offer: true, lastStamp: null, dismissed: [] },
+  keyboard: { show: true, hidden: [] },
 };
 
 /** Every field set: a record with deadline, notes and history; non-default reminders and clipboard. */

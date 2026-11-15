@@ -212,3 +212,32 @@ describe('navReduce: the 网申 tab', () => {
     expect(closed).toMatchObject({ tab: 'applications', browser: null, tracker: { applicationId: 'rec-1' } });
   });
 });
+
+describe('navReduce: the resume keyboard', () => {
+  const target = { url: 'https://jobs.example.com/a', demo: false };
+
+  it('keyboardSetup opens Settings › 简历输入法', () => {
+    const s = navReduce(at({ tab: 'home' }), { type: 'keyboardSetup' });
+    expect(s).toMatchObject({ tab: 'settings', settingsPage: 'keyboard', browser: null });
+    expect(navReduce(INITIAL_NAV, { type: 'settingsPage', page: 'keyboard' }).settingsPage).toBe('keyboard');
+  });
+
+  it('from an open fill browser it hides the page behind the tabs, so the return pill shows', () => {
+    let s = navReduce(INITIAL_NAV, { type: 'openBrowser', target: { ...target, source: 'paste' } });
+    s = navReduce(s, { type: 'keyboardSetup' });
+    expect(s).toMatchObject({ tab: 'settings', settingsPage: 'keyboard', browser: { target, hidden: true, returnTo: 'home' } });
+    s = navReduce(s, { type: 'showBrowser' });
+    expect(s.browser?.hidden).toBe(false);
+  });
+
+  it('back from the setup screen goes to the Settings root, then home', () => {
+    const setup = at({ tab: 'settings', settingsPage: 'keyboard' });
+    const root = backFrom(setup, false);
+    expect(root).toMatchObject({ tab: 'settings', settingsPage: 'root' });
+    expect(backFrom(root!, false)).toMatchObject({ tab: 'home' });
+  });
+
+  it('tapping 设置 on the setup screen returns to the Settings root', () => {
+    expect(navReduce(at({ tab: 'settings', settingsPage: 'keyboard' }), { type: 'tab', tab: 'settings' }).settingsPage).toBe('root');
+  });
+});

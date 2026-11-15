@@ -11,6 +11,8 @@ import { BackStackContext, Toast, createBackStack, type ToastMessage } from '../
 import { useAppState } from '../../../mobile/app/src/useAppState';
 import { createFakeBrowserRole, type FakeBrowserRole } from '../../../mobile/app/src/native/browserRole';
 import type { SettingsPage } from '../../../mobile/app/src/navigation';
+import { createFakeResumeKeyboard, type KeyboardStatus } from '../../../mobile/app/src/native/resumeKeyboard';
+import type { KeyboardProps } from '../../../mobile/app/src/keyboard/KeyboardSetupScreen';
 import { parseProfileJson } from '../../../src/editor';
 import { setLanguage, useLanguage, type Language } from '../../../src/i18n';
 import { ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
@@ -40,6 +42,7 @@ interface Fakes {
   clearSiteData?: () => Promise<void>;
   clipboardAvailable?: boolean;
   browserRole?: FakeBrowserRole | null;
+  keyboard?: KeyboardProps | null;
 }
 
 let store: AppStateStore;
@@ -97,6 +100,7 @@ async function renderSettings(f: Fakes = {}) {
       clearSiteData={f.clearSiteData}
       clipboardAvailable={f.clipboardAvailable}
       browserRole={f.browserRole ?? null}
+      keyboard={f.keyboard ?? null}
     />,
   );
   await screen.findByRole('heading', { level: 1, name: f.title ?? '设置' });
@@ -566,5 +570,69 @@ describe('Settings: ways in', () => {
     fireEvent.click(within(screen.getByRole('dialog', { name: '截止提醒' })).getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('switch', { name: '发现刚复制的链接' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^用本 App 打开网申链接/ })).toBeNull();
+  });
+});
+
+describe('Settings: the resume keyboard', () => {
+  const kbProps = (status: KeyboardStatus | null, extra: Partial<KeyboardProps> = {}): KeyboardProps => ({
+    native: createFakeResumeKeyboard(status ?? {}),
+    status,
+    error: false,
+    refresh: async () => undefined,
+    syncFailed: false,
+    ...extra,
+  });
+
+  it('no row without the plugin', async () => {
+    await renderSettings({ clipboardAvailable: true, browserRole: createFakeBrowserRole() });
+    expect(screen.queryByRole('button', { name: /^简历输入法/ })).toBeNull();
+  });
+
+  it('the row sits after 用本 App 打开网申链接 and reads the status', async () => {
+    await renderSettings({ clipboardAvailable: true, browserRole: createFakeBrowserRole(), keyboard: kbProps({ available: true, enabled: true, current: true }) });
+    const general = screen.getAllByRole('list')[0]!;
+    const names = within(general).getAllByRole('listitem').map((li) => li.textContent ?? '');
+    expect(names.findIndex((n) => n.includes('简历输入法'))).toBe(names.findIndex((n) => n.includes('用本 App 打开网申链接')) + 1);
+    const row = screen.getByRole('button', { name: /^简历输入法/ });
+    expect(row.querySelector('svg')?.getAttribute('data-icon')).toBe('keyboard');
+    expect(within(row).getByText('正在使用')).toBeTruthy();
+  });
+
+  it('the row value follows the state: checking, off, on', async () => {
+    await renderSettings({ keyboard: kbProps(null) });
+    expect(within(screen.getByRole('button', { name: /^简历输入法/ })).getByText('正在查看…')).toBeTruthy();
+    cleanup();
+    await renderSettings({ keyboard: kbProps({ available: true, enabled: false, current: false }) });
+    expect(within(screen.getByRole('button', { name: /^简历输入法/ })).getByText('还没启用')).toBeTruthy();
+    cleanup();
+    await renderSettings({ keyboard: kbProps({ available: true, enabled: true, current: false }) });
+    expect(within(screen.getByRole('button', { name: /^简历输入法/ })).getByText('已启用')).toBeTruthy();
+  });
+
+  it('the row opens the setup page; back returns to the Settings root', async () => {
+    await renderSettings({ keyboard: kbProps({ available: true, enabled: false, current: false }, { syncFailed: true }) });
+    fireEvent.click(screen.getByRole('button', { name: /^简历输入法/ }));
+    expect(await screen.findByRole('heading', { level: 1, name: '简历输入法' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '去系统设置启用' })).toBeTruthy();
+    expect(screen.getByText('输入法里的简历没能更新，下次修改时会再试。')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '设置' })).toBeTruthy();
+  });
+
+  it('the setup page writes keyboard.show to the stored state', async () => {
+    await renderSettings({ keyboard: kbProps({ available: true, enabled: true, current: false }) });
+    fireEvent.click(screen.getByRole('button', { name: /^简历输入法/ }));
+    fireEvent.click(await screen.findByRole('switch', { name: '在输入法里显示简历' }));
+    await waitFor(async () => expect((await store.load())!.keyboard.show).toBe(false));
+  });
+
+  it('the privacy page says what the keyboard keeps and when it is deleted', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: /^隐私说明/ }));
+    await screen.findByRole('heading', { level: 1, name: '隐私说明' });
+    const upload = screen.getByRole('heading', { level: 2, name: '不上传' }).closest('section')!;
+    const paragraphs = within(upload).getAllByText((_, el) => el?.tagName === 'P').map((p) => p.textContent ?? '');
+    expect(paragraphs.at(-1)).toMatch(/^简历输入法读的是这台手机上专门为输入法准备的一份精简简历/);
+    expect(paragraphs.findIndex((p) => p.startsWith('截止提醒由手机系统按时发出'))).toBe(paragraphs.length - 2);
   });
 });

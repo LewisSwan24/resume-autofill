@@ -19,6 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 
+import app.raf.dev.keyboard.KeyboardDataStore;
+
 /**
  * The resume profile on the phone: one JSON string, encrypted with AES-256-GCM under a key that lives in the
  * Android Keystore and never leaves it. Written atomically to the app's private files folder (excluded from backup
@@ -33,7 +35,8 @@ import java.util.regex.Pattern;
  *
  * App state (onboarding, fill language, recent application pages) is one more JSON string in {@code state.enc},
  * sealed the same way under the same key. {@link #wipe} deletes all of it and the key itself, together with the
- * deadline reminders (alarms, reminders.enc, posted notifications) and the launcher shortcuts.
+ * deadline reminders (alarms, reminders.enc, posted notifications), the launcher shortcuts and the resume keyboard's
+ * keyboard.enc.
  *
  * The sealing itself lives in {@link VaultCrypto} (file layout described there).
  */
@@ -158,9 +161,12 @@ public class ProfileVaultPlugin extends Plugin {
                     for (File f : found) f.delete();
                 }
                 dir.delete();
+                // The resume keyboard's projection, before the key: under the same lock as its writes.
+                synchronized (VaultCrypto.FILES_LOCK) { KeyboardDataStore.delete(context); }
                 clean = VaultCrypto.deleteKey() && clean;
                 File[] left = dir.listFiles();
                 clean = clean
+                    && !KeyboardDataStore.exists(context)
                     && !ReminderStore.exists(context)
                     && !sealedExists(profileFile())
                     && !sealedExists(stateFile())

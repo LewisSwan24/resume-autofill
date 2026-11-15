@@ -23,6 +23,9 @@ import type { BrowserRolePlugin } from './native/browserRole';
 import type { ClipboardPeekPlugin } from './native/clipboardPeek';
 import type { IncomingIntentPlugin } from './native/incomingIntent';
 import type { RemindersPlugin } from './native/reminders';
+import type { ResumeKeyboardPlugin } from './native/resumeKeyboard';
+import { useKeyboardStatus } from './keyboard/useKeyboardStatus';
+import { useKeyboardSync } from './keyboard/useKeyboardSync';
 import { shortcutItemFor } from './shortcuts/shortcutList';
 import { useShortcutSync } from './shortcuts/useShortcutSync';
 import { ApplicationDetail } from './tracker/ApplicationDetail';
@@ -88,6 +91,8 @@ export interface Platform {
   shortcuts?: AppShortcutsPlugin;
   /** The default-browser role and 「用系统浏览器打开」. */
   browserRole?: BrowserRolePlugin;
+  /** Phone only: the resume keyboard (its state, the system settings and picker, its sealed copy). */
+  resumeKeyboard?: ResumeKeyboardPlugin;
 }
 
 /** Where a link in the app can come from (the BrowserSource values that open a real page). */
@@ -623,6 +628,56 @@ function AppContent({
   const syncedState = readOnly ? null : appState;
   const reminderSync = useReminderSync({ native: platform?.reminders ?? null, appState: syncedState, language, now });
 
+  // ------------------------------------------------------------ the resume keyboard
+  const keyboardNative = platform?.resumeKeyboard ?? null;
+  const keyboardStatus = useKeyboardStatus(keyboardNative);
+  /** True from the start of delete-all: the keyboard's copy is never written back while the wipe runs. */
+  const [keyboardWiping, setKeyboardWiping] = useState(false);
+  const keyboardWipingRef = useRef(false);
+  // The sync goes through this guard as well as `suspended`: a debounced write that fires before the re-render that
+  // suspends it must still not reach the phone once the wipe has started.
+  const keyboardSyncNative = useMemo<ResumeKeyboardPlugin | null>(
+    () =>
+      keyboardNative && {
+        status: () => keyboardNative.status(),
+        openInputMethodSettings: () => keyboardNative.openInputMethodSettings(),
+        showPicker: () => keyboardNative.showPicker(),
+        writeData: async (o) => {
+          if (!keyboardWipingRef.current) await keyboardNative.writeData(o);
+        },
+        clearData: () => keyboardNative.clearData(),
+        addListener: (event, listener) => keyboardNative.addListener(event, listener),
+      },
+    [keyboardNative],
+  );
+  const keyboardSync = useKeyboardSync({
+    native: keyboardSyncNative,
+    profile,
+    appState: syncedState,
+    language,
+    enabled: keyboardStatus.status?.enabled ?? null,
+    suspended: keyboardWiping,
+  });
+  const keyboardSettings = useMemo(
+    () =>
+      keyboardNative
+        ? {
+            native: keyboardNative,
+            status: keyboardStatus.status,
+            error: keyboardStatus.error,
+            refresh: keyboardStatus.refresh,
+            syncFailed: keyboardSync.lastError,
+          }
+        : null,
+    [keyboardNative, keyboardStatus.status, keyboardStatus.error, keyboardStatus.refresh, keyboardSync.lastError],
+  );
+  /** 「设置简历输入法」 from a WeChat hint: Settings › 简历输入法, an open page waiting behind the return pill. */
+  const keyboardSetup = useCallback(() => {
+    if (onboardingRef.current) void finishOnboarding();
+    dispatch({ type: 'keyboardSetup' });
+    scrollTop();
+  }, [finishOnboarding]);
+
   // ------------------------------------------------------------ ways in
   const records = appState?.applications;
   const recordIds = useMemo(() => new Set((records ?? []).map((r) => r.id)), [records]);
@@ -719,6 +774,8 @@ function AppContent({
   }, [readOnly, appToast]);
 
   const wipeAll = useCallback(async (): Promise<boolean> => {
+    keyboardWipingRef.current = true;
+    setKeyboardWiping(true);
     try {
       await editor.flush();
     } catch {
@@ -743,6 +800,9 @@ function AppContent({
     }
     dispatch({ type: 'reset' });
     onWiped(ok); // remounts this component, which reloads the profile and app state from storage
+    // The remounted content starts a fresh sync on the reloaded (empty) profile, which clears the keyboard's copy.
+    // This instance is going away, so its guard stays shut.
+    setKeyboardWiping(false);
     return ok;
   }, [editor.flush, wiper, onWiped]);
 
@@ -787,6 +847,7 @@ function AppContent({
         onGoToResume={goToResume}
         showToast={appToast}
         browserRole={platform?.browserRole ?? null}
+        onKeyboardSetup={keyboardNative ? keyboardSetup : undefined}
       />
     ) : null;
   const returnPill =
@@ -891,6 +952,7 @@ function AppContent({
           pasteFocus={nav.pasteFocus !== null ? { nonce: nav.pasteFocus, read: pasteReads.current } : null}
           readClipboard={platform?.clipboard ? async () => (await platform.clipboard!.readText()).text : undefined}
           onPasteFocusDone={() => dispatch({ type: 'pasteFocusDone' })}
+          onKeyboardSetup={keyboardNative ? keyboardSetup : undefined}
           now={now}
         />
       );
@@ -976,6 +1038,7 @@ function AppContent({
           browserRole={platform?.browserRole ?? null}
           reminders={platform?.reminders ?? null}
           reminderSyncFailed={reminderSync.lastError}
+          keyboard={keyboardSettings}
         />
       );
       break;

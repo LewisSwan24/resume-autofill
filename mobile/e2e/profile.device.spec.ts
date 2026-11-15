@@ -10,8 +10,12 @@
 // Ways in and the tracker: a VIEW link, shared text, launcher shortcuts and a copied link open pages and
 // become application records; a deadline reminder is scheduled, survives a simulated reboot and fires; export carries
 // the records; delete all clears records, reminders and shortcuts. Each checks the device log for private words.
+// The resume keyboard: the setup screen reads the state back; entries type into the app's practice field
+// and into a page; password and code fields show typing only; turning it off and delete all remove its file; it fits
+// at 200%, in landscape and in dark (screenshots for a human look). The cross-origin iframe tests answer the
+// 「资料也要交给其他网站吗？」 sheet both ways.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _android, chromium, expect, test, type AndroidDevice, type Browser, type Page } from '@playwright/test';
@@ -42,7 +46,10 @@ test.beforeAll(async () => {
   if (!serial.startsWith('emulator-') && process.env.RAF_ALLOW_WIPE !== '1') {
     throw new Error(`${serial} is not an emulator: these tests wipe the app's data. Set RAF_ALLOW_WIPE=1 to run anyway.`);
   }
-  const found = (await _android.devices()).find((d) => d.serial() === serial);
+  // `_android.devices()` reads and polls every device on the adb server. RAF_ADB_PORT points it at a filtering adb
+  // proxy instead, so a real phone plugged into the same computer is never queried.
+  const adbPort = Number(process.env.RAF_ADB_PORT ?? 0);
+  const found = (await _android.devices(adbPort ? { port: adbPort } : {})).find((d) => d.serial() === serial);
   if (!found) throw new Error(`adb device ${serial} not found`);
   device = found;
   await device.installApk(APK);
@@ -1164,9 +1171,8 @@ test('fill browser: the sample form fills, reports and undoes', async () => {
   await expectCleanLogcat();
 });
 
-test('fill browser: a cross-origin iframe checks in and gets filled', async () => {
-  await clearLogcat();
-  await startServer();
+/** A resume with 张三, an email, phone 13800000000 and one education entry at 示例大学, typed through the page. */
+async function sampleWithPhoneAndSchool(): Promise<Page> {
   const page = await freshResume();
   await fillSample(page);
   await openModule(page, CONTACT);
@@ -1179,23 +1185,47 @@ test('fill browser: a cross-origin iframe checks in and gets filled', async () =
   await page.getByLabel(zh('options.field.school'), { exact: true }).fill('示例大学');
   await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
   await backToList(page);
+  return page;
+}
 
+/** outer.html (127.0.0.1:4180) with its localhost:4181 frame, filled up to the 「资料也要交给其他网站吗？」 sheet. */
+async function fillUpToSitesSheet(): Promise<{ page: Page; outer: Page }> {
+  await clearLogcat();
+  await startServer();
+  const page = await sampleWithPhoneAndSchool();
   await openLink(page, 'http://127.0.0.1:4180/outer.html');
   const outer = await contentPage(page, 'http://127.0.0.1:4180/outer.html');
   await outer.locator('#name').waitFor();
   // Both frames counted before the tap: 2 fields outside, 2 in the iframe.
   await waitForFab(/可以填 4 项/);
   await tapFab();
+  // The frame is another site (localhost against 127.0.0.1): nothing goes to it before the person says so.
+  const sites = page.getByRole('dialog', { name: mzh('m.br.run.sites.title') });
+  await expect(sites).toBeVisible({ timeout: 60_000 });
+  await expect(sites.getByRole('listitem').filter({ hasText: /^localhost$/ })).toBeVisible();
+  return { page, outer };
+}
+
+const innerFrame = (outer: Page) => {
+  const inner = outer.frames().find((f) => f.url().startsWith('http://localhost:4181/inner.html'));
+  expect(inner, 'cross-origin iframe').toBeTruthy();
+  return inner!;
+};
+
+test('fill browser: a cross-origin iframe of another site is filled only after a yes', async () => {
+  const { page, outer } = await fillUpToSitesSheet();
+  await page.getByRole('dialog', { name: mzh('m.br.run.sites.title') }).getByRole('button', { name: mzh('m.br.run.sites.go'), exact: true }).click();
   const report = page.getByRole('dialog', { name: '填写报告' });
   await expect(report).toBeVisible({ timeout: 60_000 });
 
   await expect(outer.locator('#name')).toHaveValue('张三');
   await expect(outer.locator('#email')).toHaveValue('zhangsan@example.com');
-  const inner = outer.frames().find((f) => f.url().startsWith('http://localhost:4181/inner.html'));
-  expect(inner, 'cross-origin iframe').toBeTruthy();
-  await expect(inner!.locator('#phone')).toHaveValue('13800000000');
-  await expect(inner!.locator('#school')).toHaveValue('示例大学');
+  const inner = innerFrame(outer);
+  await expect(inner.locator('#phone')).toHaveValue('13800000000');
+  await expect(inner.locator('#school')).toHaveValue('示例大学');
+  await expect(report.getByText(mzh('m.br.report.otherSites', { hosts: 'localhost' }))).toBeVisible();
   await report.getByRole('tab', { name: /^已填 \d+$/ }).click();
+  await expect(report.getByRole('tab', { name: '已填 4' })).toBeVisible();
   await expect(report.getByRole('button', { name: '在网页上找到「手机」' })).toBeVisible();
   await expect(report.getByRole('button', { name: '在网页上找到「姓名」' })).toBeVisible();
 
@@ -1212,6 +1242,22 @@ test('fill browser: a cross-origin iframe checks in and gets filled', async () =
   await toTab(page, '网申');
   await expect(page.getByRole('main')).toContainText('外层示例页');
   await expect(page.getByRole('main')).toContainText('填写中');
+  await expectCleanLogcat();
+});
+
+test('fill browser: 只填本站 sends nothing to a frame of another site', async () => {
+  const { page, outer } = await fillUpToSitesSheet();
+  await page.getByRole('dialog', { name: mzh('m.br.run.sites.title') }).getByRole('button', { name: mzh('m.br.run.sites.own'), exact: true }).click();
+  const report = page.getByRole('dialog', { name: '填写报告' });
+  await expect(report).toBeVisible({ timeout: 60_000 });
+
+  await expect(outer.locator('#name')).toHaveValue('张三');
+  await expect(outer.locator('#email')).toHaveValue('zhangsan@example.com');
+  const inner = innerFrame(outer);
+  await expect(inner.locator('#phone')).toHaveValue('');
+  await expect(inner.locator('#school')).toHaveValue('');
+  await expect(report.getByText(/^也交给了这些网站：/)).toHaveCount(0);
+  await expect(report.getByRole('tab', { name: '已填 2' })).toBeVisible();
   await expectCleanLogcat();
 });
 
@@ -1241,7 +1287,9 @@ test('fill browser: external schemes are not followed', async () => {
   const app = page.getByRole('dialog', { name: '这个链接要打开别的 App' });
   await expect(app).toBeVisible();
   await expect(app).toContainText('微信');
-  await expect(app.locator('button:not([aria-label="关闭"])')).toHaveText(['复制链接']);
+  // A WeChat link also offers the resume keyboard; still nothing that opens the other app.
+  await expect(app).toContainText(mzh('m.kb.hint.title'));
+  await expect(app.locator('button:not([aria-label="关闭"])')).toHaveText([mzh('m.kb.hint.go'), '复制链接']);
   expect(await inFront()).toBe(true);
   await app.getByRole('button', { name: '关闭' }).click();
 
@@ -1724,5 +1772,460 @@ test('tracker: the new screens fit at 200% font; light and dark screenshots for 
   } finally {
     await device.shell('settings put system font_scale 1.0');
     await device.shell('cmd uimode night no');
+  }
+});
+
+// ---- The resume keyboard: setup read back, typing entries, sensitive fields, data off, fit ----
+
+const KB_ID = 'app.raf.dev/.keyboard.ResumeKeyboardService';
+const KB_PAGE = `http://127.0.0.1:${PORTS.outer}/keyboard.html`;
+/** What must never reach the device log while the keyboard works (the whole log, not only the chromium tags). */
+const KB_WORDS = ['张三', 'zhangsan@example.com', '13800000000', '示例大学'];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The input method in use before a test (restored in its finally). */
+async function previousIme(): Promise<string> {
+  return (await device.shell('settings get secure default_input_method')).toString().trim();
+}
+
+async function enableKeyboard() {
+  await device.shell(`ime enable ${KB_ID}`);
+  await device.shell(`ime set ${KB_ID}`);
+}
+
+/** Back to the keyboard the emulator had, and the resume keyboard disabled again, as the suite found it. */
+async function restoreIme(previous: string) {
+  if (previous && previous !== 'null' && previous !== KB_ID) await device.shell(`ime set ${previous}`);
+  await device.shell(`ime disable ${KB_ID}`);
+}
+
+/** Home key, then back to the app without a restart: the page becomes visible again and re-reads the keyboard state. */
+async function comeBack(page: Page) {
+  await device.shell('input keyevent KEYCODE_HOME');
+  await sleep(1000);
+  await device.shell(`am start -n ${PKG}/.MainActivity`);
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+}
+
+interface KbNode {
+  desc: string;
+  text: string;
+  clickable: boolean;
+  selected: boolean;
+  scrollable: boolean;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+function parseNodes(xml: string): KbNode[] {
+  const unescape = (s: string) =>
+    s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const nodes: KbNode[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    const attr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(match[0])?.[1] ?? '';
+    const bounds = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(attr('bounds'));
+    if (!bounds) continue;
+    const [x1, y1, x2, y2] = bounds.slice(1).map(Number) as [number, number, number, number];
+    nodes.push({
+      desc: unescape(attr('content-desc')),
+      text: unescape(attr('text')),
+      clickable: attr('clickable') === 'true',
+      selected: attr('selected') === 'true',
+      scrollable: attr('scrollable') === 'true',
+      x1,
+      y1,
+      x2,
+      y2,
+    });
+  }
+  return nodes;
+}
+
+/** The IME window's frame from the window manager, when the dump has no per-window wrapper. */
+async function imeFrame(): Promise<[number, number, number, number] | null> {
+  const out = (await device.shell('dumpsys window InputMethod')).toString('utf8');
+  const m = /\b(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(out);
+  return m ? (m.slice(1).map(Number) as [number, number, number, number]) : null;
+}
+
+/**
+ * The views of the input-method window: `uiautomator dump --windows` (API 33+) dumps every window, the IME's too.
+ * The keyboard and the app share a package, so the IME window is told apart by its window wrapper, or else by its
+ * frame from `dumpsys window`.
+ */
+async function kbNodes(): Promise<KbNode[]> {
+  const xml = (await device.shell('uiautomator dump --windows /sdcard/raf-kb.xml >/dev/null 2>&1; cat /sdcard/raf-kb.xml')).toString('utf8');
+  const windows = xml.split(/(?=<window\b)/).filter((part) => part.startsWith('<window'));
+  const ime = windows.filter((w) => /^<window\b[^>]*(INPUT_METHOD|InputMethod|type="2")/.test(w));
+  if (ime.length > 0) return parseNodes(ime.join(''));
+  const all = parseNodes(xml);
+  const frame = await imeFrame();
+  if (!frame) return all;
+  const [fx1, fy1, fx2, fy2] = frame;
+  return all.filter((n) => {
+    const cx = (n.x1 + n.x2) / 2;
+    const cy = (n.y1 + n.y2) / 2;
+    return cx >= fx1 && cx <= fx2 && cy >= fy1 && cy <= fy2;
+  });
+}
+
+const matches = (value: string, want: string | RegExp) => (typeof want === 'string' ? value === want : want.test(value));
+
+async function kbWait(match: (n: KbNode) => boolean, what: string, timeoutMs = 20_000): Promise<KbNode> {
+  const until = Date.now() + timeoutMs;
+  let seen: string[] = [];
+  while (Date.now() < until) {
+    const nodes = await kbNodes();
+    const node = nodes.find(match);
+    if (node) return node;
+    // Descriptions are labels only, never resume values, so they are safe to print.
+    seen = nodes.map((n) => n.desc).filter(Boolean);
+    await sleep(500);
+  }
+  throw new Error(`${what} not in the keyboard; descriptions seen: ${JSON.stringify(seen)}`);
+}
+
+/**
+ * Tap a view of the keyboard by its content description. Playwright's `device.tap({ desc })` needs its driver app,
+ * which this suite never installs (its UiAutomation connection would also lock out the `uiautomator dump` that the
+ * other tests use), so it is tried only with RAF_KB_DRIVER=1. Otherwise the IME window is read with
+ * `uiautomator dump --windows` and tapped at the centre with `input tap`.
+ */
+async function kbTap(desc: string | RegExp) {
+  if (process.env.RAF_KB_DRIVER === '1') {
+    try {
+      await device.tap({ desc }, { timeout: 5_000 });
+      return;
+    } catch {
+      // Not found by the driver: read the windows instead.
+    }
+  }
+  const node = await kbWait((n) => n.clickable && matches(n.desc || n.text, desc), `a view described ${String(desc)}`);
+  await device.shell(`input tap ${Math.round((node.x1 + node.x2) / 2)} ${Math.round((node.y1 + node.y2) / 2)}`);
+}
+
+/** A real touch on an element of a content page (a CDP click does not raise the on-screen keyboard). */
+async function touch(target: Page, selector: string) {
+  const el = target.locator(selector).first();
+  await el.scrollIntoViewIfNeeded();
+  const box = (await el.boundingBox())!;
+  const cdp = await target.context().newCDPSession(target);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 20), gestureSourceType: 'touch' });
+  await cdp.detach().catch(() => undefined);
+  await expect.poll(() => target.evaluate(() => document.activeElement?.id), { timeout: 10_000 }).toBe(selector.slice(1));
+}
+
+/** With no readable data the keyboard follows the system locale, so its empty title does too. */
+async function systemLocale(): Promise<string> {
+  return (await device.shell('getprop persist.sys.locale')).toString().trim();
+}
+
+async function emptyTitle(): Promise<string> {
+  return (await systemLocale()).startsWith('zh') ? '输入法里还没有简历' : 'No resume in the keyboard yet';
+}
+
+async function fileExists(name: string): Promise<boolean> {
+  return (await privateFiles()).includes(name);
+}
+
+async function fileBytes(name: string): Promise<Buffer> {
+  return device.shell(`run-as ${PKG} cat files/${name}`);
+}
+
+/** Nothing of the sample resume anywhere in the device log: every tag, the keyboard's own process included. */
+async function expectCleanWholeLogcat() {
+  const log = (await device.shell('logcat -d')).toString('utf8');
+  for (const word of KB_WORDS) expect(log.includes(word), `logcat holds ${word}`).toBe(false);
+}
+
+/** Settings › 简历输入法. */
+async function openKeyboardSetup(page: Page) {
+  await toTab(page, '设置');
+  await page.getByRole('button', { name: /^简历输入法/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '简历输入法' })).toBeVisible();
+}
+
+const kbStatus = (page: Page) => page.getByRole('status', { name: '当前状态' });
+
+/** The practice field, focused with a real touch so the keyboard comes up. */
+async function focusPractice(page: Page) {
+  const field = page.getByRole('textbox', { name: '试用输入框' });
+  await field.scrollIntoViewIfNeeded();
+  const box = (await field.boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + box.height / 2, gestureSourceType: 'touch' });
+  await cdp.detach().catch(() => undefined);
+  await expect(field).toBeFocused();
+  return field;
+}
+
+/** A resume with data, the keyboard enabled and in use, and the app told so (its copy written). */
+async function keyboardWithData(): Promise<Page> {
+  const page = await sampleWithPhoneAndSchool();
+  await enableKeyboard();
+  await comeBack(page);
+  await expect.poll(() => fileExists('keyboard.enc'), { timeout: 15_000, message: 'keyboard.enc written' }).toBe(true);
+  return page;
+}
+
+test('resume keyboard: the setup screen reads the state back: off, on, in use', async () => {
+  const previous = await previousIme();
+  try {
+    await device.shell(`ime disable ${KB_ID}`);
+    const page = await freshHome();
+    await openKeyboardSetup(page);
+    await expect(kbStatus(page)).toContainText('还没启用');
+    const go = page.getByRole('button', { name: '去系统设置启用', exact: true });
+    const before = page.getByText(/^启用时，安卓会提醒这个输入法/);
+    await expect(before).toBeVisible();
+    expect((await before.boundingBox())!.y, 'the explanation sits above the button').toBeLessThan((await go.boundingBox())!.y);
+    await expect(page.getByRole('list', { name: '简历输入法的做法' }).getByRole('listitem')).toHaveCount(4);
+
+    await go.click();
+    await expect
+      .poll(async () => (await device.shell('dumpsys activity activities | grep -i resumedactivity')).toString(), { timeout: 15_000 })
+      .toContain('com.android.settings');
+    await pressBack();
+    await expect.poll(() => inFront(), { timeout: 15_000 }).toBe(true);
+
+    await device.shell(`ime enable ${KB_ID}`);
+    await comeBack(page);
+    await expect(kbStatus(page)).toContainText('已启用，还没切换过去', { timeout: 15_000 });
+
+    await device.shell(`ime set ${KB_ID}`);
+    await comeBack(page);
+    await expect(kbStatus(page)).toContainText('正在使用简历输入法', { timeout: 15_000 });
+
+    // The picker shows the service's label in the system's language (kb_name: 简历输入法 / Resume keyboard).
+    const label = (await systemLocale()).startsWith('zh') ? '简历输入法' : 'Resume keyboard';
+    await page.getByRole('button', { name: '选择输入法', exact: true }).click();
+    const until = Date.now() + 15_000;
+    let picker = false;
+    while (!picker && Date.now() < until) {
+      picker = (await systemUiNodes()).some((n) => n.text === label);
+      if (!picker) await sleep(500);
+    }
+    expect(picker, `the system picker lists ${label}`).toBe(true);
+    await pressBack();
+    await expect.poll(() => inFront(), { timeout: 15_000 }).toBe(true);
+  } finally {
+    await restoreIme(previous);
+  }
+});
+
+test('resume keyboard: a module and an entry type into the practice field and into a page in the fill browser', async () => {
+  const previous = await previousIme();
+  await clearLogcat();
+  await startServer();
+  try {
+    const page = await sampleWithPhoneAndSchool();
+    // Nothing the keyboard does needs the network.
+    await airplane(true);
+    await enableKeyboard();
+    await comeBack(page);
+    await expect.poll(() => fileExists('keyboard.enc'), { timeout: 15_000, message: 'keyboard.enc written' }).toBe(true);
+    await openKeyboardSetup(page);
+    const field = await focusPractice(page);
+    await kbTap('基本信息');
+    await kbTap('姓名');
+    await expect(field).toHaveValue('张三');
+    await pressBack(); // hides the keyboard
+    await airplane(false);
+
+    await openLink(page, KB_PAGE);
+    const content = await contentPage(page, KB_PAGE);
+    await content.locator('#email').waitFor();
+    await touch(content, '#email');
+    await kbWait((n) => n.desc === '推荐' && n.selected, '推荐, selected');
+    await kbTap('邮箱');
+    await expect(content.locator('#email')).toHaveValue('zhangsan@example.com');
+
+    // A WebView hands the keyboard no placeholder (EditorInfo hintText and label are null, measured on the emulator),
+    // so a plain text field named only by 「学校」 gets no 推荐; the entry is reached through its group instead.
+    // FieldClassifierTest and EntryOrderTest cover the hint words for native fields that do pass a hint.
+    await touch(content, '#school');
+    await kbTap('教育');
+    // An entry of a repeated section is described with its place, 「第一段，学校」.
+    await kbTap(/(^|，)学校$/);
+    await expect(content.locator('#school')).toHaveValue('示例大学');
+
+    await touch(content, '#tel');
+    await kbWait((n) => n.desc === '推荐' && n.selected, '推荐, selected on a tel field');
+    await kbTap('手机号码');
+    await expect(content.locator('#tel')).toHaveValue('13800000000');
+    await expectCleanWholeLogcat();
+  } finally {
+    await airplane(false);
+    await restoreIme(previous);
+  }
+});
+
+test('resume keyboard: a password field and a code field show only typing; the switch key goes back to the previous keyboard', async () => {
+  const previous = await previousIme();
+  await clearLogcat();
+  await startServer();
+  try {
+    const page = await keyboardWithData();
+    await openLink(page, KB_PAGE);
+    const content = await contentPage(page, KB_PAGE);
+    await content.locator('#password').waitFor();
+
+    await touch(content, '#password');
+    await kbWait((n) => n.text === '密码框里不显示简历', 'the password banner');
+    const onPassword = await kbNodes();
+    for (const label of ['姓名', '邮箱', '基本信息']) expect(onPassword.some((n) => n.desc === label), `${label} on a password field`).toBe(false);
+    await kbTap('a');
+    await kbTap('b');
+    await expect.poll(() => content.locator('#password').inputValue()).toBe('ab');
+
+    // The 「像是要密码或验证码」 gate reads the field's hint, and a WebView passes none (hintText and label are null), so
+    // #code cannot be told apart from any text field here. KeyboardGateTest and FieldClassifierTest cover it; a native
+    // field with a hint is checked by hand.
+
+    await kbTap('切换到其他输入法');
+    await expect.poll(() => previousIme(), { timeout: 10_000 }).toBe(previous);
+    await expectCleanWholeLogcat();
+  } finally {
+    await restoreIme(previous);
+  }
+});
+
+test('resume keyboard: turning it off deletes its file; delete all leaves the keyboard empty', async () => {
+  const previous = await previousIme();
+  await clearLogcat();
+  try {
+    const page = await keyboardWithData();
+    const sealed = await fileBytes('keyboard.enc');
+    expect(sealed.length).toBeGreaterThan(0);
+    for (const word of ['张三', 'zhangsan@example.com']) {
+      expect(sealed.includes(Buffer.from(word, 'utf8')), `${word} in UTF-8`).toBe(false);
+      expect(sealed.includes(Buffer.from(word, 'utf16le')), `${word} in UTF-16LE`).toBe(false);
+    }
+
+    await openKeyboardSetup(page);
+    const show = page.getByRole('switch', { name: '在输入法里显示简历' });
+    await expect(show).toBeChecked();
+    await show.click();
+    await expect.poll(() => fileExists('keyboard.enc'), { timeout: 3_000, message: 'keyboard.enc removed' }).toBe(false);
+    const emptyNow = await emptyTitle();
+    await focusPractice(page);
+    await kbWait((n) => n.text === emptyNow, 'the empty state');
+    await pressBack(); // hides the keyboard
+    await show.click();
+    await expect.poll(() => fileExists('keyboard.enc'), { timeout: 10_000, message: 'keyboard.enc back' }).toBe(true);
+
+    await page.getByRole('button', { name: '返回' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '设置' })).toBeVisible();
+    await page.getByRole('button', { name: /^删除这台手机上的全部数据/ }).click();
+    await page.getByRole('dialog', { name: '删除全部数据？' }).getByRole('button', { name: '永久删除', exact: true }).click();
+    await expect(page.getByText(mzh('m.wipe.done'))).toBeVisible({ timeout: 15_000 });
+    expect(await fileExists('keyboard.enc'), 'keyboard.enc after delete all').toBe(false);
+    const left = await privateFiles();
+    expect(left).not.toContain('profile.enc');
+    // Onboarding may already have stored its fresh state under a new key; never the old data.
+    if (left.includes('state.enc')) expect((await fileBytes('state.enc')).includes(Buffer.from('zhangsan@example.com'))).toBe(false);
+
+    await expect(page.getByRole('heading', { level: 1, name: /^(你好，先说三件事|Hi! Three things first)$/ })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('radio', { name: '中' }).click();
+    await page.getByRole('button', { name: '跳过', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+    await openKeyboardSetup(page);
+    await focusPractice(page);
+    const empty = await emptyTitle();
+    await kbWait((n) => n.text === empty, 'the empty state after delete all');
+    expect(await fileExists('keyboard.enc')).toBe(false);
+    await pressBack();
+    await expectCleanWholeLogcat();
+  } finally {
+    await restoreIme(previous);
+  }
+});
+
+/** Host adb, as bytes (screencap is binary; hostAdb decodes text). Emulator serial only (see beforeAll). */
+function hostAdbBytes(...args: string[]): Buffer {
+  const serial = process.env.RAF_SERIAL!;
+  const sdk = process.env.ANDROID_HOME ?? path.join(process.env.LOCALAPPDATA ?? '', 'Android', 'Sdk');
+  const adb = existsSync(path.join(sdk, 'platform-tools', 'adb.exe')) ? path.join(sdk, 'platform-tools', 'adb.exe') : 'adb';
+  return execFileSync(adb, ['-s', serial, ...args], { maxBuffer: 64 * 1024 * 1024, timeout: 60_000 });
+}
+
+/** Every control of the keyboard is at least 48dp each way; single-character keys at least 48dp tall. */
+async function expectKeyboardTargets(where: string) {
+  const density = Number(/(?:Override|Physical) density: (\d+)/.exec((await device.shell('wm density')).toString())?.[1] ?? 160);
+  const dp = (px: number) => (px * 160) / density;
+  const all = await kbNodes();
+  const nodes = all.filter((n) => n.clickable && n.x2 > n.x1 && n.y2 > n.y1);
+  expect(nodes.length, `${where}: keyboard views found`).toBeGreaterThan(0);
+  // A row cut by the edge of a scrolling list is reported with its visible part only; it is measured once scrolled in.
+  const lists = all.filter((n) => n.scrollable);
+  const clipped = (n: KbNode) => lists.some((l) => n.x1 >= l.x1 && n.x2 <= l.x2 && (n.y1 <= l.y1 || n.y2 >= l.y2) && n.y1 >= l.y1 && n.y2 <= l.y2);
+  const small: string[] = [];
+  for (const n of nodes) {
+    if (clipped(n)) continue;
+    const label = n.desc || n.text;
+    const w = dp(n.x2 - n.x1);
+    const h = dp(n.y2 - n.y1);
+    // Single-character keys may be narrower than 48dp; the comma and period keys are named in words (kb_comma, kb_period).
+    const key = [...label].length === 1 || /^(逗号|句号|Comma|Period)$/.test(label);
+    if (h < 47.5 || (!key && w < 47.5)) small.push(`${label} ${w.toFixed(0)}x${h.toFixed(0)}dp`);
+  }
+  expect.soft(small, `${where}: keyboard targets under 48dp`).toEqual([]);
+  // The system draws its back and switch buttons in the IME window's bottom bar; nothing of ours may sit under them.
+  const isSystem = (n: KbNode) => /^(Back|Switch input method|返回|切换输入法)$/.test(n.desc);
+  const system = nodes.filter(isSystem);
+  const ours = nodes.filter((n) => !isSystem(n));
+  if (system.length > 0) {
+    const barTop = Math.min(...system.map((n) => n.y1));
+    const under = ours.filter((n) => n.y2 > barTop).map((n) => `${n.desc || n.text} bottom ${n.y2} > ${barTop}`);
+    expect(under, `${where}: keyboard views under the system's IME buttons`).toEqual([]);
+  }
+}
+
+test('resume keyboard: fits at 200% font, in landscape and in dark; screenshots for a human look', async () => {
+  const previous = await previousIme();
+  const rotation = (await device.shell('settings get system accelerometer_rotation')).toString().trim();
+  mkdirSync(RESULTS, { recursive: true });
+  try {
+    await keyboardWithData();
+    const looks: { name: 'light' | 'dark' | '200' | 'land'; setup: string[] }[] = [
+      { name: 'light', setup: ['cmd uimode night no', 'settings put system font_scale 1.0'] },
+      { name: 'dark', setup: ['cmd uimode night yes', 'settings put system font_scale 1.0'] },
+      { name: '200', setup: ['cmd uimode night no', 'settings put system font_scale 2.0'] },
+      { name: 'land', setup: ['settings put system font_scale 1.0', 'settings put system accelerometer_rotation 0', 'settings put system user_rotation 1'] },
+    ];
+    for (const look of looks) {
+      for (const command of look.setup) await device.shell(command);
+      // launch() force-stops the package, and Android then drops it as the current input method: choose it again.
+      const page = await launch();
+      await device.shell(`ime set ${KB_ID}`);
+      // Playwright emulates a light colour scheme on the pages it attaches to; let the page follow the system, as the
+      // review test does, and wait for the WebView to report it, so the app and the keyboard match in the screenshot.
+      await page.emulateMedia({ colorScheme: null });
+      await expect
+        .poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches), { timeout: 15_000 })
+        .toBe(look.name === 'dark');
+      await openKeyboardSetup(page);
+      await focusPractice(page);
+      await kbWait((n) => n.desc === '字母键盘', `${look.name}: the resume panel`);
+      await sleep(500);
+      await expectKeyboardTargets(`${look.name} resume panel`);
+      writeFileSync(path.join(RESULTS, `it5-kb-resume-${look.name}.png`), hostAdbBytes('exec-out', 'screencap', '-p'));
+      await kbTap('字母键盘');
+      await kbWait((n) => n.clickable && (n.desc || n.text) === '简历', `${look.name}: the typing panel`);
+      await sleep(500);
+      await expectKeyboardTargets(`${look.name} typing panel`);
+      writeFileSync(path.join(RESULTS, `it5-kb-typing-${look.name}.png`), hostAdbBytes('exec-out', 'screencap', '-p'));
+      await kbTap('简历');
+      await pressBack();
+    }
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+    await device.shell('settings put system user_rotation 0');
+    await device.shell(`settings put system accelerometer_rotation ${rotation === '0' ? '0' : '1'}`);
+    await restoreIme(previous);
   }
 });

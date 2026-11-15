@@ -64,6 +64,20 @@ textarea {
   padding: max(16px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom));
 }
 
+/* The status bar is drawn over the app (edge to edge): a strip of the page colour keeps scrolled text from running
+   under the clock and icons. Sheets and full-screen layers sit above it. */
+.m-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--raf-color-bg);
+  z-index: 3;
+  pointer-events: none;
+}
+
 .m-header {
   display: flex;
   align-items: center;
@@ -1187,6 +1201,15 @@ textarea {
 
 button.m-settings-row:active {
   background: var(--raf-color-surface-hover);
+}
+
+/* A row that leads nowhere for now (the keyboard's modules row while its data is off). */
+button.m-settings-row:disabled {
+  opacity: var(--raf-opacity-disabled);
+}
+
+button.m-settings-row:disabled:active {
+  background: none;
 }
 
 .m-settings-row__text {

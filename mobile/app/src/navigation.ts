@@ -6,7 +6,7 @@ import type { ModuleName } from '../../../src/editor';
 import type { ApplicationStatus } from './store/appStateStore';
 
 export type Tab = 'home' | 'applications' | 'resume' | 'settings';
-export type SettingsPage = 'root' | 'privacy';
+export type SettingsPage = 'root' | 'privacy' | 'keyboard';
 
 /** Where to put the cursor after a jump. */
 export interface FocusTarget {
@@ -104,6 +104,8 @@ export type NavAction =
   | { type: 'tracker'; patch: Partial<Omit<TrackerNav, 'applicationId'>> }
   | { type: 'pasteFocus' }
   | { type: 'pasteFocusDone' }
+  /** 「设置简历输入法」 from a WeChat hint: Settings › 简历输入法, an open page waiting behind the return pill. */
+  | { type: 'keyboardSetup' }
   | { type: 'reset' };
 
 let lastNonce = 0;
@@ -160,6 +162,13 @@ export function navReduce(state: NavState, action: NavAction): NavState {
       return { ...state, tab: 'home', pasteFocus: lastNonce };
     case 'pasteFocusDone':
       return state.pasteFocus === null ? state : { ...state, pasteFocus: null };
+    case 'keyboardSetup':
+      return {
+        ...state,
+        tab: 'settings',
+        settingsPage: 'keyboard',
+        browser: state.browser ? { ...state.browser, hidden: true } : null,
+      };
     case 'reset':
       return INITIAL_NAV;
   }
@@ -169,7 +178,7 @@ export function navReduce(state: NavState, action: NavAction): NavState {
 export function backFrom(state: NavState, onboarding: boolean): NavState | null {
   if (onboarding) return state.onboardingStep === 2 ? { ...state, onboardingStep: 1 } : null;
   if (state.tab === 'resume' && state.module) return { ...state, module: null, focus: null };
-  if (state.tab === 'settings' && state.settingsPage === 'privacy') return { ...state, settingsPage: 'root' };
+  if (state.tab === 'settings' && state.settingsPage !== 'root') return { ...state, settingsPage: 'root' };
   if (state.tab === 'applications' && state.tracker.applicationId) return { ...state, tracker: { ...state.tracker, applicationId: null } };
   if (state.tab !== 'home') return { ...state, tab: 'home' };
   return null;

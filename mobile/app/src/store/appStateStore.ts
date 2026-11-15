@@ -1,8 +1,9 @@
 // App state of the mobile app (version 2): onboarding, fill language, the application records (网申记录),
-// reminder and clipboard settings. Not resume content, but it says where the person applies, so on the device it is
-// encrypted like the profile (files/state.enc through the ProfileVault plugin). One contract, three backends: vault,
+// reminder, clipboard and resume keyboard settings. Not resume content, but it says where the person applies, so on
+// the device it is encrypted like the profile (files/state.enc through the ProfileVault plugin). One contract, three backends: vault,
 // localStorage (desktop browser preview) and memory (tests). Older versions are migrated on load (appStateMigrate).
 import { z } from 'zod';
+import { KEYBOARD_GROUP_IDS } from '../keyboard/keyboardData';
 import { migrateAppState } from './appStateMigrate';
 
 // Legacy v1 types live with the migration (no import cycle at load time); re-exported for the legacy helpers.
@@ -74,6 +75,12 @@ export const ClipboardSettingsSchema = z.object({
   lastStamp: z.number().int().nonnegative().nullable().default(null),
   dismissed: z.array(z.string().regex(/^[0-9a-f]{32}$/)).max(DISMISSED_MAX).default([]),
 });
+/** The resume keyboard: 「在输入法里显示简历」 and the groups hidden from it. Belongs to this
+ *  phone, so it is never exported. An unknown group id drops the whole list (catch), never the state. */
+export const KeyboardSettingsSchema = z.object({
+  show: z.boolean().default(true),
+  hidden: z.array(z.enum(KEYBOARD_GROUP_IDS)).max(KEYBOARD_GROUP_IDS.length).default([]).catch([]),
+});
 export const AppStateSchema = z.object({
   version: z.literal(2),
   onboardingDone: z.boolean().default(false),
@@ -81,6 +88,7 @@ export const AppStateSchema = z.object({
   applications: z.array(ApplicationRecordSchema).max(APPLICATIONS_MAX).default([]),
   reminders: ReminderSettingsSchema.prefault({}),
   clipboard: ClipboardSettingsSchema.prefault({}),
+  keyboard: KeyboardSettingsSchema.prefault({}),
 });
 
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
@@ -89,6 +97,7 @@ export type FillEntry = z.infer<typeof FillEntrySchema>;
 export type Deadline = z.infer<typeof DeadlineSchema>;
 export type ReminderSettings = z.infer<typeof ReminderSettingsSchema>;
 export type ClipboardSettings = z.infer<typeof ClipboardSettingsSchema>;
+export type KeyboardSettings = z.infer<typeof KeyboardSettingsSchema>;
 export type AppState = z.infer<typeof AppStateSchema>;
 export type FillLanguage = AppState['fillLanguage'];
 export type { AppStateV1 } from './appStateMigrate';

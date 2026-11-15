@@ -18,6 +18,7 @@ import { createNativeBrowserRole } from './native/browserRole';
 import { createNativeClipboardPeek } from './native/clipboardPeek';
 import { createNativeIncomingIntent } from './native/incomingIntent';
 import { createNativeReminders } from './native/reminders';
+import { createNativeResumeKeyboard } from './native/resumeKeyboard';
 import { createNativeIncomingSource, type IncomingFilePlugin } from './resumeImport/incoming';
 import { createLocalStorageAppStateStore, createVaultAppStateStore, type AppStateVaultPlugin } from './store/appStateStore';
 import { createIndexedDbFileStore, createVaultFileStore, toBase64, type FileVaultPlugin } from './store/fileStore';
@@ -108,6 +109,8 @@ const platform: Platform = {
         reminders: createNativeReminders(),
         shortcuts: createNativeShortcuts(),
         browserRole: createNativeBrowserRole(),
+        // The resume keyboard (status, system settings, picker, its sealed copy of the resume).
+        resumeKeyboard: createNativeResumeKeyboard(),
       }
     : {}),
 };

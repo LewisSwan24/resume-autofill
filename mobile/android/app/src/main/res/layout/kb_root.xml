@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The resume keyboard's shell. The bar, the panels and the keys are built in code by KeyboardRootView,
+     TopBarView, ResumePanelView, TypingPanelView and PickerPanelView, styled from the generated raf_color_* colours. -->
+<app.raf.dev.keyboard.KeyboardRootView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/kb_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/raf_color_bg"
+    android:orientation="vertical">
+
+    <app.raf.dev.keyboard.TopBarView
+        android:id="@+id/kb_top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/kb_bar_height"
+        android:orientation="horizontal" />
+
+    <TextView
+        android:id="@+id/kb_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="40dp"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/raf_color_text_muted"
+        android:textSize="13sp"
+        android:fontFamily="@font/raf_lexend"
+        android:drawablePadding="8dp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/kb_tip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="@dimen/kb_side_padding"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/kb_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp" />
+</app.raf.dev.keyboard.KeyboardRootView>

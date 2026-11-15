@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The resume keyboard, portrait. -->
+<resources>
+    <dimen name="kb_panel_height">304dp</dimen>
+    <dimen name="kb_bar_height">48dp</dimen>
+    <dimen name="kb_strip_height">48dp</dimen>
+    <dimen name="kb_key_min_height">52dp</dimen>
+    <dimen name="kb_key_gap">4dp</dimen>
+    <dimen name="kb_row_min_height">48dp</dimen>
+    <dimen name="kb_radius">8dp</dimen>
+    <dimen name="kb_line">1dp</dimen>
+    <dimen name="kb_side_padding">4dp</dimen>
+    <dimen name="kb_icon">24dp</dimen>
+    <dimen name="kb_target">48dp</dimen>
+    <dimen name="kb_focus_line">2dp</dimen>
+</resources>

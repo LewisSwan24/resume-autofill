@@ -516,6 +516,141 @@ describe('privacy guards', () => {
     });
   });
 
+  describe('resume keyboard', () => {
+    const kbDir = join(javaDir, 'keyboard');
+    const kbFiles = () => (existsSync(kbDir) ? walk(kbDir, /\.java$/) : []);
+    const kbAt = (name: string) => readFileSync(join(kbDir, name), 'utf8');
+    const resDir = join(repo, 'mobile/android/app/src/main/res');
+
+    it('the manifest declares the keyboard in its own process, bound by the system, not direct-boot aware, with no new permission', () => {
+      const manifest = mainManifest();
+      const services = [...manifest.matchAll(/<service\b([^>]*)>([\s\S]*?)<\/service>/g)];
+      const kb = services.filter((m) => m[1]!.includes('android:name=".keyboard.ResumeKeyboardService"'));
+      expect(kb).toHaveLength(1);
+      const attrs = kb[0]![1]!;
+      const body = kb[0]![2]!;
+      expect(attrs).toContain('android:process=":keyboard"');
+      expect(attrs).toContain('android:permission="android.permission.BIND_INPUT_METHOD"');
+      expect(attrs).toContain('android:exported="true"');
+      expect(attrs).toContain('android:label="@string/kb_name"');
+      // No component is direct-boot aware (the words may appear in a comment explaining why).
+      expect(manifest.replace(/<!--[\s\S]*?-->/g, ' ')).not.toMatch(/directBootAware/);
+      expect(body).toMatch(/<action android:name="android\.view\.InputMethod"\s*\/>/);
+      expect(body).toMatch(/<meta-data android:name="android\.view\.im" android:resource="@xml\/method"\s*\/>/);
+      expect(permissionsOf(manifest)).toEqual(PERMISSIONS);
+      const method = readFileSync(join(resDir, 'xml/method.xml'), 'utf8').replace(/<!--[\s\S]*?-->/g, ' ');
+      expect(method).toMatch(/<input-method\b[^>]*android:supportsSwitchingToNextInputMethod="true"/);
+      expect(method).not.toMatch(/settingsActivity/);
+      const subtypes = [...method.matchAll(/<subtype\b([^>]*)\/>/g)].map((m) => m[1]!);
+      expect(subtypes).toHaveLength(1);
+      expect(subtypes[0]).toContain('android:imeSubtypeLocale="en_US"');
+      expect(subtypes[0]).toContain('android:imeSubtypeMode="keyboard"');
+      expect(subtypes[0]).toContain('android:isAsciiCapable="true"');
+      expect(subtypes[0]).toContain('android:label="@string/kb_subtype"');
+    });
+
+    it('nothing in keyboard/ logs, prints or dumps a stack trace', () => {
+      const names = kbFiles().map((f) => relative(kbDir, f));
+      expect(names).toEqual(expect.arrayContaining(['ResumeKeyboardService.java', 'KeyboardDataStore.java', 'EntryRowView.java']));
+      const banned = /\bandroid\.util\.Log\b|\bLog\.[deivwa]\w*\s*\(|\bSystem\.(out|err)\b|printStackTrace/;
+      expect(offenders(kbFiles(), banned)).toEqual([]);
+      expect(offenders([join(javaDir, 'ResumeKeyboardPlugin.java')], banned)).toEqual([]);
+    });
+
+    it('ResumeKeyboardPlugin rejects only with constant codes', () => {
+      const raw = javaAt('ResumeKeyboardPlugin.java');
+      expect(raw).toMatch(/@CapacitorPlugin\(\s*name\s*=\s*"ResumeKeyboard"\s*\)/);
+      const args = rejectArguments(raw);
+      expect(args.length).toBeGreaterThanOrEqual(3);
+      constantRejects('ResumeKeyboardPlugin.java', raw);
+      const codes = args.map((a) => /"(\w+)"\s*$/.exec(a.trim())?.[1]);
+      expect([...new Set(codes)].sort()).toEqual(['BAD_DATA', 'TOO_LARGE', 'WRITE_FAILED']);
+    });
+
+    it('writeData and clearData work synchronously under VaultCrypto.FILES_LOCK and write only through VaultCrypto', () => {
+      const source = code(javaAt('ResumeKeyboardPlugin.java'));
+      const write = bodyOf(source, 'public void writeData(');
+      const size = write.search(/MAX_BYTES/);
+      const parse = write.search(/KeyboardData\.parse\(/);
+      const lock = write.search(/synchronized\s*\(\s*VaultCrypto\.FILES_LOCK\s*\)/);
+      const seal = write.search(/VaultCrypto\.writeSealed\(\s*KeyboardDataStore\.file\(/);
+      expect(size).toBeGreaterThan(-1);
+      expect(parse).toBeGreaterThan(size);
+      expect(lock).toBeGreaterThan(parse);
+      expect(seal).toBeGreaterThan(lock);
+      // No background thread: the file work is done before the call resolves, so delete-all cannot race it.
+      expect(write).not.toMatch(/execute\(|submit\(|new Thread|post\(/);
+      const clear = bodyOf(source, 'public void clearData(');
+      expect(clear).toMatch(/synchronized\s*\(\s*VaultCrypto\.FILES_LOCK\s*\)[\s\S]*KeyboardDataStore\.delete\(/);
+      expect(source).not.toMatch(/\bFileOutputStream\b|\bFileWriter\b|\bRandomAccessFile\b|getSharedPreferences|\bFiles\.write\b/);
+      const store = code(kbAt('KeyboardDataStore.java'));
+      expect(kbAt('KeyboardDataStore.java')).toContain('"keyboard.enc"');
+      expect(store).toMatch(/MAX_BYTES\s*=\s*524288\s*;/);
+      expect(bodyOf(store, 'static void delete(')).toMatch(/synchronized\s*\(\s*VaultCrypto\.FILES_LOCK\s*\)[\s\S]*VaultCrypto\.deleteSealed\(/);
+      expect(store).toMatch(/VaultCrypto\.readSealedIfKeyExists\(/);
+      // The keyboard only ever reads, and never through a method that could create the key.
+      const used = new Set<string>();
+      for (const f of kbFiles()) for (const m of code(readFileSync(f, 'utf8')).matchAll(/VaultCrypto\.(\w+)/g)) used.add(m[1]!);
+      expect([...used].sort()).toEqual(['FILES_LOCK', 'deleteSealed', 'readSealedIfKeyExists', 'sealedExists']);
+      for (const f of kbFiles()) {
+        const c = code(readFileSync(f, 'utf8'));
+        expect(c, relative(kbDir, f)).not.toMatch(/\bFileOutputStream\b|\bFileWriter\b|\bRandomAccessFile\b|\bFiles\.write\b|openFileOutput/);
+      }
+    });
+
+    it('the keyboard stores one boolean in plain preferences: whether the Chinese tip was dismissed', () => {
+      const prefs: string[] = [];
+      for (const f of kbFiles()) {
+        const raw = code(readFileSync(f, 'utf8'));
+        for (const m of raw.matchAll(/getSharedPreferences\(([^)]*)\)/g)) prefs.push(m[1]!.trim());
+        for (const m of raw.matchAll(/\.put(\w+)\(\s*([^,]+),/g)) {
+          expect(`${m[1]} ${m[2]!.trim()}`, relative(kbDir, f)).toBe('Boolean PREF_TIP');
+        }
+      }
+      expect(prefs.length).toBeGreaterThan(0);
+      for (const p of prefs) expect(p).toMatch(/^PREFS\s*,\s*(?:Context\.)?MODE_PRIVATE$/);
+      const service = kbAt('ResumeKeyboardService.java');
+      expect(service).toMatch(/PREFS\s*=\s*"kb_prefs"/);
+      expect(service).toMatch(/PREF_TIP\s*=\s*"tipChineseSeen"/);
+    });
+
+    it('wipe deletes keyboard.enc under FILES_LOCK before the key, and checks it is gone', () => {
+      const wipe = code(bodyOf(javaAt('ProfileVaultPlugin.java'), 'public void wipe('));
+      const del = wipe.search(/synchronized\s*\(\s*VaultCrypto\.FILES_LOCK\s*\)\s*\{\s*KeyboardDataStore\.delete\(\s*context\s*\)/);
+      expect(del).toBeGreaterThan(-1);
+      expect(del).toBeLessThan(wipe.search(/VaultCrypto\.deleteKey\(/));
+      expect(wipe).toMatch(/!\s*KeyboardDataStore\.exists\(\s*context\s*\)/);
+    });
+
+    it('readSealedIfKeyExists never creates the key and reads only the base file', () => {
+      const crypto = code(javaAt('VaultCrypto.java'));
+      expect(crypto).toMatch(/static\s+final\s+Object\s+FILES_LOCK\s*=\s*new\s+Object\(\)\s*;/);
+      const read = bodyOf(crypto, 'static byte[] readSealedIfKeyExists(');
+      expect(read).not.toMatch(/\bkey\(\s*\)/);
+      expect(read).toMatch(/existingKey\(\s*\)/);
+      expect(read).toMatch(/new\s+FileInputStream\(/);
+      expect(read).not.toMatch(/AtomicFile|readFully|\.bak/);
+      const existing = bodyOf(crypto, 'private static SecretKey existingKey(');
+      expect(existing).not.toMatch(/KeyGenerator|generateKey|\bkey\(\s*\)/);
+    });
+
+    it('the service never goes fullscreen, never reads the field text, and hides the resume when locked', () => {
+      const service = code(kbAt('ResumeKeyboardService.java'));
+      expect(bodyOf(service, 'public boolean onEvaluateFullscreenMode(')).toMatch(/return\s+false\s*;/);
+      for (const f of kbFiles()) {
+        expect(code(readFileSync(f, 'utf8')), relative(kbDir, f)).not.toMatch(
+          /getTextBeforeCursor|getTextAfterCursor|getSelectedText|getSurroundingText|getExtractedText/,
+        );
+      }
+      expect(service).toMatch(/sendDownUpKeyEvents\(\s*KeyEvent\.KEYCODE_DEL\s*\)/);
+      expect(service).toMatch(/switchToPreviousInputMethod\(\s*\)/);
+      expect(service).toMatch(/showInputMethodPicker\(\s*\)/);
+      expect(service).toMatch(/isKeyguardLocked\(\s*\)/);
+      expect(service).toMatch(/isUserUnlocked\(\s*\)/);
+      expect(service).toMatch(/store\.forget\(\s*\)/);
+    });
+  });
+
   it('MainActivity saves only a boolean about the incoming file', () => {
     const raw = readFileSync(join(javaDir, 'MainActivity.java'), 'utf8');
     const source = code(raw);

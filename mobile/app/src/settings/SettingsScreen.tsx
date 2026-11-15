@@ -6,6 +6,7 @@ import type { Language } from '../../../../src/i18n';
 import type { Profile } from '../../../../src/schema';
 import { Icon, type IconName } from '../Icon';
 import { useMT } from '../i18n';
+import { KeyboardSetupScreen, type KeyboardProps } from '../keyboard/KeyboardSetupScreen';
 import type { SettingsPage } from '../navigation';
 import type { BrowserRolePlugin } from '../native/browserRole';
 import type { RemindersPlugin } from '../native/reminders';
@@ -52,6 +53,15 @@ export interface SettingsScreenProps {
   reminders?: RemindersPlugin | null;
   /** useReminderSync's lastError, shown in the reminder sheet. */
   reminderSyncFailed?: boolean;
+  /** The resume keyboard; absent in the browser preview, which hides 「简历输入法」. */
+  keyboard?: KeyboardProps | null;
+}
+
+/** The 简历输入法 row's value: the keyboard's state, or 正在查看… while unknown. */
+function keyboardRowKey(k: KeyboardProps): string {
+  if (!k.status) return 'm.kb.row.checking';
+  if (k.status.current) return 'm.kb.row.current';
+  return k.status.enabled ? 'm.kb.row.on' : 'm.kb.row.off';
 }
 
 /** 「09:00，前一天和当天」, or which day is on, or 不提醒. */
@@ -64,8 +74,9 @@ function reminderValueKey(r: AppState['reminders']): string {
 
 type OpenSheet = 'fill' | 'export' | 'siteData' | 'wipe' | 'about' | 'links' | 'reminders' | null;
 
-/** A setting that is on or off: a checkbox with role="switch", named by its label and described by its hint. */
-function SwitchRow({ icon, label, hint, checked, onChange }: { icon: IconName; label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+/** A setting that is on or off: a checkbox with role="switch", named by its label and described by its hint.
+ *  Exported for the resume keyboard's setup page. */
+export function SwitchRow({ icon, label, hint, checked, onChange }: { icon: IconName; label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
   const id = useId();
   return (
     <li>
@@ -95,12 +106,14 @@ function SwitchRow({ icon, label, hint, checked, onChange }: { icon: IconName; l
   );
 }
 
-function Row({
+/** A settings row: a button when it leads somewhere, else plain. Exported for the resume keyboard's setup page. */
+export function Row({
   icon,
   label,
   value,
   onClick,
   danger,
+  disabled,
   children,
 }: {
   icon: IconName;
@@ -108,6 +121,7 @@ function Row({
   value?: string;
   onClick?: () => void;
   danger?: boolean;
+  disabled?: boolean;
   children?: ReactNode;
 }) {
   const content = (
@@ -125,7 +139,7 @@ function Row({
   return (
     <li>
       {onClick ? (
-        <button type="button" className={className} onClick={onClick}>
+        <button type="button" className={className} onClick={onClick} disabled={disabled}>
           {content}
         </button>
       ) : (
@@ -142,6 +156,18 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const close = () => setSheet(null);
 
   if (page === 'privacy') return <PrivacyScreen onBack={() => onPage('root')} />;
+  if (page === 'keyboard') {
+    return (
+      <KeyboardSetupScreen
+        onBack={() => onPage('root')}
+        keyboard={props.keyboard ?? null}
+        profile={profile}
+        appState={appState}
+        updateAppState={updateAppState}
+        showToast={showToast}
+      />
+    );
+  }
 
   return (
     <>
@@ -182,6 +208,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
           />
         ) : null}
         {props.browserRole ? <Row icon="signpost-split" label={t('m.links.row')} value={t('m.links.rowHint')} onClick={() => setSheet('links')} /> : null}
+        {props.keyboard ? <Row icon="keyboard" label={t('m.kb.title')} value={t(keyboardRowKey(props.keyboard))} onClick={() => onPage('keyboard')} /> : null}
       </ul>
 
       <h2 className="m-section-title">{t('m.settings.data')}</h2>

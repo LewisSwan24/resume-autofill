@@ -85,6 +85,7 @@ import searchIcon from 'bootstrap-icons/icons/search.svg?raw';
 import pinAngle from 'bootstrap-icons/icons/pin-angle.svg?raw';
 import clockHistory from 'bootstrap-icons/icons/clock-history.svg?raw';
 import signpostSplit from 'bootstrap-icons/icons/signpost-split.svg?raw';
+import keyboardIcon from 'bootstrap-icons/icons/keyboard.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -179,6 +180,8 @@ const ICONS = {
   'pin-angle': pinAngle,
   'clock-history': clockHistory,
   'signpost-split': signpostSplit,
+  // The resume keyboard: the Settings row, the setup screen and the WeChat hint.
+  'keyboard': keyboardIcon,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

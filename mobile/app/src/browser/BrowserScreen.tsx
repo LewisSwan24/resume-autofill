@@ -64,6 +64,8 @@ export interface BrowserScreenProps {
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   /** 「用系统浏览器打开」 in page info; absent in the browser preview and in older callers. */
   browserRole?: Pick<BrowserRolePlugin, 'openInOtherBrowser'> | null;
+  /** The resume keyboard's setup screen, from the WeChat hint on the open-another-app sheet; absent without the plugin. */
+  onKeyboardSetup?: () => void;
 }
 
 type LocalSheet = 'report' | 'resume' | 'pageInfo' | null;
@@ -93,6 +95,7 @@ export function BrowserScreen({
   onClose,
   onGoToResume,
   browserRole = null,
+  onKeyboardSetup,
 }: BrowserScreenProps) {
   const t = useMT();
   const { session, state, native } = open;
@@ -544,6 +547,14 @@ export function BrowserScreen({
               session.dismissPending();
             }}
             onClose={() => session.dismissPending()}
+            onKeyboardSetup={
+              onKeyboardSetup
+                ? () => {
+                    session.dismissPending();
+                    onKeyboardSetup();
+                  }
+                : undefined
+            }
           />
           <DownloadSheet
             download={download}

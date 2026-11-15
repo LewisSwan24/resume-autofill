@@ -8,7 +8,8 @@ const SECTIONS: ReadonlyArray<{ id: string; icon: IconName; body: readonly strin
   // Where things live: the resume (encrypted) and, since the fill browser, the sites' own sign-ins (the WebView's).
   // The tracker and the launcher's shortcuts are stored too; the clipboard and reminders never go online.
   { id: 'where', icon: 'lock', body: ['m.privacy.where.body', 'm.privacy.tracker', 'm.privacy.shortcuts', 'm.privacy.browser'] },
-  { id: 'upload', icon: 'shield', body: ['m.privacy.upload.body', 'm.privacy.clipboard', 'm.privacy.reminders'] },
+  // The resume keyboard's slim copy, its own offline process, and when the copy goes.
+  { id: 'upload', icon: 'shield', body: ['m.privacy.upload.body', 'm.privacy.clipboard', 'm.privacy.reminders', 'm.privacy.keyboard'] },
   { id: 'submit', icon: 'send-slash', body: ['m.privacy.submit.body'] },
   { id: 'fill', icon: 'input-cursor-text', body: ['m.privacy.handOver'] },
   { id: 'export', icon: 'download', body: ['m.privacy.export.body'] },

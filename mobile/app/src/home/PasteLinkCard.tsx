@@ -1,8 +1,10 @@
 // Home, block B: paste an application link. While typing it says which site will open; errors wait for a submit.
 // A valid link is recorded in the tracker and opens in the fill browser (App's openLink). The 粘贴链接 launcher
 // shortcut focuses the box and, because the person asked to paste, fills it once from the clipboard (not opened).
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Icon } from '../Icon';
+import { KeyboardHint } from '../keyboard/KeyboardHint';
+import { wechatOnlyReason } from '../keyboard/wechatHint';
 import { useMT } from '../i18n';
 import { IconButton, type ToastMessage } from '../ui';
 import { parseApplicationLink, parseApplicationLinks, type ParsedLink, type PasteError } from './pasteLink';
@@ -18,6 +20,8 @@ export interface PasteLinkCardProps {
   /** ClipboardPeek.readText(): the text, or null. */
   readClipboard?: () => Promise<string | null>;
   onFocusDone?: () => void;
+  /** Opens the resume keyboard's setup screen; absent without the plugin, which hides the WeChat hint. */
+  onKeyboardSetup?: () => void;
 }
 
 export interface PasteFocusRequest {
@@ -27,7 +31,7 @@ export interface PasteFocusRequest {
 
 const canReadClipboard = () => typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
 
-export function PasteLinkCard({ onOpen, showToast, focusRequest, readClipboard, onFocusDone }: PasteLinkCardProps) {
+export function PasteLinkCard({ onOpen, showToast, focusRequest, readClipboard, onFocusDone, onKeyboardSetup }: PasteLinkCardProps) {
   const t = useMT();
   const id = useId();
   const liveId = `${id}-live`;
@@ -103,6 +107,8 @@ export function PasteLinkCard({ onOpen, showToast, focusRequest, readClipboard, 
   }, [requestNonce, requestRead]);
 
   const shown = preview?.ok ? preview : null;
+  // Live as the text changes; only links WeChat alone can open.
+  const wechat = useMemo(() => (onKeyboardSetup && value.trim() ? wechatOnlyReason(value) : null), [onKeyboardSetup, value]);
   return (
     <section className="m-card m-card--padded m-paste">
       <h2>
@@ -154,6 +160,7 @@ export function PasteLinkCard({ onOpen, showToast, focusRequest, readClipboard, 
             </>
           ) : null}
         </div>
+        {wechat && onKeyboardSetup ? <KeyboardHint reason={wechat} onSetup={onKeyboardSetup} /> : null}
       </form>
     </section>
   );

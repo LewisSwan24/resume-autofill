@@ -97,6 +97,20 @@
             android:name=".ChooserStreamProvider"
             android:authorities="${applicationId}.chooser"
             android:exported="false" />
+
+        <!-- The resume keyboard. Own process: no WebView or Capacitor is ever loaded there. Not
+             directBootAware: Android does not run it before the first unlock. No new uses-permission. -->
+        <service
+            android:name=".keyboard.ResumeKeyboardService"
+            android:label="@string/kb_name"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:process=":keyboard"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/method" />
+        </service>
     </application>
 
     <!-- Permissions -->

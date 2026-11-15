@@ -92,6 +92,8 @@ describe('ways-in and reminder plugins', () => {
     { name: 'Reminders', java: 'RemindersPlugin.java', ts: 'reminders.ts', methods: 'REMINDERS_METHODS', events: 'REMINDERS_EVENTS' },
     { name: 'AppShortcuts', java: 'AppShortcutsPlugin.java', ts: 'appShortcuts.ts', methods: 'SHORTCUTS_METHODS', events: 'SHORTCUTS_EVENTS' },
     { name: 'BrowserRole', java: 'BrowserRolePlugin.java', ts: 'browserRole.ts', methods: 'BROWSER_ROLE_METHODS', events: 'BROWSER_ROLE_EVENTS' },
+    // The resume keyboard.
+    { name: 'ResumeKeyboard', java: 'ResumeKeyboardPlugin.java', ts: 'resumeKeyboard.ts', methods: 'RESUME_KEYBOARD_METHODS', events: 'RESUME_KEYBOARD_EVENTS' },
   ] as const;
   const javaOf = (file: string) => {
     const path = join(javaDir, file);
@@ -128,9 +130,10 @@ describe('ways-in and reminder plugins', () => {
     }
     expect((await load('incomingIntent.ts')).INCOMING_INTENT_EVENTS).toEqual(['incomingIntent']);
     expect((await load('clipboardPeek.ts')).CLIPBOARD_EVENTS).toEqual(['focus']);
+    expect((await load('resumeKeyboard.ts')).RESUME_KEYBOARD_EVENTS).toEqual(['stateChange']);
   });
 
-  it('MainActivity registers all nine plugins before super.onCreate', () => {
+  it('MainActivity registers all ten plugins before super.onCreate', () => {
     const source = javaOf('MainActivity.java');
     const onCreate = source.slice(source.indexOf('public void onCreate('));
     const superAt = onCreate.indexOf('super.onCreate(');
@@ -139,8 +142,9 @@ describe('ways-in and reminder plugins', () => {
     expect(sorted(registered)).toEqual(sorted([
       'ProfileVaultPlugin', 'DocumentSaverPlugin', 'IncomingFilePlugin', 'FillBrowserPlugin',
       'IncomingIntentPlugin', 'ClipboardPeekPlugin', 'RemindersPlugin', 'AppShortcutsPlugin', 'BrowserRolePlugin',
+      'ResumeKeyboardPlugin',
     ]));
-    expect([...source.matchAll(/registerPlugin\(/g)]).toHaveLength(9);
+    expect([...source.matchAll(/registerPlugin\(/g)]).toHaveLength(10);
   });
 
   it('window focus reaches ClipboardPeekPlugin through the bridge', () => {
@@ -150,5 +154,26 @@ describe('ways-in and reminder plugins', () => {
     expect(body).toMatch(/super\.onWindowFocusChanged\(/);
     expect(body).toMatch(/getPlugin\(\s*"ClipboardPeek"\s*\)/);
     expect(body).toMatch(/notifyFocus\(\s*\)/);
+  });
+
+  it('window focus also reaches ResumeKeyboardPlugin, which emits stateChange with the status', () => {
+    const source = javaOf('MainActivity.java');
+    const focus = source.slice(source.indexOf('void onWindowFocusChanged('));
+    const body = focus.slice(0, focus.indexOf('\n    }'));
+    expect(body).toMatch(/getPlugin\(\s*"ResumeKeyboard"\s*\)/);
+    expect(body).toMatch(/instanceof\s+ResumeKeyboardPlugin/);
+    expect(body).toMatch(/notifyStateChange\(\s*\)/);
+    const plugin = javaOf('ResumeKeyboardPlugin.java');
+    const notify = plugin.slice(plugin.indexOf('void notifyStateChange('));
+    expect(notify.slice(0, notify.indexOf('\n    }'))).toMatch(/notifyListeners\(\s*"stateChange"\s*,/);
+  });
+
+  it('the keyboard status names the service by its component, which is RESUME_KEYBOARD_ID', async () => {
+    const plugin = javaOf('ResumeKeyboardPlugin.java');
+    expect(plugin).toMatch(/new\s+ComponentName\(\s*\w+\s*,\s*ResumeKeyboardService\.class\s*\)\.flattenToShortString\(\)/);
+    const mod = (await import(/* @vite-ignore */ pathToFileURL(join(nativeDir, 'resumeKeyboard.ts')).href)) as { RESUME_KEYBOARD_ID: string };
+    const manifest = readFileSync(join(repo, 'mobile/android/app/src/main/AndroidManifest.xml'), 'utf8');
+    expect(manifest).toContain('android:name=".keyboard.ResumeKeyboardService"');
+    expect(mod.RESUME_KEYBOARD_ID).toBe('app.raf.dev/.keyboard.ResumeKeyboardService');
   });
 });

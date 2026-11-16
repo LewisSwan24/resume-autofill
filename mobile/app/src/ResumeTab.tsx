@@ -52,9 +52,24 @@ export interface ResumeTabProps {
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   /** A file was just stored and is not yet in the resume: keep the sweep away from it. */
   onStored: (id: string) => void;
+  /** Read a PDF or Word resume (the resume import's picker). */
+  onImportResume?: () => void;
+  /** Read the resume PDF stored in a resume's attachment slot. */
+  onReadStored?: (fileId: string, resumeId: string) => void;
 }
 
-export function ResumeTab({ editor, files, module: moduleName, onModule, focus, onFocusDone, showToast, onStored }: ResumeTabProps) {
+export function ResumeTab({
+  editor,
+  files,
+  module: moduleName,
+  onModule,
+  focus,
+  onFocusDone,
+  showToast,
+  onStored,
+  onImportResume,
+  onReadStored,
+}: ResumeTabProps) {
   const t = useMT();
   const { profile, edit } = editor;
 
@@ -74,9 +89,15 @@ export function ResumeTab({ editor, files, module: moduleName, onModule, focus, 
       <ListHeader title={t('m.title')}>
         <div className="m-card m-card--padded m-start">
           <p className="m-empty">{t('m.empty')}</p>
+          {onImportResume ? (
+            <button type="button" className="m-button m-button--primary m-button--wide" onClick={onImportResume}>
+              <Icon name="file-earmark-pdf" />
+              <span>{t('m.ri.entry')}</span>
+            </button>
+          ) : null}
           <button
             type="button"
-            className="m-button m-button--primary m-button--wide"
+            className={onImportResume ? 'm-button m-button--wide' : 'm-button m-button--primary m-button--wide'}
             onClick={() => edit((p) => startResume(p, 'zh-CN', t('m.defaultTitle.zh')), { immediate: true })}
           >
             <Icon name="plus-lg" />
@@ -118,6 +139,7 @@ export function ResumeTab({ editor, files, module: moduleName, onModule, focus, 
             edit={editResumeNow}
             showToast={showToast}
             onStored={onStored}
+            onReadStored={onReadStored}
             focus={focus}
             onFocusDone={onFocusDone}
           />
@@ -139,7 +161,7 @@ export function ResumeTab({ editor, files, module: moduleName, onModule, focus, 
 
   return (
     <ListHeader title={t('m.title')}>
-      <ResumeSwitcher profile={profile} edit={edit} showToast={showToast} />
+      <ResumeSwitcher profile={profile} edit={edit} showToast={showToast} onImportResume={onImportResume} />
       <SaveStatusLine status={editor.status} />
       <ul className="m-card m-modules" aria-label={t('m.modules')}>
         {PROFILE_MODULES.map((m) => (

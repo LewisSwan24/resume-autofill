@@ -3,13 +3,17 @@ import { Icon, type IconName } from '../Icon';
 import { useMT } from '../i18n';
 import { IconButton } from '../ui';
 
-const SECTIONS: ReadonlyArray<{ id: string; icon: IconName }> = [
-  { id: 'where', icon: 'lock' },
-  { id: 'upload', icon: 'shield' },
-  { id: 'submit', icon: 'send-slash' },
-  { id: 'fill', icon: 'input-cursor-text' },
-  { id: 'export', icon: 'download' },
-  { id: 'delete', icon: 'trash' },
+/** Each section's paragraphs, in order. */
+const SECTIONS: ReadonlyArray<{ id: string; icon: IconName; body: readonly string[] }> = [
+  // Where things live: the resume (encrypted) and, since the fill browser, the sites' own sign-ins (the WebView's).
+  // The tracker and the launcher's shortcuts are stored too; the clipboard and reminders never go online.
+  { id: 'where', icon: 'lock', body: ['m.privacy.where.body', 'm.privacy.tracker', 'm.privacy.shortcuts', 'm.privacy.browser'] },
+  // The resume keyboard's slim copy, its own offline process, and when the copy goes.
+  { id: 'upload', icon: 'shield', body: ['m.privacy.upload.body', 'm.privacy.clipboard', 'm.privacy.reminders', 'm.privacy.keyboard'] },
+  { id: 'submit', icon: 'send-slash', body: ['m.privacy.submit.body'] },
+  { id: 'fill', icon: 'input-cursor-text', body: ['m.privacy.handOver'] },
+  { id: 'export', icon: 'download', body: ['m.privacy.export.body'] },
+  { id: 'delete', icon: 'trash', body: ['m.privacy.delete.body'] },
 ];
 
 export function PrivacyScreen({ onBack }: { onBack: () => void }) {
@@ -29,7 +33,9 @@ export function PrivacyScreen({ onBack }: { onBack: () => void }) {
               <Icon name={s.icon} />
               <span>{t(`m.privacy.${s.id}.title`)}</span>
             </h2>
-            <p>{t(`m.privacy.${s.id}.body`)}</p>
+            {s.body.map((key) => (
+              <p key={key}>{t(key)}</p>
+            ))}
           </section>
         ))}
       </div>

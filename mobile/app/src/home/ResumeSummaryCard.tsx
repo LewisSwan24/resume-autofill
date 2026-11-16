@@ -18,6 +18,8 @@ export interface ResumeSummaryCardProps {
   onJump: (resumeId: string, target?: JumpTarget) => void;
   onStartResume: (locale: Locale) => void;
   onImport: () => void;
+  /** Read a PDF or Word resume; offered first on the no-resume card. */
+  onImportResume?: () => void;
   onOpenSettings: () => void;
 }
 
@@ -34,7 +36,16 @@ function MissingRow({ item, onClick }: { item: KeyItem; onClick: () => void }) {
   );
 }
 
-export function ResumeSummaryCard({ profile, loadError, fillLanguage, onJump, onStartResume, onImport, onOpenSettings }: ResumeSummaryCardProps) {
+export function ResumeSummaryCard({
+  profile,
+  loadError,
+  fillLanguage,
+  onJump,
+  onStartResume,
+  onImport,
+  onImportResume,
+  onOpenSettings,
+}: ResumeSummaryCardProps) {
   const t = useMT();
   const missingId = useId();
   const [allOpen, setAllOpen] = useState(false);
@@ -62,7 +73,17 @@ export function ResumeSummaryCard({ profile, loadError, fillLanguage, onJump, on
       <section className="m-card m-card--padded m-home-resume">
         <h2 className="m-home-resume__title">{t('m.home.noResume')}</h2>
         <p className="m-home-resume__note">{t('m.home.noResumeHint')}</p>
-        <button type="button" className="m-button m-button--primary m-button--wide" onClick={() => onStartResume('zh-CN')}>
+        {onImportResume ? (
+          <button type="button" className="m-button m-button--primary m-button--wide" onClick={onImportResume}>
+            <Icon name="file-earmark-pdf" />
+            <span>{t('m.ri.entry')}</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={onImportResume ? 'm-button m-button--wide' : 'm-button m-button--primary m-button--wide'}
+          onClick={() => onStartResume('zh-CN')}
+        >
           <Icon name="plus-lg" />
           <span>{t('m.newZh')}</span>
         </button>

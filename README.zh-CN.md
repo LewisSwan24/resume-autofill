@@ -2,161 +2,306 @@
 
 [English](README.md) | **简体中文**
 
-本地优先的网申简历一键填写 Chrome 扩展，覆盖中国校招网站，也覆盖澳洲和海外的 ATS 平台。
+本地优先的网申简历一键填写工具，包含 Chrome 浏览器扩展（Manifest V3）和配套 Android 应用及简历输入法（Capacitor）。它不需要把简历上传到任何服务器，直接按你本地保存的简历填写招聘表单，覆盖国内校招平台和澳洲、海外主流 ATS 平台。
 
-技术栈：WXT 0.21、React 19、TypeScript（Manifest V3）。
+## 目录
+
+- [核心特性](#核心特性)
+- [系统架构](#系统架构)
+- [当前状态与路线图](#当前状态与路线图)
+- [支持平台与组件库](#支持平台与组件库)
+- [Chrome 扩展：安装与本地试用](#chrome-扩展安装与本地试用)
+- [管理简历与本地 PDF / Word 导入](#管理简历与本地-pdf--word-导入)
+- [Android 移动端应用与简历键盘（`mobile/`）](#android-移动端应用与简历键盘mobile)
+- [配置、权限与环境变量](#配置权限与环境变量)
+- [开发与测试命令](#开发与测试命令)
+- [项目结构](#项目结构)
+- [已知限制](#已知限制)
+- [隐私与安全](#隐私与安全)
+- [设计系统](#设计系统)
 
 ## 核心特性
 
-- **一键填写。** 在网申页面点右下角的悬浮按钮，扩展按你选定的简历填好表单。
-- **绝不瞎填。** 没把握的字段保持留空，并标成黄色等你确认。验证码、同意隐私条款的复选框这类字段一律不碰。
-- **填写报告。** 按钮旁弹出摘要卡片，侧边栏按严重程度列出每个字段。可以采纳候选项，也可以手动改写。
-- **数据完全本地。** 简历、附件和设置都存在本机的 `chrome.storage.local` 和 IndexedDB 里。
-- **只给每个 frame 需要的数据。** 后台先问每个 frame 识别到了哪些字段（这一步不带简历数据），再只发对应的值。没有表单的 frame，例如第三方 iframe，什么都收不到。
-- **支持 iframe 和多组件库。** 可以跨 iframe 填写，能驱动原生 HTML 控件、Ant Design 和 Element Plus 组件。
-- **中英双语简历。** 每种语言维护一份简历，例如 zh-CN 和 en-AU，在侧边栏切换当前使用的那份。界面本身也有中文和英文两种。
+### Chrome 扩展（`entrypoints/`、`src/`）
+
+- **一键填写与保留预填。** 点击网申页面上的悬浮按钮（支持鼠标拖拽或 `Alt` + 方向键微调，各站点会记住自己的位置），按当前选中简历填表，页面上已经预填好的字段会保留不动。
+- **绝不瞎填。** 没把握的字段保持留空，并用黄色虚线标出待确认；验证码、隐私同意勾选框、推荐人工号和防爬虫陷阱字段都会跳过。
+- **页内摘要卡片与侧边栏报告。** 按钮旁会弹出摘要卡片，可直接在页面上定位字段，也提供「添加到我的资料」按钮一键跳到简历编辑器里第一个缺数据的输入框。侧边栏按严重程度（`filled`、`needs_review`、`no_option`、`unmatched`、`action_failed`、`no_data`、`no_control`）列出完整报告，支持采纳候选项或行内手动修改。
+- **本地 PDF / `.docx` 简历导入。** 用本地打包的 `pdfjs-dist`（含本地 worker 和 CMap 字体表）与 `mammoth` 离线解析简历，并在 `ImportReview` 里把每个字段和原文逐行对照展示，确认后可新建简历或对比差异后合并到已有简历。
+- **中英一键切换（`中 | EN`）。** 支持按语言维护多份简历（`zh-CN`、`en-AU`），并可用 `linkedResumeId` 配对关联；在侧边栏、选项页顶栏或悬浮按钮的 `中 / EN` 标签都能直接切换界面语言和对应简历。
+- **跨 iframe 与多组件库驱动。** 支持嵌套 iframe，能驱动原生 HTML、Ant Design、Element Plus、`react-select`、ARIA 下拉框与按钮，并带有真实 ATS 适配器和国内校招平台驱动。
+- **欢迎页与使用说明。** 首次安装会打开欢迎页（`entrypoints/welcome`），扩展内也带有一份完整的使用说明页（`entrypoints/help`），方便随时查看状态含义、支持站点、隐私机制和常见问题。
+
+### Android 移动端应用与简历输入法（`mobile/`）
+
+- **本地加密存储（`ProfileVault`）。** 简历、应用状态和附件都放在应用私有目录里，通过 Android Keystore 密钥用 AES-256-GCM 加密（`loggingBehavior: "none"`，禁用系统备份和换机迁移）。
+- **内置自动填表 WebView 浏览器。** 用悬浮 WebView 打开招聘链接并把填表引擎注入到各个 frame；遇到第三方跨域 frame 会先弹出源站确认单，支持上传已加密的附件，也支持一键撤销。
+- **链接接管与投递追踪。** 支持作为系统浏览器接收 `http(s)` 链接或分享文本，首页可直接识别剪贴板里的链接并配有桌面快捷方式；内置投递记录（公司、岗位、状态、截止日期、填写次数）和本地截止提醒闹钟。
+- **离线简历输入法（Android IME）。** 同包集成的系统输入法：顶部有一条模块切换栏，点一下就把条目填进当前输入框，匹配当前字段类型的条目会排在前面，还能切换简历、切换语言和输入基础英文。它只读取剥离了附件的精简投影，密码框、锁屏和无学习字段不展示简历内容，不写日志也不碰剪贴板，且单元测试会做字节码检查，代码里一旦引用网络、广播、服务或 Intent API 就会直接报错。
+
+## 系统架构
+
+### 扩展端：跨 Frame 按需下发流程
+
+```mermaid
+sequenceDiagram
+    participant User as "用户 (悬浮按钮 / 侧边栏)"
+    participant BG as "Background Service Worker"
+    participant CS as "Content Script (ISOLATED World)"
+    participant Engine as "匹配引擎 + ATS 适配器 + 控件驱动"
+
+    User->>BG: "在当前标签页触发一键填写"
+    BG->>CS: "扫描各 frame 控件 (此步不携带任何简历数据)"
+    CS->>Engine: "发现表单控件并匹配站点适配器"
+    Engine-->>CS: "返回识别到的字段键与 frame 映射"
+    CS-->>BG: "按 frameId 上报字段摘要"
+    BG->>BG: "按 frame 裁剪简历数据 (仅含上传控件的 frame 才附带附件)"
+    BG->>CS: "通过 chrome.runtime 通道下发最小化数据"
+    CS->>Engine: "执行驱动填表并生成 FillReport"
+    Engine-->>User: "页面高亮描边 + 摘要卡片 + 侧边栏报告"
+```
+
+### 双端共享核心与隔离边界
+
+```mermaid
+flowchart TB
+    subgraph Shared["共享核心层 (src/)"]
+        Schema["src/schema (19 个模块, Zod v4)"]
+        Dict["src/dictionary (中英双语词典 + 省市区 + 选项)"]
+        Engine["src/engine & src/fill (分类, 规划, 高亮, 报告)"]
+        Drivers["src/drivers & src/adapters (原生, AntD, Element, ATS)"]
+        Import["src/import (离线 PDF.js + Mammoth)"]
+        UI["src/ui (Lively Icons 设计令牌与 theme.css)"]
+    end
+
+    subgraph Ext["Chrome 扩展 (WXT 0.21 + React 19, MV3)"]
+        BG["entrypoints/background.ts"]
+        CS["entrypoints/content.ts & fab.content"]
+        Pages["options / sidepanel / welcome / help"]
+        ExtStore["chrome.storage.local + IndexedDB"]
+    end
+
+    subgraph Mobile["Android 应用 (mobile/, Capacitor 8.5.3)"]
+        CapApp["mobile/app (简历编辑, 投递追踪, 导入, 内置浏览器)"]
+        Inject["mobile/inject (WebView 注入引擎 + 源站确认守卫)"]
+        Vault["Android ProfileVault (AES-256-GCM Keystore)"]
+        IME["Android 简历输入法 IME (无网络权限)"]
+    end
+
+    Shared --> Ext
+    Shared --> Mobile
+    Pages --> ExtStore
+    CapApp --> Vault
+    Vault -->|"精简只读投影 (无附件)"| IME
+    CapApp -->|"按确认源站下发填表数据"| Inject
+```
 
 ## 当前状态与路线图
 
-| 里程碑 | 内容 | 状态 |
+| 里程碑 | 范围 | 状态 |
 |---|---|---|
-| **M1** | 核心引擎、简历编辑器、侧边栏和悬浮按钮。在合成测试站（原生 HTML、Ant Design、Element Plus）上，字段 100% 填对。 | 已完成 |
-| **M2** | 适配真实 ATS。Greenhouse、Lever、Ashby、Workable（含多条教育和工作经历）和 Workday 第一步已在真实页面上验证，Workday 后面几步、SuccessFactors、PageUp、Moka、北森、飞书招聘等还在做。 | 进行中 |
-| **M3** | 加入 AI 能力：简历导入、开放题起草、中英互译、投递工作台，同时完善文件上传并做整体打磨。 | 计划中 |
+| **M1** | 核心引擎、19 模块简历编辑器、侧边栏、悬浮按钮和设计系统；在三大合成测试站（原生 HTML、Ant Design、Element Plus）上字段 100% 填对。 | 已完成 |
+| **M2** | 真实 ATS 与国内校招平台适配（`Greenhouse`、`Lever`、`Workable`、`Workday`、`Ashby`、`Moka`、北森 `Beisen`、飞书招聘 `Feishu`）、真实页面脱敏抓包与评分脚本、本地 PDF / Word 简历导入、中英一键切换，以及 Android Capacitor 移动端（`ProfileVault`、WebView 填表、投递追踪和简历输入法）。其余站点（`SuccessFactors`、`PageUp`、`Workday` 后续多步流程等）还在陆续补充。 | 进行中（核心已落地） |
+| **M3** | 可选 AI 能力：开放式问题起草、中英简历翻译以及更多细节打磨。 | 计划中 |
 
-## 安装
+## 支持平台与组件库
 
-需要 Node.js、pnpm，以及 Chrome 114 及以上（侧边栏 API 的要求）。
+- **专用 ATS 适配器（`src/adapters/`）：** Greenhouse、Lever、Workable（支持多段教育和工作经历）、Workday；Ashby 目前直接由通用引擎配合 ARIA / `react-select` 驱动处理。
+- **招聘平台与前端组件库驱动（`src/drivers/`）：**
+  - 国内校招平台：**北森（Beisen / Phoenix）**、**Moka**、**飞书招聘（Feishu）**。
+  - UI 组件库：**原生 HTML**（文本、下拉、单选/复选、日期、文件、富文本）、**Ant Design**（`antdSelect`、`antdPicker`）、**Element Plus**（`select`、`date`、`cascader`、`upload`）、**`react-select`**，以及 **ARIA** 组合框、搜索框和是否按钮组。
+
+## Chrome 扩展：安装与本地试用
+
+### 1. 构建并加载扩展
+
+环境要求：**Node.js（建议 v22+）**、**pnpm**，以及 **Chrome 114+**（侧边栏 API 要求）。
 
 ```powershell
 pnpm i
-pnpm build        # 产物在 .output/chrome-mv3
+pnpm build        # 产物输出到 .output/chrome-mv3
 ```
 
-然后加载到 Chrome：
-
+加载到 Chrome：
 1. 地址栏打开 `chrome://extensions`。
-2. 打开右上角的「开发者模式」。
-3. 点「加载已解压的扩展程序」，选择 `.output/chrome-mv3` 目录。
-4. 再次 `pnpm build` 之后，点扩展卡片上的刷新按钮即可更新。
+2. 打开右上角「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择 `.output/chrome-mv3` 目录。
+4. 之后每次重新执行 `pnpm build`，在扩展卡片上点一下刷新图标即可更新。
 
-首次安装时，扩展会写入两份示例简历：`林知远（中文简历）`（zh-CN）和 `Zhiyuan (Leo) Lin (English resume)`（en-AU）。
+首次安装会自动打开欢迎页，并写入两份示例简历：`林知远（中文简历）`（`zh-CN`）和 `Zhiyuan (Leo) Lin (English resume)`（`en-AU`）。
 
-## 本地试用
+### 2. 在合成测试站本地试用
 
-仓库自带合成网申页面，分别对应三套界面技术栈。
+仓库自带三套界面技术栈的合成网申页面：
 
 ```powershell
 pnpm fixtures:build
-pnpm fixtures:preview     # 固定端口 4173
+pnpm fixtures:preview     # 固定跑在 4173 端口
 ```
 
-打开 <http://localhost:4173/>，选一个页面：
+打开 <http://localhost:4173/> 选择页面：
 
-| 页面 | 路径 | 应选用的示例简历 |
+| 页面 | 路径 | 建议选用的示例简历 |
 |---|---|---|
-| 原生 HTML（en-AU） | `/native/`（另有 iframe 页 `/native/frame.html`） | 英文：`Zhiyuan (Leo) Lin` |
-| Ant Design（zh-CN） | `/antd/` | 中文：`林知远` |
-| Element Plus（zh-CN） | `/element/` | 中文：`林知远` |
+| 原生 HTML（`en-AU`） | `/native/`（另有 iframe 页 `/native/frame.html`） | `Zhiyuan (Leo) Lin` |
+| Ant Design（`zh-CN`） | `/antd/` | `林知远` |
+| Element Plus（`zh-CN`） | `/element/` | `林知远` |
 
-步骤：
-
-1. 点工具栏的扩展图标打开侧边栏，在「当前简历」下拉框里选好对应的简历。
-2. 回到测试页面，点右下角的悬浮按钮。按钮上会先显示识别到的字段数。
+试用步骤：
+1. 点击工具栏扩展图标打开侧边栏，选好对应的简历（也可以用 `中 | EN` 快速切换）。
+2. 在测试页面点右下角悬浮按钮（按钮会先显示识别到的字段数量）。
 3. 对照页面上的边框颜色：
-   - 绿色：已填写。
-   - 黄色：待确认（有多个候选，或选项没有匹配项），字段保持为空。
-   - 红色：未识别，或填写失败。
-   - 没有边框：简历里没有这个字段的数据。
-4. 按钮旁的摘要卡片列出各类数量和需要留意的字段。点某个字段可以在页面上定位。
-5. 侧边栏是完整报告，按严重程度排序，可以按状态筛选。黄色的行可以采纳候选项，也可以点编辑图标输入文字再应用。
+   - **绿色（2px 实线）：** 已填写。
+   - **黄色（2px 虚线）：** 待确认（有多个候选项，或选项没有匹配项），字段保持为空。
+   - **红色（3px 实线）：** 未识别，或填写失败。
+   - **没有边框：** 简历里没有该字段数据（或属于刻意设置的验证码、隐私条款勾选框、推荐人工号等陷阱）。
+4. 可以通过摘要卡片在页面上定位待处理字段，或者点「添加到我的资料」直接跳回编辑器补填。
+5. 侧边栏展示按严重程度排序的完整报告，支持采纳候选项、行内修改和直达缺失字段编辑。
 
-测试站里有几个故意设置的陷阱，M1 的预期是都不填：验证码、同意隐私条款的复选框、推荐人工号。
+## 管理简历与本地 PDF / Word 导入
 
-## 管理简历
+从 `chrome://extensions` 详情页、侧边栏工具栏或摘要卡片都可以打开选项页（个人资料页）：
 
-在 `chrome://extensions` 的扩展详情里打开选项页，或从侧边栏进入。
+- **简历库：** 新建（选择 `zh-CN` 或 `en-AU`）、复制、双语关联配对（`linkedResumeId`）、删除以及设为当前简历。
+- **19 模块编辑器（`src/editor/modules.ts`）：**
+  - 单对象与根模块：`basics`（含籍贯、户口、生源地、现居地等省市区输入）、`contact`、`workRights`、`jobIntention`、`emergencyContact`、`diversity`、`about`（`selfIntroduction`、`hobbies`）。
+  - 可重复条目模块：`education`、`work`、`projects`、`campus`、`awards`、`languages`、`certificates`、`skills`、`family`、`referees`、`customAnswers`。
+  - 修改后自动保存，日期格式等校验问题会就地提示。
+- **本地简历导入（`src/import/`）：** 上传 10 MB 以内的 `.pdf` 或 `.docx` 文件，离线解析所有字段并在 `ImportReview` 展示对应原文行，核对后可以新建简历，或者在预览差异后合并进已有简历。
+- **附件（`attachments`）：** 简历 PDF、证件照、成绩单保存在 IndexedDB（单个文件上限 10 MB）。
+- **JSON 备份：** 可把所有简历和设置导出成 JSON（不包含附件文件）；导入前会有确认提示，确认后**替换**当前数据。
+- **设置：** 界面语言（`auto` / `zh` / `en`）、重置各站点记住的悬浮按钮位置，以及 `previewBeforeFill` 偏好开关。
 
-- **简历库：** 新建（可选语言版本）、复制、删除，以及设为当前简历。
-- **编辑器：** 按模块分页（基本信息、联系方式、求职意向、教育经历、工作和实习经历、项目、奖项、语言能力、推荐人、自我介绍）。重复模块可以增删条目。修改自动保存，格式不合法的值会就地提示。
-- **附件：** 简历 PDF、证件照、成绩单，保存在 IndexedDB，遇到文件上传控件时使用。单个文件不超过 10 MB。
-- **导入 / 导出：** 可以把全部简历和设置导出成 JSON。导入会**替换**现有的全部内容，导入前有确认。附件文件不在 JSON 里。
-- **设置：** 界面语言（跟随浏览器、中文、English）。「填写前预览」目前只保存开关，功能本身还没做。
+## Android 移动端应用与简历键盘（`mobile/`）
 
-## 开发命令
+`mobile/` 基于 **Capacitor 8.5.3** 把共用的简历模型、词典、填表引擎和本地解析逻辑打包进原生 Android 应用。
 
-| 命令 | 作用 |
+### 主要功能
+
+- **首页与引导：** 粘贴或直接点首页识别到的剪贴板招聘链接，查看近期投递和快要截止的提醒，随时切换当前简历。
+- **资料与加密附件：** 移动端覆盖全部 19 个简历模块，支持底部选择弹窗、标签芯片、系统日期/年月选择器，编辑后 500 ms 及切到后台时自动保存；附件以 AES-256-GCM 加密存放在 `files/attachments`。
+- **内置 WebView 浏览器：** 向页面各 frame 注入 `mobile/inject`，提供悬浮填表按钮、报告面板、一键撤销与附件上传；遇到跨域 frame 会弹窗确认源站后再下发数据。
+- **投递追踪与链接接管：** 支持作为系统浏览器打开 `http(s)` 链接或接收分享文本，记录公司、岗位、状态、截止日期和填写次数，并按需设置本地提醒闹钟。
+- **简历输入法（IME）：** 通过应用内引导在系统设置开启后，即可在微信内置浏览器等其他 App 里呼出简历键盘，直接点选模块和字段条目填入（完全离线，无网络权限）。
+
+### 移动端开发与测试命令
+
+在 `mobile/` 目录下执行：
+
+```powershell
+cd mobile
+npm install
+npm run dev           # 启动移动端界面 Vite 开发服务器
+npm run build         # 校验原生主题令牌，构建 App 与 WebView 注入脚本，并拷贝页面资源
+npm run build:inject  # 仅重新构建 WebView 注入脚本
+npm run sync          # 构建并执行 cap sync android
+```
+
+构建 Android Debug APK 并运行设备端 E2E 测试（在仓库根目录执行）：
+
+```powershell
+# 先在 mobile/android 目录执行 ./gradlew assembleDebug（Windows 下为 gradlew.bat assembleDebug）
+$env:RAF_SERIAL="<adb-device-serial>"
+npx playwright test --config mobile/e2e/playwright.config.ts
+```
+
+## 配置、权限与环境变量
+
+本项目不需要任何外部 API Key、后端服务器或 `.env` 配置文件。
+
+### 扩展 Manifest 权限（`wxt.config.ts`）
+
+| 权限 / 配置 | 用途 |
 |---|---|
-| `pnpm dev` | WXT 开发模式 |
+| `storage`、`unlimitedStorage` | 在本机 `chrome.storage.local` 和 IndexedDB 保存简历数据与设置 |
+| `sidePanel` | 显示侧边栏填写报告和简历切换栏（需要 Chrome 114+） |
+| `webNavigation` | 列出当前标签页的各个 frame 以便按 frame 下发数据（刻意不申请 `tabs` 权限） |
+| `<all_urls>`（主机权限） | 在任意招聘网站上识别和填写申请表单 |
+| `content_security_policy` | 扩展页面严格限制 `default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self'; form-action 'none'; frame-src 'none'` |
+
+### 运行与测试环境变量
+
+| 变量名 | 适用范围 | 说明 |
+|---|---|---|
+| `RAF_SERIAL` | `mobile/e2e` | 指定 Playwright 连接的 Android 设备或模拟器 ADB 序列号 |
+| `RAF_ALLOW_WIPE` | `mobile/e2e` | 在物理真机跑 `mobile/e2e/profile.device.spec.ts` 时必须设为 `1`，防止误清空数据 |
+
+## 开发与测试命令
+
+| 命令 | 用途 |
+|---|---|
+| `pnpm dev` | 启动 WXT 开发模式 |
 | `pnpm build` | 构建扩展到 `.output/chrome-mv3` |
-| `pnpm zip` | 用 WXT 打包扩展 |
-| `pnpm test` | 单元测试（Vitest + jsdom） |
-| `pnpm test:watch` | 监听模式的单元测试 |
-| `pnpm test:drivers` | 先构建页内 harness，再用 Playwright 在合成测试站上跑控件驱动和整页填写的准确率测试（不加载扩展） |
-| `pnpm e2e` | 先构建，再把扩展装进 Chromium，在三个测试站上走完整流程（默认无界面） |
-| `pnpm e2e:headed` | 同 `pnpm e2e`，但显示浏览器窗口 |
-| `pnpm typecheck` | `wxt prepare`，再对扩展和测试站做类型检查 |
-| `pnpm fixtures:dev` | 合成测试站的 Vite 开发服务器 |
+| `pnpm zip` | 用 WXT 打包扩展压缩包 |
+| `pnpm typecheck` | 执行 `wxt prepare` 并检查扩展和合成测试站的 TypeScript 类型 |
+| `pnpm test` | 运行单元测试（Vitest + jsdom） |
+| `pnpm test:watch` | 监听模式运行单元测试 |
+| `pnpm harness:build` | 只构建页内驱动测试 harness |
+| `pnpm test:drivers` | 构建 harness，并用 Playwright 跑控件驱动与整页准确率测试 |
+| `pnpm e2e` | 构建扩展并在无头 Chromium 里跑三大合成测试站 E2E |
+| `pnpm e2e:headed` | 同 `pnpm e2e`，但打开浏览器窗口 |
+| `pnpm visual` | 构建扩展并跑亮色 / 暗色界面视觉截图测试（`tests/visual`） |
+| `pnpm fixtures:dev` | 启动合成测试站的 Vite 开发服务器 |
 | `pnpm fixtures:build` | 构建合成测试站 |
-| `pnpm fixtures:preview` | 在 4173 端口预览合成测试站 |
-| `pnpm harness:build` | 只构建页内测试 harness |
+| `pnpm fixtures:preview` | 在 `4173` 端口预览合成测试站 |
+| `pnpm capture` | 运行 `scripts/capture-page.ts` 录制真实招聘页面脱敏快照 |
+| `pnpm test:captured` | 构建 harness 和扩展，在已录制快照上运行回归测试 |
+| `pnpm accuracy:table` | 生成各样本页准确率汇总表（`scripts/accuracy-table.ts`） |
+| `pnpm live-check` | 构建扩展并跑受控真实站点校验（`scripts/live-check.ts`） |
 
 ## 项目结构
 
 | 路径 | 内容 |
 |---|---|
-| `entrypoints/` | 扩展入口：后台、内容脚本、悬浮按钮（`fab.content`）、选项页、侧边栏 |
-| `src/background/` | 消息路由、frame 发现、按 frame 裁剪数据、写入示例简历 |
-| `src/content/` | 各 frame 内容脚本的处理器和监听器 |
-| `src/engine/` | 字段发现、分类、分组和填写计划 |
-| `src/dictionary/` | 字段、选项和模块词典（中英文） |
-| `src/drivers/` | 原生 HTML、Ant Design、Element Plus 的控件驱动 |
-| `src/fill/` | 填写执行、高亮、报告、补建重复条目卡片 |
-| `src/schema/` | 简历数据模型、字段键、迁移、示例简历 |
-| `src/storage/`、`src/editor/` | 本地存储（简历和文件）、简历编辑逻辑、导入导出 |
-| `src/messaging/`、`src/i18n/` | 消息协议与校验、界面文案 |
-| `src/ui/` | 设计系统基础：令牌、主题、字体、图标、状态词汇 |
-| `fixtures/synthetic/` | 合成测试站（原生、Ant Design、Element Plus） |
-| `tests/` | 单元测试、驱动测试和端到端测试 |
+| `entrypoints/` | 扩展入口：`background.ts`、`content.ts`、`fab.content/`、`options/`、`sidepanel/`、`welcome/`、`help/` |
+| `src/adapters/` | 站点专用 ATS 适配器（`greenhouse.ts`、`lever.ts`、`workable.ts`、`workday.ts`、`resolve.ts`） |
+| `src/background/` | 消息路由、frame 发现、按 frame 裁剪数据、初始化示例简历 |
+| `src/content/` | 各 frame 内容脚本的处理器和 DOM 监听器 |
+| `src/dictionary/` | 中英文双语字段、选项、模块、省市区、添加按钮和相似度词典 |
+| `src/drivers/` | UI 与招聘平台控件驱动（`native/`、`element/`、`workday/`、`antd*.ts`、`beisen.ts`、`moka.ts`、`feishu.ts`、`aria.ts`、`searchBox.ts`） |
+| `src/editor/` | 19 个模块的纯数据定义、变更方法、校验、字段直达定位和导入导出逻辑 |
+| `src/engine/` | 字段发现、分类、可见性判断、分组、字段依赖、日期格式化与填写规划 |
+| `src/fill/` | 填表执行、补建重复条目卡片（`ensureCards.ts`）、高亮描边与报告生成 |
+| `src/import/` | 离线 PDF（`pdfjs-dist`）和 `.docx`（`mammoth`）提取及简历草稿解析 |
+| `src/messaging/`、`src/i18n/` | 类型安全的 `chrome.runtime` 消息协议与中英双语界面文案 |
+| `src/schema/` | Zod v4 简历数据模型、字段键、版本迁移与中性示例数据 |
+| `src/storage/` | `chrome.storage.local` 与 IndexedDB 本地存储（简历和附件） |
+| `src/ui/` | 共用的「Lively Icons」设计令牌、主题、内置字体、Bootstrap Icons 注册表和状态映射 |
+| `mobile/` | Capacitor 8.5.3 Android 应用工作区（`app/`、`android/`、`bridge/`、`inject/`、`demo/`、`e2e/`、`scripts/`） |
+| `fixtures/` | 合成测试站（`synthetic/`）与示例简历 PDF（`resume-samples/`） |
+| `scripts/` | 图标生成（`render-icons.mjs`）、示例生成、页面抓包、准确率统计与在线校验脚本 |
+| `tests/` | `unit/`、`drivers/`、`e2e/`、`captured/`、`visual/`、`shared/` 测试套件 |
 
-## M1 已知限制
+## 已知限制
 
-- 不支持日期范围选择器（起止日期合在一个控件里的那种）。单个日期和年月选择器可以。
-- 组件库支持原生 HTML、Ant Design、Element Plus、react-select，以及带 ARIA 角色的下拉框和是否按钮。其他库以后再加。
-- 性别题如果带“不愿透露”这类选项，默认选不愿透露。想按简历回答，可以在编辑器的多元化信息里修改。
-- 雇主自己加的问题能读到，但只有词典认识的才会作答，其余留空并提示确认。
-- 没有 AI 层。字段识别靠词典和规则，认不出的字段留空并标红。
-- 没有预览步骤，点一下就直接填。
-- 新增条目卡片（第二段教育、第二段实习等）靠页面上「添加……」按钮的文字来识别。按钮文字不在词典里就点不到。
-- 页面上没有添加按钮的模块，只填已有的卡片，简历里多出来的条目会跳过。
-- 真实招聘网站的适配放在 M2。
+- **日期范围选择器：** 暂不支持起止日期合在一个输入框里的 Range Picker，单个日期和年月选择器已支持。
+- **暂无 AI 层：** 字段识别靠词典、规则和站点适配器，没认出的雇主自定义问题会留空并标红。
+- **暂无填前预览弹窗：** 点击悬浮按钮直接开始填，通过摘要卡片、侧边栏和移动端撤销核对结果（`previewBeforeFill` 只保存设置项，功能暂未启用）。
+- **新增条目按钮：** 自动添加教育/工作卡片靠识别「添加……」按钮文本；页面没有添加按钮或文案不在词典里时，多余的简历条目会跳过。
+- **性别与多元化默认策略：** 带「不愿透露」选项的性别题默认选不愿透露，可以在编辑器的「多元化信息」里改回按简历回答。
+- **更多 ATS 覆盖：** Workday 后续多步页面、SuccessFactors、PageUp 等平台仍在 M2 中继续完善。
 
-## 隐私说明
+## 隐私与安全
 
-- 简历、附件和设置只保存在本机的 `chrome.storage.local` 和 IndexedDB，不会上传到任何服务器。
-- M1 没有任何网络请求。代码里没有 `fetch`、`XMLHttpRequest` 和 `WebSocket`，也没有第三方统计。
-- 内容脚本运行在默认的 ISOLATED world，页面自己的脚本读不到扩展的变量。
-- 简历数据从不经过 `window.postMessage`。内容脚本、后台和侧边栏之间只用扩展自己的消息通道（`chrome.runtime`）。
-- 数据按需下发。后台先问每个 frame 识别到了哪些字段（这一步不带简历数据），再只把对应的值发给各个 frame。没有表单的 frame 什么都收不到，附件只发给有上传控件的 frame。
-- 扩展不会通过 `window.postMessage` 向页面广播自己（已关闭 WXT 的 content-script-started 消息），页面拿不到扩展 ID。
-- 权限只有 `storage`、`unlimitedStorage`、`sidePanel` 和 `webNavigation`（列出标签页里的各个 frame），不申请 `tabs`。
-- 需要 `<all_urls>` 主机权限，因为扩展要在任意招聘网站上识别并填写表单。
+- **本地存储：** 扩展数据只保存在本机 `chrome.storage.local` 和 IndexedDB；移动端通过 Android Keystore AES-256-GCM 加密存在应用私有目录里，并关闭了系统备份和设备迁移。
+- **无网络请求：** 扩展页面启用了严格 CSP（`default-src 'self'; connect-src 'self'; form-action 'none'; frame-src 'none'`），`pdfjs-dist` 的 worker / CMap 和 `@fontsource/*` 字体全部本地打包，扩展代码里没有 `fetch`、`XMLHttpRequest`、`WebSocket` 或任何统计埋点。
+- **ISOLATED World 与通道隔离：** 内容脚本运行在默认的 `ISOLATED` world，已关闭 WXT 的 `window.postMessage` 广播，简历数据不走页面全局变量或 `postMessage`，只通过 `chrome.runtime` 传递。
+- **按 Frame 与按源站最小化分发：** 后台先问每个 frame 识别到了哪些字段（不含任何简历内容），再只发该 frame 用到的值；附件只发给存在文件上传框的 frame；移动端 WebView 遇到跨域 iframe 必须由用户先确认源站才下发。
+- **输入法隔离：** Android 简历输入法只读取去掉附件的精简投影，在密码、锁屏和无学习输入框里自动隐藏简历内容，不留日志和输入记录，单元测试也会检查字节码，禁止引用网络、广播、服务或 Intent API。
 
 ## 设计系统
 
-三个界面（选项页、侧边栏、页面上的悬浮按钮）共用一套设计系统，改编自作者的 “Lively Icons”：界面安静、图标优先，用 `paper` / `surface` / `tile` 三层加 1px 线分层，不用阴影。基础部分在 `src/ui/`：
+扩展页面（选项页、侧边栏、欢迎页、帮助页、悬浮按钮）和移动端共用一套改编自「Lively Icons」的设计系统：克制留白、图标优先、用 `1px` 边框区分 `paper` / `surface` / `tile` 三层，不使用阴影。基础代码在 `src/ui/`：
 
-| 文件 | 内容 |
+| 文件（`src/ui/`） | 内容 |
 |---|---|
-| `tokens.ts`、`theme.css` | 设计令牌（`--raf-*` 自定义属性） |
-| `fonts.css` | 扩展页面用的内置字体 |
-| `Icon.tsx` | 内联 SVG 图标（Bootstrap Icons） |
-| `status.ts` | 每种填写结果对应的色调、图标和词 |
+| `tokens.ts`、`theme.css` | 设计令牌（`--raf-*` CSS 自定义属性） |
+| `fonts.css` | 扩展页面内置打包字体 |
+| `Icon.tsx` | 从 `bootstrap-icons` 按需注册的内联 SVG 图标 |
+| `status.ts` | 每种填写结果的色调、图标和词映射（`OUTCOME_STATUS`） |
 
-- **令牌。** 换样式只需改 `tokens.ts` 和 `theme.css`，并保持两者同步。`tests/unit/ui/tokens.test.ts` 会分别检查亮色块和暗色块里的名字和值是否一致，也会检查三个界面里没有写死的颜色和未定义的令牌。命名：颜色用 `--raf-color-*`，其余有 `--raf-font-*`、`--raf-radius-*`、`--raf-space-*`、`--raf-shadow-*`、`--raf-motion-*`、`--raf-z-*` 和 `--raf-size-*`。字重只有 400 和 600，阴影一律是 `none`，动效是 320ms 弹性（`--raf-motion-move`）、160ms（`--raf-motion-settle`）和 120ms（`--raf-motion-duration`）。
-- **深色模式。** 跟随系统设置（`prefers-color-scheme`），没有切换开关。`theme.css` 先写亮色的值，暗色的颜色放在 `@media (prefers-color-scheme: dark)` 块里。暗色没有色相，只有状态色（danger、success、warning）例外。悬浮按钮同样跟随系统主题，不跟随它所在页面的主题。
-- **字体。** 界面文字用 Manrope（400 和 600），ZCOOL KuaiLe 只用于页面标题（`--raf-font-display`）。两者都来自 npm（`@fontsource/*`），打包进构建产物，不发任何网络请求。`src/ui/fonts.css` 只由选项页和侧边栏引入。悬浮按钮在别人页面的 shadow root 里，`@font-face` 在那里不生效，要生效就得写进页面本身，所以它不注册任何字体：本机装了 Manrope 就用，否则用系统字体栈（`Noto Sans SC`、`PingFang SC`、`Microsoft YaHei`、`system-ui`）。Manrope 只覆盖拉丁字母，所以中文不受影响。
-- **图标。** `<Icon name="check-circle" />` 从 `bootstrap-icons` 包渲染内联 SVG。只有 `Icon.tsx` 里 `ICONS` 注册表列出的图标会被打包，新图标要在那里导入并注册。图标默认只是装饰（`aria-hidden`），传入 `label` 才会有无障碍名称。状态图标总是和文字并排出现。
-- **状态。** `status.ts` 里的 `OUTCOME_STATUS` 把每种填写结果映射到色调（success、warning、danger、muted）、图标和词（`src/i18n` 里的 `status.*`），状态不会只靠颜色表达。
-- **页面高亮。** 页面自身字段上的描边是行内样式，用不了 CSS 变量，三种颜色是 `tokens.ts` 里的常量 `HIGHLIGHT_COLORS`。线型也随状态变化：已填写是 2px 实线，待确认是 2px 虚线，失败是 3px 实线。
-- **扩展图标。** `public/icon/*.png` 由设计系统草稿渲染而来（主色 `#0066cc` 方块，白色 `file-earmark-check` 字形，16 和 32 px 用更粗的 `check-lg`）。运行 `node scripts/render-icons.mjs` 可重新生成（需要 Playwright Chromium）。
+- **设计令牌：** 改样式时同步修改 `tokens.ts` 和 `theme.css`（`tests/unit/ui/tokens.test.ts` 会分别校验亮/暗色块并检查不能有硬编码颜色；移动端用 `mobile/scripts/gen-native-theme.mjs --check` 对齐原生主题）。字重只用 `400` 和 `600`，阴影均为 `none`，动效使用 `320 ms` 弹性（`--raf-motion-move`）、`160 ms`（`--raf-motion-settle`）和 `120 ms`（`--raf-motion-duration`）。
+- **深色模式：** 跟随系统 `prefers-color-scheme`，不设手动切换按钮；暗色下除语义状态色外没有额外色相。
+- **字体：** 扩展页面内置 `@fontsource/manrope`（`400`、`600`）和 `ZCOOL KuaiLe`（页面标题）；移动端内置 `Lexend`、`Shantell Sans` 和 `ZCOOL KuaiLe`；Shadow DOM 悬浮按钮回退到系统字体栈（`Noto Sans SC`、`PingFang SC`、`Microsoft YaHei`、`system-ui`）。
+- **状态与页面高亮：** 状态图标总是和文字一起展示（`OUTCOME_STATUS`）；页面字段描边使用 `tokens.ts` 中的 `HIGHLIGHT_COLORS`，线型按状态区分：`2px solid`（已填写）、`2px dashed`（待确认）、`3px solid`（失败）。
+- **扩展图标：** `public/icon/{16,32,48,128}.png` 由 `node scripts/render-icons.mjs` 渲染生成（主色 `#0066cc` 方块加 `file-earmark-check` 图标）。

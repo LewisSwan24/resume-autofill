@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'">
+<title>其他信息（演示）</title>
+<style>
+  :root { color-scheme: light dark; --card: #ffffff; --ink: #1f2328; --muted: #5b616b; --line: #d0d4da; }
+  @media (prefers-color-scheme: dark) {
+    :root { --card: #202329; --ink: #e9ebee; --muted: #a3a9b3; --line: #3a3f47; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px 16px; background: var(--card); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h2 { font-size: 1rem; margin: 0 0 12px; }
+  .row { margin-bottom: 12px; }
+  label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9rem; }
+  input, select { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+</style>
+</head>
+<body>
+<form id="extra" novalidate>
+  <h2>其他信息 More information</h2>
+  <div class="row"><label for="emergency-name">紧急联系人姓名 Emergency contact name</label><input id="emergency-name" name="emergency-name" type="text"></div>
+  <div class="row"><label for="emergency-phone">紧急联系人电话 Emergency contact phone</label><input id="emergency-phone" name="emergency-phone" type="tel"></div>
+  <div class="row">
+    <label for="expected-city">期望工作城市 Preferred work city</label>
+    <select id="expected-city" name="expected-city">
+      <option value="">请选择 Select</option>
+      <option>北京</option><option>上海</option><option>广州</option><option>深圳</option><option>杭州</option><option>其他</option>
+    </select>
+  </div>
+  <div class="row"><label for="start-date">到岗时间 Available from</label><input id="start-date" name="start-date" type="date"></div>
+</form>
+</body>
+</html>

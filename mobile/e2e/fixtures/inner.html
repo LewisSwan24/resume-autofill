@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Device test page (fill browser): the cross-origin iframe of outer.html, served on localhost:4181. No scripts. -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>内层示例页</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 12px; }
+      label { display: block; margin: 12px 0 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 8px; font: inherit; }
+    </style>
+  </head>
+  <body>
+    <form>
+      <h2>联系方式</h2>
+      <label for="phone">手机</label>
+      <input id="phone" name="phone" type="tel" autocomplete="off" />
+      <h2>教育经历</h2>
+      <label for="school">学校</label>
+      <input id="school" name="school" type="text" autocomplete="off" />
+    </form>
+  </body>
+</html>

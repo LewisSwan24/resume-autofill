@@ -124,9 +124,11 @@ interface SlotProps {
   edit: ResumeEdit;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   onStored: (id: string) => void;
+  /** Read the stored resume PDF into the resume import (resume PDF slot only). */
+  onReadStored?: (fileId: string, resumeId: string) => void;
 }
 
-function Slot({ slot, resume, files, edit, showToast, onStored }: SlotProps) {
+function Slot({ slot, resume, files, edit, showToast, onStored, onReadStored }: SlotProps) {
   const t = useMT();
   const language = useLanguage();
   const fileId = resume.attachments[slot];
@@ -209,6 +211,12 @@ function Slot({ slot, resume, files, edit, showToast, onStored }: SlotProps) {
             {more}
           </div>
         ) : null}
+        {fileId && slot === 'resumeFileId' && shown?.state === 'ok' && shown.info.type === 'application/pdf' && onReadStored ? (
+          <button type="button" className="m-button m-button--wide" onClick={() => onReadStored(fileId, resume.id)}>
+            <Icon name="file-earmark-pdf" />
+            <span>{t('m.ri.fromAttachment')}</span>
+          </button>
+        ) : null}
         {fileId && shown?.state === 'missing' ? (
           <div className="m-file">
             <p className="m-help m-help--error m-file__text">{t('options.attach.missing', { id: fileId })}</p>
@@ -239,6 +247,8 @@ interface Props {
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   /** A file was just stored and is not yet in the resume: keep the sweep away from it. */
   onStored: (id: string) => void;
+  /** Read the stored resume PDF into the resume import. */
+  onReadStored?: (fileId: string, resumeId: string) => void;
   /** A jump from Home to a slot: put the cursor on it, then call onFocusDone. */
   focus?: FocusTarget | null;
   onFocusDone?: () => void;

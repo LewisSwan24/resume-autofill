@@ -1,0 +1,31 @@
+// TEST-ONLY PLANT for tests/unit/mobile/keyboard/noNetworkSource.test.ts. Not compiled, not shipped. Every line
+// below breaks one rule; the test must catch each of them.
+// A banned word in a comment does not count: java.net.Socket, Log.d, getTextBeforeCursor(
+package app.raf.dev.keyboard;
+
+import android.util.Log;
+import android.view.inputmethod.InputConnection;
+import android.webkit.WebView;
+
+import java.net.URL;
+
+import app.raf.dev.MainActivity;
+
+final class PlantedNetworkUse {
+    private WebView view;
+    private MainActivity other;
+    private static final char QUOTE = '"';
+
+    static Object planted(InputConnection ic) throws Exception {
+        URL url = new URL("https://example.com/");
+        Class<?> socket = Class.forName("java.net.Socket");
+        CharSequence before = ic.getTextBeforeCursor(10, 0);
+        Log.d("kb", "typed");
+        System.out.println(before);
+        new Exception().printStackTrace();
+        Runtime.getRuntime();
+        return new Object[] {url, socket, before};
+    }
+
+    private static native void hidden();
+}

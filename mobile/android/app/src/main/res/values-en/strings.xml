@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="shortcut_paste_short">Paste a link</string>
+    <string name="shortcut_paste_long">Paste an application link</string>
+    <string name="shortcut_demo_short">Sample form</string>
+    <string name="shortcut_demo_long">Try the sample form</string>
+    <string name="shortcut_deleted">This application was deleted</string>
+    <string name="notification_channel">Application deadlines</string>
+    <!-- The resume keyboard. Mirrors m.kb.native.* in mobile/app/src/i18n.ts; keyboardStrings.test.ts keeps them equal. -->
+    <string name="kb_name">Resume keyboard</string>
+    <string name="kb_subtype">English</string>
+    <string name="kb_resume">Resume</string>
+    <string name="kb_typing">Letter keys</string>
+    <string name="kb_switch_ime">Switch keyboard</string>
+    <string name="kb_hide">Hide keyboard</string>
+    <string name="kb_shift">Shift</string>
+    <string name="kb_shift_on">Shift on</string>
+    <string name="kb_caps_lock">Caps lock</string>
+    <string name="kb_delete">Delete</string>
+    <string name="kb_space">Space</string>
+    <string name="kb_space_caption">English</string>
+    <string name="kb_comma">Comma</string>
+    <string name="kb_period">Period</string>
+    <string name="kb_hyphen">Hyphen</string>
+    <string name="kb_symbols">Numbers and symbols</string>
+    <string name="kb_more_symbols">More symbols</string>
+    <string name="kb_letters">Letters</string>
+    <string name="kb_enter">Return</string>
+    <string name="kb_action_go">Go</string>
+    <string name="kb_action_search">Search</string>
+    <string name="kb_action_send">Send</string>
+    <string name="kb_action_next">Next</string>
+    <string name="kb_action_done">Done</string>
+    <string name="kb_action_previous">Previous</string>
+    <string name="kb_switch_resume">Change resume, now \"%1$s\"</string>
+    <string name="kb_lang_to_en">Switch to the English resume</string>
+    <string name="kb_lang_to_zh">Switch to the Chinese resume</string>
+    <string name="kb_lang_none">No resume in the other language</string>
+    <string name="kb_pick_resume">Choose a resume</string>
+    <string name="kb_close">Close</string>
+    <string name="kb_suggested">Suggested</string>
+    <string name="kb_selected">Selected</string>
+    <string name="kb_inserted">Typed: %1$s</string>
+    <string name="kb_read_value">Read the value</string>
+    <string name="kb_empty_title">No resume in the keyboard yet</string>
+    <string name="kb_empty_text">Fill in your resume in the app, then turn on Settings › Resume keyboard › Show my resume in the keyboard.</string>
+    <string name="kb_open_app">Open the app</string>
+    <string name="kb_loading">Reading your resume…</string>
+    <string name="kb_error">Couldn\'t read your resume. Open the app once and try again.</string>
+    <string name="kb_locked">Unlock your phone to see your resume</string>
+    <string name="kb_password">Your resume stays hidden in password fields</string>
+    <string name="kb_secret">This field looks like it wants a password or code, so your resume stays hidden</string>
+    <string name="kb_no_learning">This field asks not to remember input, so your resume is hidden</string>
+    <string name="kb_reveal">Show my resume</string>
+    <string name="kb_no_chinese">Chinese isn\'t available here. Tap the switch key for your usual keyboard</string>
+    <string name="kb_tip_dismiss">Got it</string>
+</resources>

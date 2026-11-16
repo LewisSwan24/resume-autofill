@@ -56,6 +56,36 @@ import sendSlash from 'bootstrap-icons/icons/send-slash.svg?raw';
 import clipboardCheck from 'bootstrap-icons/icons/clipboard-check.svg?raw';
 import listUl from 'bootstrap-icons/icons/list-ul.svg?raw';
 import inputCursorText from 'bootstrap-icons/icons/input-cursor-text.svg?raw';
+import fileEarmarkWord from 'bootstrap-icons/icons/file-earmark-word.svg?raw';
+import fileEarmarkImage from 'bootstrap-icons/icons/file-earmark-image.svg?raw';
+import fileEarmarkLock from 'bootstrap-icons/icons/file-earmark-lock.svg?raw';
+import fileEarmarkX from 'bootstrap-icons/icons/file-earmark-x.svg?raw';
+import cardText from 'bootstrap-icons/icons/card-text.svg?raw';
+import arrowCounterclockwise from 'bootstrap-icons/icons/arrow-counterclockwise.svg?raw';
+import dashCircle from 'bootstrap-icons/icons/dash-circle.svg?raw';
+import boxArrowInDown from 'bootstrap-icons/icons/box-arrow-in-down.svg?raw';
+import magic from 'bootstrap-icons/icons/magic.svg?raw';
+import arrowRight from 'bootstrap-icons/icons/arrow-right.svg?raw';
+import arrowClockwise from 'bootstrap-icons/icons/arrow-clockwise.svg?raw';
+import slashCircle from 'bootstrap-icons/icons/slash-circle.svg?raw';
+import cardChecklist from 'bootstrap-icons/icons/card-checklist.svg?raw';
+import boxArrowUpRight from 'bootstrap-icons/icons/box-arrow-up-right.svg?raw';
+import windowIcon from 'bootstrap-icons/icons/window.svg?raw';
+import playCircle from 'bootstrap-icons/icons/play-circle.svg?raw';
+import folder2Open from 'bootstrap-icons/icons/folder2-open.svg?raw';
+import wifiOff from 'bootstrap-icons/icons/wifi-off.svg?raw';
+import questionCircle from 'bootstrap-icons/icons/question-circle.svg?raw';
+import shieldExclamation from 'bootstrap-icons/icons/shield-exclamation.svg?raw';
+import xCircle from 'bootstrap-icons/icons/x-circle.svg?raw';
+import listCheck from 'bootstrap-icons/icons/list-check.svg?raw';
+import calendarEvent from 'bootstrap-icons/icons/calendar-event.svg?raw';
+import bellIcon from 'bootstrap-icons/icons/bell.svg?raw';
+import bellSlash from 'bootstrap-icons/icons/bell-slash.svg?raw';
+import searchIcon from 'bootstrap-icons/icons/search.svg?raw';
+import pinAngle from 'bootstrap-icons/icons/pin-angle.svg?raw';
+import clockHistory from 'bootstrap-icons/icons/clock-history.svg?raw';
+import signpostSplit from 'bootstrap-icons/icons/signpost-split.svg?raw';
+import keyboardIcon from 'bootstrap-icons/icons/keyboard.svg?raw';
 import type { ModuleName } from '../../../src/editor';
 
 const ICONS = {
@@ -115,6 +145,43 @@ const ICONS = {
   'clipboard-check': clipboardCheck,
   'list-ul': listUl,
   'input-cursor-text': inputCursorText,
+  // Resume import: a Word file, a scan with no text, a locked file, a file the app cannot take, show the original
+  // text, put back what was left out, leave out of this import, merge into an existing resume.
+  'file-earmark-word': fileEarmarkWord,
+  'file-earmark-image': fileEarmarkImage,
+  'file-earmark-lock': fileEarmarkLock,
+  'file-earmark-x': fileEarmarkX,
+  'card-text': cardText,
+  'arrow-counterclockwise': arrowCounterclockwise,
+  'dash-circle': dashCircle,
+  'box-arrow-in-down': boxArrowInDown,
+  // Fill browser: fill in one tap, the fill report, forward, reload / retry, stop loading, open outside the app, the
+  // open application page, try the sample form, choose from the phone, offline, site not found, certificate problem.
+  magic,
+  'card-checklist': cardChecklist,
+  'arrow-right': arrowRight,
+  'arrow-clockwise': arrowClockwise,
+  'slash-circle': slashCircle,
+  'box-arrow-up-right': boxArrowUpRight,
+  window: windowIcon,
+  'play-circle': playCircle,
+  'folder2-open': folder2Open,
+  'wifi-off': wifiOff,
+  'question-circle': questionCircle,
+  'shield-exclamation': shieldExclamation,
+  // The report's status word for a fill that failed (src/ui/status.ts, same meaning as in the extension).
+  'x-circle': xCircle,
+  // The application tracker and the ways in (one meaning each).
+  'list-check': listCheck,
+  'calendar-event': calendarEvent,
+  'bell': bellIcon,
+  'bell-slash': bellSlash,
+  'search': searchIcon,
+  'pin-angle': pinAngle,
+  'clock-history': clockHistory,
+  'signpost-split': signpostSplit,
+  // The resume keyboard: the Settings row, the setup screen and the WeChat hint.
+  'keyboard': keyboardIcon,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

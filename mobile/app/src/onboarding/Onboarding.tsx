@@ -1,5 +1,6 @@
-// First run: step 1 says what the app promises, step 2 gets a resume ready (import a file, start blank, or the PDF
-// import that is still to come). Nothing is marked done until the person leaves through one of those or 跳过.
+// First run: step 1 says what the app promises, step 2 gets a resume ready (import a file, start blank, or read a PDF
+// or Word resume) or tries the sample form first. Nothing is marked done until the person leaves through one of the
+// three resume choices or 跳过; the sample form comes back to step 2.
 import { useState } from 'react';
 import type { Language } from '../../../../src/i18n';
 import type { Locale } from '../../../../src/schema';
@@ -16,6 +17,10 @@ export interface OnboardingProps {
   onSkip: () => void;
   onStartBlank: (locale: Locale) => void;
   onImport: () => void;
+  /** Read a PDF or Word resume (the resume import). */
+  onImportResume: () => void;
+  /** Open the sample form in the fill browser; absent, the option is not offered. */
+  onTryDemo?: () => void;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
 }
 
@@ -66,23 +71,15 @@ function Option({
   hint,
   onClick,
   expanded,
-  soon,
 }: {
   icon: IconName;
   name: string;
   hint: string;
   onClick: () => void;
   expanded?: boolean;
-  soon?: string;
 }) {
   return (
-    <button
-      type="button"
-      className="m-onb__option"
-      aria-expanded={expanded}
-      aria-disabled={soon ? true : undefined}
-      onClick={onClick}
-    >
+    <button type="button" className="m-onb__option" aria-expanded={expanded} onClick={onClick}>
       <span className="m-row__tile">
         <Icon name={icon} />
       </span>
@@ -90,12 +87,11 @@ function Option({
         <span className="m-row__name">{name}</span>
         <span className="m-row__caption">{hint}</span>
       </span>
-      {soon ? <span className="m-soon">{soon}</span> : null}
     </button>
   );
 }
 
-function GetReady({ onStep, onSkip, onStartBlank, onImport, showToast }: OnboardingProps) {
+function GetReady({ onStep, onSkip, onStartBlank, onImport, onImportResume, onTryDemo }: OnboardingProps) {
   const t = useMT();
   const [blankOpen, setBlankOpen] = useState(false);
   return (
@@ -131,13 +127,8 @@ function GetReady({ onStep, onSkip, onStartBlank, onImport, showToast }: Onboard
             </button>
           </div>
         ) : null}
-        <Option
-          icon="file-earmark-pdf"
-          name={t('m.onb.pdf')}
-          hint={t('m.onb.pdfHint')}
-          soon={t('m.onb.soon')}
-          onClick={() => showToast({ text: t('m.onb.pdfSoon') })}
-        />
+        <Option icon="file-earmark-pdf" name={t('m.onb.pdf')} hint={t('m.onb.pdfHint')} onClick={onImportResume} />
+        {onTryDemo ? <Option icon="play-circle" name={t('m.onb.demo')} hint={t('m.onb.demoHint')} onClick={onTryDemo} /> : null}
       </div>
     </div>
   );

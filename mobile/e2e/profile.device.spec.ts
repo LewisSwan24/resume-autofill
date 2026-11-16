@@ -2,20 +2,37 @@
 // every value must come back from the encrypted file. Plus: a quick edit survives Home + kill, the on-screen keyboard
 // does not cover the field being typed in, onboarding runs once, export and import round-trip (plain and with a
 // password), delete all leaves nothing behind, the back key order, recent pages are encrypted, and 200% font scale.
-import { mkdirSync } from 'node:fs';
+// Resume import: a PDF opened with the app and a Word file shared to it (through the manifest's intent filters), a
+// stored attachment read back, files it cannot read, and the review at 200% font scale and in dark mode.
+// Fill browser: the sample form fills, reports and undoes; a cross-origin iframe is filled; an SSL error is refused;
+// app schemes are not followed; the keyboard does not cover a field; a stored PDF is uploaded through the file chooser
+// (test pages from fixtures/server.ts).
+// Ways in and the tracker: a VIEW link, shared text, launcher shortcuts and a copied link open pages and
+// become application records; a deadline reminder is scheduled, survives a simulated reboot and fires; export carries
+// the records; delete all clears records, reminders and shortcuts. Each checks the device log for private words.
+// The resume keyboard: the setup screen reads the state back; entries type into the app's practice field
+// and into a page; password and code fields show typing only; turning it off and delete all remove its file; it fits
+// at 200%, in landscape and in dark (screenshots for a human look). The cross-origin iframe tests answer the
+// 「资料也要交给其他网站吗？」 sheet both ways.
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { _android, expect, test, type AndroidDevice, type Page } from '@playwright/test';
-import { MODULES, enumOptions, exportProfile, type FieldMeta, type ModuleMeta } from '../../src/editor';
+import { _android, chromium, expect, test, type AndroidDevice, type Browser, type Page } from '@playwright/test';
+import { MODULES, enumOptions, exportProfile, parseProfileJson, type FieldMeta, type ModuleMeta } from '../../src/editor';
 import { translate } from '../../src/i18n';
 // The export pieces, not transfer.ts's buildExport: that one pulls in the page's icons (svg?raw), which Node cannot load.
 import { encryptExport } from '../app/src/data/exportCrypto';
+import { mt } from '../app/src/i18n';
 import { ProfileSchema, ResumeSchema } from '../../src/schema';
+import { PORTS, startServers, type TestServers } from './fixtures/server';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APK = path.join(HERE, '..', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
 const PKG = 'app.raf.dev';
 const zh = (key: string, params?: Record<string, string | number>) => translate('zh', key, params);
+/** The app's own words (mobile/app/src/i18n.ts), in Chinese. */
+const mzh = (key: string, params?: Record<string, string | number>) => mt('zh', key, params);
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EDITABLE = MODULES.filter((m) => m.container !== 'attachments');
 const REGION_PARTS = ['province', 'city', 'district'] as const;
@@ -29,7 +46,10 @@ test.beforeAll(async () => {
   if (!serial.startsWith('emulator-') && process.env.RAF_ALLOW_WIPE !== '1') {
     throw new Error(`${serial} is not an emulator: these tests wipe the app's data. Set RAF_ALLOW_WIPE=1 to run anyway.`);
   }
-  const found = (await _android.devices()).find((d) => d.serial() === serial);
+  // `_android.devices()` reads and polls every device on the adb server. RAF_ADB_PORT points it at a filtering adb
+  // proxy instead, so a real phone plugged into the same computer is never queried.
+  const adbPort = Number(process.env.RAF_ADB_PORT ?? 0);
+  const found = (await _android.devices(adbPort ? { port: adbPort } : {})).find((d) => d.serial() === serial);
   if (!found) throw new Error(`adb device ${serial} not found`);
   device = found;
   await device.installApk(APK);
@@ -43,9 +63,18 @@ test.afterAll(async () => {
 async function launch(): Promise<Page> {
   await device.shell(`am force-stop ${PKG}`);
   await device.shell(`am start -n ${PKG}/.MainActivity`);
-  const page = await (await device.webView({ pkg: PKG })).page();
-  await page.getByRole('heading', { level: 1 }).first().waitFor();
-  return page;
+  // Right after a force-stop, Playwright can still hand out the killed process's WebView (its page then reports
+  // "closed"): ask again for the new one.
+  for (let attempt = 0; ; attempt++) {
+    const page = await (await device.webView({ pkg: PKG })).page();
+    try {
+      await page.getByRole('heading', { level: 1 }).first().waitFor();
+      return page;
+    } catch (error) {
+      if (attempt >= 2 || !/closed/i.test(String(error))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
 }
 
 const WELCOME = '你好，先说三件事';
@@ -69,10 +98,18 @@ async function startBlank(page: Page) {
   await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
 }
 
-const tabButton = (page: Page, name: '首页' | '简历' | '设置') =>
+const tabButton = (page: Page, name: '首页' | '网申' | '简历' | '设置') =>
   page.getByRole('navigation', { name: '主导航' }).getByRole('button', { name, exact: true });
 
-async function toTab(page: Page, name: '首页' | '简历' | '设置') {
+/**
+ * The paste box's own 打开. The system clipboard outlives `pm clear`, so a link copied by an earlier test can put the
+ * clipboard card, with its own 打开, on Home as well.
+ */
+function pasteOpenButton(page: Page) {
+  return page.locator('form').filter({ has: page.getByLabel('网申链接') }).getByRole('button', { name: '打开', exact: true });
+}
+
+async function toTab(page: Page, name: '首页' | '网申' | '简历' | '设置') {
   const tab = tabButton(page, name);
   if ((await tab.getAttribute('aria-current')) !== 'page') await tab.click();
   await expect(tab).toHaveAttribute('aria-current', 'page');
@@ -525,8 +562,10 @@ test('delete all removes the encrypted files and the key', async () => {
   await backToList(page);
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
-  await page.getByRole('button', { name: '打开', exact: true }).click();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await pasteOpenButton(page).click();
+  // 打开 opens the page in the fill browser; closing it comes back to Home with the page recorded.
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
+  await expect(page.getByRole('button', { name: /^全部网申记录（1）/ })).toBeVisible();
   await expect.poll(() => privateFiles()).toEqual(expect.arrayContaining(['profile.enc', 'state.enc', 'attachments']));
 
   await deleteAllData(page);
@@ -568,16 +607,19 @@ test('the back key: sheet, module, home, then out', async () => {
   await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
 });
 
-test('recent pages survive a restart and are not stored in plain text', async () => {
+test('application records survive a restart and are not stored in plain text', async () => {
   let page = await freshResume();
   await toTab(page, '首页');
   await page.getByLabel('网申链接').fill('https://jobs.example.com/apply/1');
-  await page.getByRole('button', { name: '打开', exact: true }).click();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await pasteOpenButton(page).click();
+  // 打开 opens the page in the fill browser; closing it comes back to Home with the page recorded.
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
+  await expect(page.getByRole('button', { name: /^全部网申记录（1）/ })).toBeVisible();
 
   page = await launch();
   await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
-  await expect(page.getByRole('list', { name: '最近的网申页面' })).toContainText('jobs.example.com');
+  await toTab(page, '网申');
+  await expect(page.getByRole('main')).toContainText('jobs.example.com');
   const raw = await device.shell(`run-as ${PKG} cat files/state.enc`);
   expect(raw.length).toBeGreaterThan(0);
   expect(raw.includes(Buffer.from('jobs.example.com'))).toBe(false);
@@ -640,5 +682,1550 @@ test('at 200% font scale nothing is cut off; light and dark screenshots for a hu
   } finally {
     await device.shell('settings put system font_scale 1.0');
     await device.shell('cmd uimode night no');
+  }
+});
+
+// ---- Resume import: open with, share, a stored attachment, files it cannot read, 200% and dark ----
+
+const IMPORT_FIXTURES = path.join(HERE, '..', '..', 'tests', 'unit', 'mobile', 'fixtures', 'import');
+const RESUME_SAMPLES = path.join(HERE, '..', '..', 'fixtures', 'resume-samples');
+const MIME_PDF = 'application/pdf';
+const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const REVIEW_TITLE = '核对导入的内容';
+
+/**
+ * Puts a file in the app's own cache (after `pm clear`) and returns its content URI through the app's FileProvider
+ * (`cache-path name="my_cache_images" path="."`). The name must be plain ASCII: it goes into a shell command and a URI.
+ */
+async function pushToAppCache(local: string | Buffer, name: string): Promise<string> {
+  const tmp = `/data/local/tmp/raf-${name}`;
+  await device.push(typeof local === 'string' ? readFileSync(local) : local, tmp);
+  try {
+    await device.shell(`cat ${tmp} | run-as ${PKG} sh -c 'mkdir -p cache/incoming-test && cat > cache/incoming-test/${name}'`);
+  } finally {
+    await device.shell(`rm -f ${tmp}`);
+  }
+  return `content://${PKG}.fileprovider/my_cache_images/incoming-test/${name}`;
+}
+
+/** "Open with": ACTION_VIEW resolved through the manifest's filters to this app, without a chooser. */
+async function openWith(uri: string, mime: string) {
+  await device.shell(`am start -a android.intent.action.VIEW -d ${uri} -t ${mime} --grant-read-uri-permission -p ${PKG}`);
+}
+
+/** "Share": ACTION_SEND with the file as EXTRA_STREAM. */
+async function shareTo(uri: string, mime: string) {
+  await device.shell(
+    `am start -a android.intent.action.SEND -t ${mime} --eu android.intent.extra.STREAM ${uri} --grant-read-uri-permission -p ${PKG}`,
+  );
+}
+
+async function airplane(on: boolean) {
+  await device.shell(`cmd connectivity airplane-mode ${on ? 'enable' : 'disable'}`);
+}
+
+const importDialog = (page: Page, title: string | RegExp = REVIEW_TITLE) => page.getByRole('dialog', { name: title });
+
+/** The review's primary action: 导入 n 项 or 合并 n 项. */
+const primaryAction = (page: Page, verb: '导入' | '合并') =>
+  importDialog(page).getByRole('button', { name: new RegExp(`^${verb} \\d+ 项$`) });
+
+/** Fresh data, the interface switched to Chinese on onboarding's first step, and the app stopped there. */
+async function chineseOnboardingStopped() {
+  await device.shell(`pm clear ${PKG}`);
+  const page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  // The language is stored with the first save; give it time before the process goes.
+  await expect.poll(() => privateFiles(), { timeout: 15_000 }).toContain('profile.enc');
+  await device.shell(`am force-stop ${PKG}`);
+}
+
+test('open with: a Chinese PDF opened from another app, cold start in airplane mode, is reviewed and imported as a new resume', async () => {
+  try {
+    await chineseOnboardingStopped();
+    await airplane(true);
+    const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan-3pages.pdf'), 'zh-zhangsan-3pages.pdf');
+    const started = Date.now();
+    await openWith(uri, MIME_PDF);
+    let page = await (await device.webView({ pkg: PKG })).page();
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
+    const workers = new Set(page.workers().map((w) => w.url()));
+    page.on('worker', (worker) => workers.add(worker.url()));
+
+    const review = importDialog(page);
+    await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+    const elapsed = Date.now() - started;
+    test.info().annotations.push({ type: 'intent to review (ms)', description: String(elapsed) });
+    console.log(`D1: intent to review heading ${elapsed} ms`);
+    for (const w of page.workers()) workers.add(w.url());
+    expect([...workers].some((url) => url.endsWith('/pdfjs/pdf.worker.min.mjs')), [...workers].join(', ')).toBe(true);
+
+    await expect(review.getByLabel('姓', { exact: true })).toHaveValue('张');
+    await expect(review.getByLabel('名', { exact: true })).toHaveValue('三');
+    await expect(review.getByText(/^认出 \d+ 项/)).toBeVisible();
+    await expect(review.getByRole('radio', { name: '新建一份简历' })).toBeChecked();
+    await expect(review.getByRole('radio', { name: mzh('m.lang.zh'), exact: true })).toBeChecked();
+    await primaryAction(page, '导入').click();
+
+    await expect(importDialog(page)).toHaveCount(0);
+    await expect(tabButton(page, '简历')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('list', { name: '简历模块' })).toBeVisible();
+    await openModule(page, BASICS);
+    await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+    await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+    await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+
+    const seen = [...requests];
+    page = await launch();
+    await expect(page.getByRole('heading', { name: WELCOME })).toHaveCount(0);
+    await openModule(page, BASICS);
+    await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+    await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+
+    const offsite = seen.filter((url) => !/^(https:\/\/localhost\/|blob:|data:)/.test(url));
+    expect(offsite, 'requests outside the app').toEqual([]);
+  } finally {
+    await airplane(false);
+  }
+});
+
+test('share: a Word file shared to the app merges into the current resume, fills only empty fields, and undo puts it back', async () => {
+  const page = await freshResume();
+  await openModule(page, BASICS);
+  await page.getByLabel('姓', { exact: true }).fill('李');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+
+  const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan.docx'), 'zh-zhangsan.docx');
+  await shareTo(uri, MIME_DOCX);
+  const review = importDialog(page);
+  await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+  // The resume is not blank, so a new one is the default.
+  await expect(review.getByRole('radio', { name: '新建一份简历' })).toBeChecked();
+  await review.getByRole('radio', { name: `合并到「${mzh('m.defaultTitle.zh')}」` }).check();
+  await expect(review.getByText('现有：李')).toBeVisible();
+  await expect(review.getByRole('checkbox', { name: '覆盖：姓' })).not.toBeChecked();
+  await primaryAction(page, '合并').click();
+
+  const preview = page.getByRole('dialog', { name: '合并前看一下' });
+  await expect(preview.getByText(/^填入空着的 \d+ 项/)).toBeVisible();
+  await preview.getByRole('button', { name: '确认合并', exact: true }).click();
+  await expect(importDialog(page)).toHaveCount(0);
+
+  // The toast's 撤销 stays for 8 s: check what was merged quickly, then undo.
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('李');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+  await backToList(page);
+  await openModule(page, CONTACT);
+  const email = page.getByLabel(zh('options.field.email'), { exact: true });
+  await expect(email).toHaveValue('zhangsan@example.com');
+  await page.getByRole('button', { name: zh('options.undo'), exact: true }).click();
+  await expect(page.getByText('已撤销导入')).toBeVisible();
+  await expect(email).toHaveValue('');
+  await backToList(page);
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('李');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('');
+});
+
+test('open with, then leaving with back: the intent redelivered from Recents is not imported again', async () => {
+  const page = await freshResume();
+  const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan.docx'), 'zh-zhangsan.docx');
+  await openWith(uri, MIME_DOCX);
+  const review = importDialog(page);
+  await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+  await review.getByRole('button', { name: zh('common.cancel'), exact: true }).click();
+  await expect(importDialog(page)).toHaveCount(0);
+  for (let i = 0; i < 4 && (await inFront()); i += 1) {
+    await pressBack();
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
+
+  // Recents starts the activity again with its original intent plus FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY (0x00100000).
+  await device.shell(`am start -a android.intent.action.VIEW -d ${uri} -t ${MIME_DOCX} -f 0x00100000 --grant-read-uri-permission -p ${PKG}`);
+  // The process lives on, so Playwright keeps the closed page of the finished activity; read the screen instead.
+  const appTexts = async () => (await systemUiNodes()).filter((n) => n.pkg === PKG && n.text).map((n) => n.text);
+  await expect.poll(async () => (await appTexts()).some((t) => /^(首页|简历资料|正在读取简历|核对导入的内容)$/.test(t)), { timeout: 30_000 }).toBe(true);
+  await new Promise((r) => setTimeout(r, 4_000));
+  const shown = await appTexts();
+  expect(shown.filter((t) => /正在读取简历|核对导入的内容/.test(t))).toEqual([]);
+});
+
+test('attachment: 从这份 PDF 读取简历内容 reads the stored PDF and fills the blank resume', async () => {
+  const page = await freshResume();
+  await openModule(page, ATTACHMENTS);
+  const resumeLabel = zh('options.attach.resume');
+  await page.getByLabel(`${resumeLabel} – 选择文件`).setInputFiles({
+    name: '示例简历.pdf',
+    mimeType: MIME_PDF,
+    buffer: readFileSync(path.join(IMPORT_FIXTURES, 'zh-zhangsan.pdf')),
+  });
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+
+  await page.getByRole('button', { name: '从这份 PDF 读取简历内容' }).click();
+  const review = importDialog(page);
+  await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+  await expect(review.getByRole('radio', { name: `合并到「${mzh('m.defaultTitle.zh')}」` })).toBeChecked();
+  await expect(review.getByRole('checkbox', { name: /^同时/ })).toHaveCount(0);
+  await primaryAction(page, '合并').click();
+  await page.getByRole('dialog', { name: '合并前看一下' }).getByRole('button', { name: '确认合并', exact: true }).click();
+  await expect(importDialog(page)).toHaveCount(0);
+
+  await openModule(page, BASICS);
+  await expect(page.getByLabel('姓', { exact: true })).toHaveValue('张');
+  await expect(page.getByLabel('名', { exact: true })).toHaveValue('三');
+  await backToList(page);
+  await openModule(page, ATTACHMENTS);
+  await expect(page.getByText('示例简历.pdf')).toBeVisible();
+  // Still the one stored file (a .meta and a .data), not a second copy.
+  expect(await privateFiles('files/attachments')).toHaveLength(2);
+});
+
+test('files the app cannot read: a scan, a locked PDF, an 11 MB file and a non-PDF each explain why and store nothing', async () => {
+  await device.shell(`pm clear ${PKG}`);
+  const page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await page.getByRole('button', { name: '跳过', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  const before = await privateFiles();
+
+  const tooBig = Buffer.alloc(11 * 1024 * 1024, 0x20);
+  tooBig.write('%PDF-1.4\n', 0, 'latin1');
+  const cases: Array<{ file: string | Buffer; name: string; title: string }> = [
+    { file: path.join(RESUME_SAMPLES, 'image-only.pdf'), name: 'image-only.pdf', title: '这份 PDF 是扫描件' },
+    { file: path.join(RESUME_SAMPLES, 'encrypted.pdf'), name: 'encrypted.pdf', title: '这份 PDF 设了密码' },
+    { file: tooBig, name: 'too-big.pdf', title: '文件超过 10 MB' },
+    // Sent as a PDF, but the provider knows it as text: refused by type.
+    { file: Buffer.from('plain notes, not a resume\n'), name: 'notes.txt', title: '不是 PDF 或 Word 文件' },
+  ];
+  for (const { file, name, title } of cases) {
+    const uri = await pushToAppCache(file, name);
+    await openWith(uri, MIME_PDF);
+    const failure = importDialog(page, title);
+    await expect(failure.getByRole('heading', { level: 1, name: title }), name).toBeVisible({ timeout: 60_000 });
+    await failure.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(importDialog(page, title), name).toHaveCount(0);
+  }
+
+  const after = await privateFiles();
+  if (after.includes('attachments')) expect(await privateFiles('files/attachments')).toEqual([]);
+  // profileInstalled is AndroidX ProfileInstaller's marker, written a few seconds after any launch: not app data.
+  const ignored = new Set(['state.enc', 'profile.enc', 'profileInstalled']);
+  expect(after.filter((n) => !before.includes(n) && !ignored.has(n))).toEqual([]);
+  await toTab(page, '简历');
+  await expect(page.getByText(mzh('m.empty'))).toBeVisible();
+});
+
+test('the review at 200% font scale and in dark mode: nothing cut off; screenshots for a human look', async () => {
+  mkdirSync(RESULTS, { recursive: true });
+  try {
+    await device.shell(`pm clear ${PKG}`);
+    await device.shell('settings put system font_scale 2.0');
+    const page = await launch();
+    await page.getByRole('radio', { name: '中' }).click();
+    await startBlank(page);
+
+    // The three-page file keeps the progress screen up long enough to measure it.
+    const uri = await pushToAppCache(path.join(IMPORT_FIXTURES, 'zh-zhangsan-3pages.pdf'), 'zh-zhangsan-3pages.pdf');
+    await openWith(uri, MIME_PDF);
+    const progress = importDialog(page, '正在读取简历');
+    await expect(progress.getByRole('heading', { level: 1, name: '正在读取简历' })).toBeVisible({ timeout: 30_000 });
+    await expectFits(page, 'import progress');
+
+    const review = importDialog(page);
+    await expect(review.getByRole('heading', { level: 1, name: REVIEW_TITLE })).toBeVisible({ timeout: 60_000 });
+    await expectFits(page, 'import review');
+    // Playwright emulates a light colour scheme by default; let the page follow the phone instead.
+    await page.emulateMedia({ colorScheme: null });
+    await page.screenshot({ path: path.join(RESULTS, 'review-light-200.png') });
+    await page.screenshot({ path: path.join(RESULTS, 'review-light-200-full.png'), fullPage: true });
+
+    await device.shell('cmd uimode night yes');
+    await expect.poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(true);
+    await page.screenshot({ path: path.join(RESULTS, 'review-dark-200.png') });
+    await page.screenshot({ path: path.join(RESULTS, 'review-dark-200-full.png'), fullPage: true });
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+  }
+});
+
+// ---- The fill browser ----
+
+const DEMO = 'https://appassets.androidplatform.net/demo/form.html';
+const SAMPLE_WORDS = ['张三', 'zhangsan@example.com', '示例大学'];
+let servers: TestServers | null = null;
+
+/** Host adb for what `device.shell` cannot do (port reverse, port forward). Emulator serial only (see beforeAll). */
+function hostAdb(...args: string[]): string {
+  const serial = process.env.RAF_SERIAL!;
+  const sdk = process.env.ANDROID_HOME ?? path.join(process.env.LOCALAPPDATA ?? '', 'Android', 'Sdk');
+  const adb = existsSync(path.join(sdk, 'platform-tools', 'adb.exe')) ? path.join(sdk, 'platform-tools', 'adb.exe') : 'adb';
+  return execFileSync(adb, ['-s', serial, ...args], { encoding: 'utf8' });
+}
+
+/** The test pages on 4180 / 4181 / 4443, reachable from the emulator as 127.0.0.1 and localhost. */
+async function startServer() {
+  if (servers) return;
+  servers = await startServers();
+  for (const port of Object.values(PORTS)) hostAdb('reverse', `tcp:${port}`, `tcp:${port}`);
+}
+
+test.afterAll(async () => {
+  if (!servers) return;
+  await servers.close();
+  servers = null;
+  try {
+    hostAdb('reverse', '--remove-all');
+  } catch {
+    // The device may be gone already.
+  }
+});
+
+/** Fresh app data, onboarding skipped, Chinese interface, on Home. */
+async function freshHome(): Promise<Page> {
+  await device.shell(`pm clear ${PKG}`);
+  const page = await launch();
+  await page.getByRole('radio', { name: '中' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: WELCOME })).toBeVisible();
+  await page.getByRole('button', { name: '跳过', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  return page;
+}
+
+/** Paste a link on Home and open it in the fill browser. */
+async function openLink(page: Page, url: string) {
+  await toTab(page, '首页');
+  await page.getByLabel('网申链接').fill(url);
+  await pasteOpenButton(page).click();
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible();
+}
+
+let cdpBrowser: Browser | null = null;
+
+/**
+ * The page WebView's own CDP page (the fill browser's page, not the app's UI). Both WebViews live in the app's process
+ * and share one DevTools socket, so the page usually shows up next to the UI page; when Playwright's Android wrapper
+ * only exposes one page per socket, connect to the socket directly over a forwarded port.
+ */
+async function contentPage(page: Page, urlPrefix: string): Promise<Page> {
+  const until = Date.now() + 15_000;
+  while (Date.now() < until) {
+    const found = page.context().pages().find((p) => p.url().startsWith(urlPrefix));
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const pid = (await device.shell(`pidof ${PKG}`)).toString().trim().split(/\s+/)[0];
+      hostAdb('forward', 'tcp:9333', `localabstract:webview_devtools_remote_${pid}`);
+      cdpBrowser ??= await chromium.connectOverCDP('http://127.0.0.1:9333', { timeout: 20_000 });
+      const pollUntil = Date.now() + 15_000;
+      while (Date.now() < pollUntil) {
+        const found = cdpBrowser
+          .contexts()
+          .flatMap((c) => c.pages())
+          .find((p) => p.url().startsWith(urlPrefix));
+        if (found) return found;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch {
+      await cdpBrowser?.close().catch(() => undefined);
+      cdpBrowser = null;
+    }
+  }
+  throw new Error(`no CDP page for ${urlPrefix}`);
+}
+
+test.afterEach(async () => {
+  await cdpBrowser?.close().catch(() => undefined);
+  cdpBrowser = null;
+});
+
+interface DescNode {
+  desc: string;
+  x: number;
+  y: number;
+}
+
+/** Views of the app with a content description (the native FAB), read with uiautomator. */
+async function describedNodes(): Promise<DescNode[]> {
+  const xml = (await device.shell('uiautomator dump /sdcard/raf-ui.xml >/dev/null 2>&1; cat /sdcard/raf-ui.xml')).toString('utf8');
+  const nodes: DescNode[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    const desc = /\bcontent-desc="([^"]*)"/.exec(match[0])?.[1] ?? '';
+    const bounds = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(/\bbounds="([^"]*)"/.exec(match[0])?.[1] ?? '');
+    if (!desc || !bounds) continue;
+    const [x1, y1, x2, y2] = bounds.slice(1).map(Number) as [number, number, number, number];
+    nodes.push({ desc, x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) });
+  }
+  return nodes;
+}
+
+async function waitForFab(match: RegExp, timeoutMs = 30_000): Promise<DescNode> {
+  const until = Date.now() + timeoutMs;
+  let seen: string[] = [];
+  while (Date.now() < until) {
+    const nodes = await describedNodes();
+    const node = nodes.find((n) => match.test(n.desc));
+    if (node) return node;
+    seen = nodes.map((n) => n.desc);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`no view described ${match}; last seen: ${JSON.stringify(seen)}`);
+}
+
+/**
+ * A real touch on an element of a content page (a gesture, unlike a CDP click, so links count as user-initiated).
+ * Measured with evaluate, not a locator: after a link the app refused (weixin:), Playwright still waits for that
+ * navigation to finish, and locator actions on the page would hang.
+ */
+async function realTap(target: Page, selector: string) {
+  const box = await target.evaluate((sel) => {
+    const el = document.querySelector(sel)!;
+    el.scrollIntoView({ block: 'center' });
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  }, selector);
+  const cdp = await target.context().newCDPSession(target);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + box.height / 2, gestureSourceType: 'touch' });
+  await cdp.detach().catch(() => undefined);
+}
+
+async function tapFab(match = /一键填写|继续填写/) {
+  const fab = await waitForFab(match);
+  await device.shell(`input tap ${fab.x} ${fab.y}`);
+  return fab;
+}
+
+/** Nothing of the sample resume in the chromium or crash log. */
+async function expectCleanLogcat() {
+  const log = (await device.shell('logcat -d -s chromium:* AndroidRuntime:*')).toString('utf8');
+  for (const word of SAMPLE_WORDS) expect(log.includes(word), `logcat holds ${word}`).toBe(false);
+}
+
+/** Fill-browser tests read the device log at the end; start each from an empty one. */
+async function clearLogcat() {
+  await device.shell('logcat -c');
+}
+
+test('fill browser: the sample form fills, reports and undoes', async () => {
+  await clearLogcat();
+  const page = await freshHome();
+  await page.getByRole('button', { name: /^没有链接？试试示例表单/ }).click();
+  await expect(page.getByRole('button', { name: '网页信息：示例表单（App 自带）' })).toBeVisible();
+  const content = await contentPage(page, DEMO);
+  await content.locator('#name').waitFor();
+
+  await tapFab();
+  const report = page.getByRole('dialog', { name: '填写报告' });
+  await expect(report).toBeVisible({ timeout: 60_000 });
+  const filledTab = report.getByRole('tab', { name: /^已填 \d+$/ });
+  const filled = Number((await filledTab.textContent())!.replace(/\D/g, ''));
+  expect(filled).toBeGreaterThanOrEqual(10);
+  await expect(report.getByText(/App 不会替你提交/)).toBeVisible();
+
+  await expect(content.locator('#name')).toHaveValue('张三');
+  await expect(content.locator('#email')).toHaveValue('zhangsan@example.com');
+  await expect(content.locator('#school-1')).toHaveValue('示例大学');
+  const extra = content.frames().find((f) => f.url().endsWith('/demo/extra.html'));
+  expect(extra, 'same-origin iframe').toBeTruthy();
+  await expect(extra!.locator('#emergency-name')).not.toHaveValue('');
+  expect(await content.locator('#agree').isChecked()).toBe(false);
+  expect(await content.locator('#notice').isVisible()).toBe(false);
+
+  // A row on 待你看 (or 已填 when nothing needs the person) scrolls its field into view.
+  const attention = report.getByRole('tab', { name: /^待你看 \d+$/ });
+  if ((await attention.textContent())!.replace(/\D/g, '') !== '0') await attention.click();
+  else await filledTab.click();
+  await content.evaluate(() => window.scrollTo(0, 0));
+  const row = report.getByRole('button', { name: /^在网页上找到「/ }).last();
+  const label = (await row.getAttribute('aria-label'))!;
+  await row.click();
+  // The page scrolls the field to the centre (and may focus it): either way it is on screen now.
+  await expect
+    .poll(
+      () =>
+        content.evaluate(() => {
+          const el = document.activeElement;
+          if (el && el !== document.body) {
+            const r = el.getBoundingClientRect();
+            return r.bottom > 0 && r.top < window.innerHeight;
+          }
+          return window.scrollY > 0;
+        }),
+      { message: `located ${label}`, timeout: 10_000 },
+    )
+    .toBe(true);
+
+  await report.getByRole('button', { name: '撤销这次填写' }).click();
+  await expect(report.getByText(/^已恢复 \d+ 项$/)).toBeVisible({ timeout: 15_000 });
+  await expect(content.locator('#name')).toHaveValue('');
+  await expect(content.locator('#email')).toHaveValue('');
+  await expectCleanLogcat();
+});
+
+/** A resume with 张三, an email, phone 13800000000 and one education entry at 示例大学, typed through the page. */
+async function sampleWithPhoneAndSchool(): Promise<Page> {
+  const page = await freshResume();
+  await fillSample(page);
+  await openModule(page, CONTACT);
+  await page.getByLabel(zh('options.field.phone'), { exact: true }).fill('13800000000');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+  const education = EDITABLE.find((m) => m.module === 'education')!;
+  await openModule(page, education);
+  await page.getByRole('button', { name: zh('options.add', { name: zh(education.labelKey) }) }).click();
+  await page.getByLabel(zh('options.field.school'), { exact: true }).fill('示例大学');
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+  return page;
+}
+
+/** outer.html (127.0.0.1:4180) with its localhost:4181 frame, filled up to the 「资料也要交给其他网站吗？」 sheet. */
+async function fillUpToSitesSheet(): Promise<{ page: Page; outer: Page }> {
+  await clearLogcat();
+  await startServer();
+  const page = await sampleWithPhoneAndSchool();
+  await openLink(page, 'http://127.0.0.1:4180/outer.html');
+  const outer = await contentPage(page, 'http://127.0.0.1:4180/outer.html');
+  await outer.locator('#name').waitFor();
+  // Both frames counted before the tap: 2 fields outside, 2 in the iframe.
+  await waitForFab(/可以填 4 项/);
+  await tapFab();
+  // The frame is another site (localhost against 127.0.0.1): nothing goes to it before the person says so.
+  const sites = page.getByRole('dialog', { name: mzh('m.br.run.sites.title') });
+  await expect(sites).toBeVisible({ timeout: 60_000 });
+  await expect(sites.getByRole('listitem').filter({ hasText: /^localhost$/ })).toBeVisible();
+  return { page, outer };
+}
+
+const innerFrame = (outer: Page) => {
+  const inner = outer.frames().find((f) => f.url().startsWith('http://localhost:4181/inner.html'));
+  expect(inner, 'cross-origin iframe').toBeTruthy();
+  return inner!;
+};
+
+test('fill browser: a cross-origin iframe of another site is filled only after a yes', async () => {
+  const { page, outer } = await fillUpToSitesSheet();
+  await page.getByRole('dialog', { name: mzh('m.br.run.sites.title') }).getByRole('button', { name: mzh('m.br.run.sites.go'), exact: true }).click();
+  const report = page.getByRole('dialog', { name: '填写报告' });
+  await expect(report).toBeVisible({ timeout: 60_000 });
+
+  await expect(outer.locator('#name')).toHaveValue('张三');
+  await expect(outer.locator('#email')).toHaveValue('zhangsan@example.com');
+  const inner = innerFrame(outer);
+  await expect(inner.locator('#phone')).toHaveValue('13800000000');
+  await expect(inner.locator('#school')).toHaveValue('示例大学');
+  await expect(report.getByText(mzh('m.br.report.otherSites', { hosts: 'localhost' }))).toBeVisible();
+  await report.getByRole('tab', { name: /^已填 \d+$/ }).click();
+  await expect(report.getByRole('tab', { name: '已填 4' })).toBeVisible();
+  await expect(report.getByRole('button', { name: '在网页上找到「手机」' })).toBeVisible();
+  await expect(report.getByRole('button', { name: '在网页上找到「姓名」' })).toBeVisible();
+
+  // The page title lands on the application record (its guessed company).
+  await report.getByRole('button', { name: '完成', exact: true }).click();
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
+  await page.getByRole('dialog', { name: '关闭这个网申页面？' }).getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+  // After a fill, closing the page asks once whether it was submitted; the app never decides that itself.
+  const ask = page.getByRole('dialog', { name: '提交了吗？' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: '还没有', exact: true }).click();
+  await expect(ask).toHaveCount(0);
+  await toTab(page, '网申');
+  await expect(page.getByRole('main')).toContainText('外层示例页');
+  await expect(page.getByRole('main')).toContainText('填写中');
+  await expectCleanLogcat();
+});
+
+test('fill browser: 只填本站 sends nothing to a frame of another site', async () => {
+  const { page, outer } = await fillUpToSitesSheet();
+  await page.getByRole('dialog', { name: mzh('m.br.run.sites.title') }).getByRole('button', { name: mzh('m.br.run.sites.own'), exact: true }).click();
+  const report = page.getByRole('dialog', { name: '填写报告' });
+  await expect(report).toBeVisible({ timeout: 60_000 });
+
+  await expect(outer.locator('#name')).toHaveValue('张三');
+  await expect(outer.locator('#email')).toHaveValue('zhangsan@example.com');
+  const inner = innerFrame(outer);
+  await expect(inner.locator('#phone')).toHaveValue('');
+  await expect(inner.locator('#school')).toHaveValue('');
+  await expect(report.getByText(/^也交给了这些网站：/)).toHaveCount(0);
+  await expect(report.getByRole('tab', { name: '已填 2' })).toBeVisible();
+  await expectCleanLogcat();
+});
+
+test('fill browser: an SSL error page is refused', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+  await openLink(page, 'https://127.0.0.1:4443/');
+  const error = page.getByRole('alert');
+  await expect(error.getByRole('heading', { name: '这个网站的安全证书有问题' })).toBeVisible({ timeout: 30_000 });
+  await expect(error.getByRole('button')).toHaveText(['重试', '关闭']);
+  expect(page.context().pages().some((p) => p.url().startsWith('https://127.0.0.1:4443'))).toBe(false);
+  await error.getByRole('button', { name: '重试' }).click();
+  await expect(page.getByRole('alert').getByRole('heading', { name: '这个网站的安全证书有问题' })).toBeVisible({ timeout: 30_000 });
+  await expectCleanLogcat();
+});
+
+test('fill browser: external schemes are not followed', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+  await openLink(page, 'http://127.0.0.1:4180/links.html');
+  const links = await contentPage(page, 'http://127.0.0.1:4180/links.html');
+  await links.locator('#weixin').waitFor();
+
+  await realTap(links, '#weixin');
+  const app = page.getByRole('dialog', { name: '这个链接要打开别的 App' });
+  await expect(app).toBeVisible();
+  await expect(app).toContainText('微信');
+  // A WeChat link also offers the resume keyboard; still nothing that opens the other app.
+  await expect(app).toContainText(mzh('m.kb.hint.title'));
+  await expect(app.locator('button:not([aria-label="关闭"])')).toHaveText([mzh('m.kb.hint.go'), '复制链接']);
+  expect(await inFront()).toBe(true);
+  await app.getByRole('button', { name: '关闭' }).click();
+
+  await realTap(links, '#tel');
+  const call = page.getByRole('dialog', { name: '打开拨号？' });
+  await expect(call).toContainText('10086');
+  await call.getByRole('button', { name: '取消' }).click();
+  await expect(call).toHaveCount(0);
+  expect(await inFront()).toBe(true);
+
+  // A navigation with no gesture behind it. Playwright's evaluate runs as a user gesture, so send the script over
+  // CDP with userGesture off, and first wait out Chromium's transient activation (5 s) from the taps above.
+  await new Promise((resolve) => setTimeout(resolve, 6000));
+  const cdp = await links.context().newCDPSession(links);
+  await cdp.send('Runtime.evaluate', { expression: "location.href = 'weixin://dl/x'", userGesture: false });
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const dialogs = await page.getByRole('dialog').evaluateAll((els) => els.map((el) => (el.textContent ?? '').slice(0, 60)));
+  expect(dialogs).toEqual([]);
+  expect(await inFront()).toBe(true);
+  // Control: the same script with a gesture does reach the app, so the quiet above was the gesture rule at work.
+  await cdp.send('Runtime.evaluate', { expression: "location.href = 'weixin://dl/x'", userGesture: true });
+  await expect(page.getByRole('dialog', { name: '这个链接要打开别的 App' })).toBeVisible();
+  await cdp.detach().catch(() => undefined);
+  expect(await inFront()).toBe(true);
+  await expectCleanLogcat();
+});
+
+test('fill browser: the keyboard does not cover a field near the bottom', async () => {
+  await clearLogcat();
+  const page = await freshHome();
+  await page.getByRole('button', { name: /^没有链接？试试示例表单/ }).click();
+  const content = await contentPage(page, DEMO);
+  const about = content.locator('#about');
+  await about.waitFor();
+  await waitForFab(/一键填写/);
+  await about.scrollIntoViewIfNeeded();
+  const box = (await about.boundingBox())!;
+  // A real touch, so the on-screen keyboard comes up.
+  const cdp = await content.context().newCDPSession(content);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 20), gestureSourceType: 'touch' });
+  await expect.poll(() => content.evaluate(() => document.activeElement?.id), { timeout: 10_000 }).toBe('about');
+  await device.shell('input text hello');
+  await expect(about).toHaveValue(/hello/);
+  await expect
+    .poll(
+      async () => {
+        const nodes = await describedNodes();
+        return nodes.some((n) => /一键填写/.test(n.desc));
+      },
+      { timeout: 10_000, message: 'the FAB hides with the keyboard' },
+    )
+    .toBe(false);
+  const fits = await about.evaluate((el) => el.getBoundingClientRect().bottom <= (window.visualViewport?.height ?? window.innerHeight) + 1);
+  expect(fits).toBe(true);
+  await device.shell('input keyevent 4');
+  await expectCleanLogcat();
+});
+
+test('fill browser: a stored PDF goes into the page through the file chooser, and no plain copy lands on disk', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshResume();
+  await openModule(page, ATTACHMENTS);
+  const marker = `RAF-UPLOAD-${Date.now()}`;
+  const pdf = Buffer.from(`%PDF-1.4\n% ${marker}\n%%EOF\n`);
+  await page.getByLabel(`${zh('options.attach.resume')} – 选择文件`).setInputFiles({ name: '示例简历.pdf', mimeType: 'application/pdf', buffer: pdf });
+  await expect(page.getByText(zh('options.allSaved'))).toBeVisible();
+  await backToList(page);
+
+  await openLink(page, 'http://127.0.0.1:4180/upload.html');
+  const upload = await contentPage(page, 'http://127.0.0.1:4180/upload.html');
+  await upload.locator('#cv').waitFor();
+  await realTap(upload, '#cv');
+  const chooser = page.getByRole('dialog', { name: '选择要上传的文件' });
+  await expect(chooser).toBeVisible({ timeout: 15_000 });
+  await expect(chooser.getByText('这个网页要：PDF', { exact: true })).toBeVisible();
+  await chooser.getByRole('button', { name: /示例简历\.pdf/ }).click();
+  await expect(chooser).toHaveCount(0);
+
+  // Chromium reads the file through the app's one-time content:// stream: the page gets the whole file.
+  await expect
+    .poll(() => upload.evaluate(() => (document.querySelector('#cv') as HTMLInputElement).files?.length ?? 0), { timeout: 15_000 })
+    .toBe(1);
+  const got = await upload.evaluate(async () => {
+    const file = (document.querySelector('#cv') as HTMLInputElement).files![0]!;
+    return { name: file.name, size: file.size, text: await file.text() };
+  });
+  expect(got.name).toBe('示例简历.pdf');
+  expect(got.size).toBe(pdf.length);
+  expect(got.text).toContain(marker);
+
+  // The decrypted bytes went through a pipe, never a file: nothing in the app's private folders holds them.
+  const hits = (await device.shell(`run-as ${PKG} sh -c 'grep -rl ${marker} . 2>/dev/null; true'`)).toString().trim();
+  expect(hits).toBe('');
+  await expectCleanLogcat();
+});
+
+// ---- Ways in and the application tracker ----
+
+const JOB = `http://127.0.0.1:${PORTS.outer}/job.html`;
+const OUTER = `http://127.0.0.1:${PORTS.outer}/outer.html`;
+/** What must never reach the device log: record and resume content, and the job page's address. */
+const PRIVATE_WORDS = ['示例科技', '张三', 'zhangsan@example.com', '127.0.0.1:4180/job.html'];
+
+/** A VIEW intent as another app's 「在默认浏览器打开」 sends it (aimed at this app, as the chooser would). */
+async function viewUrl(url: string, extraFlags = '') {
+  await device.shell(`am start -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d '${url}' ${extraFlags} -p ${PKG}`);
+}
+
+/**
+ * A text shared to the app (no single quotes in `text`). Through the host's adb, not `device.shell`: Playwright's adb
+ * client sizes the command in UTF-16 units, so a command holding Chinese reaches the device cut short.
+ */
+async function shareText(text: string) {
+  hostAdb('shell', `am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT '${text}' -p ${PKG}`);
+}
+
+/** A launcher shortcut's intent, started explicitly. */
+async function shortcut(action: string, extras = '') {
+  await device.shell(`am start -a ${action} -n ${PKG}/.MainActivity ${extras}`);
+}
+
+async function dumpsys(name: string): Promise<string> {
+  return (await device.shell(`dumpsys ${name}`)).toString('utf8');
+}
+
+/**
+ * Whether a reminder alarm is pending. Only the 「N pending alarms:」 block counts: `dumpsys alarm` also keeps a
+ * removal history and fired-alarm stats that name the tag long after the alarm is gone.
+ */
+const hasReminderAlarm = async () => {
+  const dump = await dumpsys('alarm');
+  const start = /^\s*\d+ pending alarms:/m.exec(dump);
+  if (!start) throw new Error('dumpsys alarm has no pending alarms block');
+  const rest = dump.slice(start.index + start[0].length);
+  const end = /^ {2}\S/m.exec(rest);
+  return (end ? rest.slice(0, end.index) : rest).includes(`${PKG}.REMINDER`);
+};
+
+/** Milliseconds since the epoch on the emulator's clock. */
+async function emulatorNow(): Promise<number> {
+  return Number((await device.shell('date +%s')).toString().trim()) * 1000;
+}
+
+/** The emulator's local time plus `minutes`, as HH:MM. */
+async function emulatorClockPlus(minutes: number): Promise<string> {
+  const [h, m] = (await device.shell('date +%H:%M')).toString().trim().split(':').map(Number) as [number, number];
+  const total = (h * 60 + m + minutes) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** Nothing of a record or the resume in the WebView, crash or activity-manager log. */
+async function expectNoPrivateWordsInLogcat() {
+  const log = (await device.shell('logcat -d -s chromium:* AndroidRuntime:* ActivityManager:*')).toString('utf8');
+  for (const word of PRIVATE_WORDS) expect(log.includes(word), `logcat holds ${word}`).toBe(false);
+}
+
+async function closePage(page: Page) {
+  await page.getByRole('button', { name: '关闭网申页面' }).click();
+  const confirm = page.getByRole('dialog', { name: '关闭这个网申页面？' });
+  if (await confirm.isVisible().catch(() => false)) await confirm.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toHaveCount(0);
+}
+
+/** Every text and accessible name of this app's views on screen (Playwright may hold a finished activity's page). */
+async function appWords(): Promise<string[]> {
+  const xml = (await device.shell('uiautomator dump /sdcard/raf-ui.xml >/dev/null 2>&1; cat /sdcard/raf-ui.xml')).toString('utf8');
+  const words: string[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    if (!match[0].includes(`package="${PKG}"`)) continue;
+    for (const attr of ['text', 'content-desc']) {
+      const value = new RegExp(`\\b${attr}="([^"]*)"`).exec(match[0])?.[1];
+      if (value) words.push(value);
+    }
+  }
+  return words;
+}
+
+/** The 网申 tab's detail of the record named `name`. */
+async function openRecord(page: Page, name: string) {
+  await toTab(page, '网申');
+  const back = page.getByRole('button', { name: '返回网申记录' });
+  if (await back.isVisible().catch(() => false)) await back.click();
+  await page.getByRole('button', { name: new RegExp(`^${esc(name)}`) }).first().click();
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+}
+
+async function setDeadline(page: Page, chip: '今天' | '明天') {
+  await page.getByRole('button', { name: /^截止日期/ }).click();
+  const sheet = page.getByRole('dialog', { name: '设置截止日期' });
+  await sheet.getByRole('button', { name: chip, exact: true }).click();
+  await sheet.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+}
+
+/** Settings → 截止提醒: the time, and whether the day-before reminder is on. */
+async function setReminderTime(page: Page, time: string, dayBefore?: boolean) {
+  await toTab(page, '设置');
+  await page.getByRole('button', { name: /^截止提醒/ }).click();
+  const sheet = page.getByRole('dialog', { name: '截止提醒' });
+  await sheet.getByLabel('提醒时间').fill(time);
+  if (dayBefore !== undefined) await sheet.getByRole('checkbox', { name: '截止前一天' }).setChecked(dayBefore);
+  await sheet.getByRole('button', { name: '关闭', exact: true }).click();
+}
+
+/** Open the job page by VIEW, wait for its form, close it: the record exists (its company comes from the title). */
+async function recordJobPage(page: Page) {
+  await viewUrl(JOB);
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+  const job = await contentPage(page, JOB);
+  await job.locator('#name').waitFor();
+  await closePage(page);
+}
+
+test('ways in: a VIEW link opens the fill browser and becomes an application record', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+
+  // Our browser, not some other: the self-signed page is refused with our own certificate error.
+  await viewUrl(`https://127.0.0.1:${PORTS.tls}/`);
+  await expect(page.getByRole('button', { name: `网页信息：127.0.0.1:${PORTS.tls}` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('alert').getByRole('heading', { name: '这个网站的安全证书有问题' })).toBeVisible({ timeout: 30_000 });
+  await closePage(page);
+
+  await recordJobPage(page);
+  await toTab(page, '网申');
+  const row = page.getByRole('button', { name: /^示例科技/ });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(row).toContainText('想投');
+
+  // A javascript: link sent straight to the activity: refused, no browser.
+  await device.shell(`am start -n ${PKG}/.MainActivity -a android.intent.action.VIEW -d 'javascript:alert(1)'`);
+  await expect(page.getByText('只能打开 http 或 https 开头的网页链接。')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toHaveCount(0);
+
+  // Leave with back; Recents starts the activity again with the old intent plus FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY.
+  for (let i = 0; i < 5 && (await inFront()); i += 1) {
+    await pressBack();
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  await expect.poll(inFront, { timeout: 10_000 }).toBe(false);
+  await viewUrl(JOB, '-f 0x00100000');
+  await expect.poll(async () => (await appWords()).some((w) => /^(首页|网申记录)$/.test(w)), { timeout: 30_000 }).toBe(true);
+  await new Promise((r) => setTimeout(r, 4_000));
+  expect((await appWords()).filter((w) => /关闭网申页面|网页信息/.test(w))).toEqual([]);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('ways in: a shared text opens its link, asks when it has two, and says when it has none', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+
+  await shareText(`【示例科技校园招聘】网申入口 ${JOB}`);
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('已打开：示例科技校园招聘 网申入口')).toBeVisible({ timeout: 15_000 });
+  await closePage(page);
+
+  await shareText(`第一个 ${JOB} 第二个 ${OUTER}`);
+  const choice = page.getByRole('dialog', { name: '打开哪个链接？' });
+  await expect(choice).toBeVisible({ timeout: 15_000 });
+  const rows = choice.getByRole('button', { name: '打开 127.0.0.1' });
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).click();
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+  const outer = await contentPage(page, OUTER);
+  expect(outer.url()).toMatch(/\/outer\.html$/);
+  await closePage(page);
+
+  await shareText('明天下午面试');
+  await expect(page.getByText('分享的内容里没有网页链接。')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: '关闭网申页面' })).toHaveCount(0);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('ways in: launcher shortcuts open the demo, the paste box and the last application', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+
+  await shortcut('app.raf.dev.action.OPEN_DEMO');
+  await expect(page.getByRole('button', { name: '网页信息：示例表单（App 自带）' })).toBeVisible({ timeout: 30_000 });
+  await closePage(page);
+
+  await recordJobPage(page);
+  // The dynamic 继续：… shortcut is synced a second after the record changed.
+  await expect.poll(async () => (await dumpsys('shortcut')).includes('last-application'), { timeout: 20_000 }).toBe(true);
+  const dump = await dumpsys('shortcut');
+  expect(dump).toContain(PKG);
+  const recordId = /recordId=([A-Za-z0-9-]{1,64})/.exec(dump)?.[1];
+  if (recordId) {
+    await shortcut('app.raf.dev.action.OPEN_APPLICATION', `--es recordId ${recordId}`);
+    await expect(page.getByRole('button', { name: '关闭网申页面' })).toBeVisible({ timeout: 30_000 });
+    expect((await contentPage(page, JOB)).url()).toMatch(/\/job\.html$/);
+    await closePage(page);
+  } else {
+    test.info().annotations.push({
+      type: 'skipped step',
+      description: 'dumpsys shortcut does not print the intent extras (no recordId=), so opening the last application by its real id was not checked',
+    });
+  }
+
+  await shortcut('app.raf.dev.action.OPEN_APPLICATION', '--es recordId no-such-id');
+  await expect(page.getByText('这条网申记录已经删了。')).toBeVisible({ timeout: 15_000 });
+
+  await toTab(page, '设置');
+  await shortcut('app.raf.dev.action.PASTE_LINK');
+  await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel('网申链接')).toBeFocused({ timeout: 10_000 });
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('ways in: a copied link is offered when the app comes back', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshHome();
+  const copy = async (text: string) =>
+    page
+      .evaluate((t) => navigator.clipboard.writeText(t), text)
+      .then(() => true)
+      .catch((error: unknown) => String(error));
+  const copied = await copy(OUTER);
+  test.skip(copied !== true, `the WebView could not write the clipboard (${String(copied)}); the clipboard card was not checked on the device`);
+  const comeBack = async () => {
+    await device.shell('input keyevent 3');
+    await new Promise((r) => setTimeout(r, 1_000));
+    await device.shell(`am start -n ${PKG}/.MainActivity`);
+  };
+
+  await comeBack();
+  const card = page.getByRole('region', { name: '打开刚复制的链接？' });
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await expect(card).toContainText('127.0.0.1');
+  await card.getByRole('button', { name: '不打开这个链接' }).click();
+  await expect(card).toHaveCount(0);
+
+  await comeBack();
+  await new Promise((r) => setTimeout(r, 3_000));
+  await expect(page.getByRole('region', { name: '打开刚复制的链接？' })).toHaveCount(0);
+
+  await toTab(page, '设置');
+  await page.getByRole('switch', { name: '发现刚复制的链接' }).uncheck();
+  expect(await copy(JOB)).toBe(true);
+  await comeBack();
+  await toTab(page, '首页');
+  await new Promise((r) => setTimeout(r, 3_000));
+  await expect(page.getByRole('region', { name: '打开刚复制的链接？' })).toHaveCount(0);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('tracker: a deadline reminder posts a notification and comes back after a simulated reboot', async () => {
+  await clearLogcat();
+  await startServer();
+  let page = await freshHome();
+  await recordJobPage(page);
+  await openRecord(page, '示例科技');
+  await setDeadline(page, '今天');
+  await setReminderTime(page, await emulatorClockPlus(2), false);
+
+  await openRecord(page, '示例科技');
+  await page.getByRole('switch', { name: '截止前提醒我' }).click();
+  const ask = page.getByRole('dialog', { name: '允许发通知？' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: '继续', exact: true }).click();
+  await tapInSystemUi((node) => /^(允许|Allow)$/.test(node.text), 'the system Allow button');
+  await expect(page.getByRole('switch', { name: '截止前提醒我' })).toBeChecked({ timeout: 15_000 });
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+
+  // Reboot simulation: a force-stop drops the alarms; the boot path puts them back from reminders.enc, without the UI.
+  await device.shell(`am force-stop ${PKG}`);
+  await expect.poll(hasReminderAlarm, { timeout: 10_000 }).toBe(false);
+  await device.shell(`am broadcast --include-stopped-packages -n ${PKG}/.DebugReminderReceiver -a app.raf.dev.debug.RESCHEDULE`);
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+
+  // Firing: due reminders are posted; the lock screen version has no company name.
+  const at = (await emulatorNow()) + 3 * 60_000;
+  await device.shell(`am broadcast -n ${PKG}/.DebugReminderReceiver -a app.raf.dev.debug.FIRE_DUE --el at ${at}`);
+  await expect.poll(async () => (await dumpsys('notification --noredact')).includes('今天截止：示例科技'), { timeout: 20_000 }).toBe(true);
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(false);
+
+  // Cancel: a new future reminder, then deleting the record removes its alarm and its notification.
+  page = await launch();
+  await setReminderTime(page, await emulatorClockPlus(5));
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+  await openRecord(page, '示例科技');
+  await page.getByRole('button', { name: /^删除这条记录/ }).click();
+  await expect(page.getByText(/^已删除「示例科技」的网申记录/)).toBeVisible();
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(false);
+  await expect.poll(async () => (await dumpsys('notification --noredact')).includes('今天截止：示例科技'), { timeout: 20_000 }).toBe(false);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('tracker: export carries the records, the extension reads the resume part, and delete all clears records, reminders and shortcuts', async () => {
+  await clearLogcat();
+  await startServer();
+  const page = await freshResume();
+  await device.shell(`pm grant ${PKG} android.permission.POST_NOTIFICATIONS`);
+  await recordJobPage(page);
+  await openRecord(page, '示例科技');
+  await setDeadline(page, '明天');
+  await page.getByRole('switch', { name: '截止前提醒我' }).click();
+  await expect(page.getByRole('switch', { name: '截止前提醒我' })).toBeChecked({ timeout: 15_000 });
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await dumpsys('shortcut')).includes('last-application'), { timeout: 20_000 }).toBe(true);
+
+  const exported = await exportThroughPicker(page);
+  const text = exported.buffer.toString('utf8');
+  expect(parseProfileJson(text).ok).toBe(true);
+  expect((JSON.parse(text) as { mobileTracker: { applications: unknown[] } }).mobileTracker.applications).toHaveLength(1);
+  await device.shell('rm -f /sdcard/Download/resume-autofill-profile-*');
+
+  await deleteAllData(page);
+  await page.getByRole('radio', { name: '中' }).click();
+  await page.getByRole('button', { name: '跳过', exact: true }).click();
+  await toTab(page, '网申');
+  await expect(page.getByText('还没有网申记录')).toBeVisible();
+  expect(await privateFiles()).not.toContain('reminders.enc');
+  await expect.poll(hasReminderAlarm, { timeout: 20_000 }).toBe(false);
+  await expect.poll(async () => (await dumpsys('shortcut')).includes('last-application'), { timeout: 20_000 }).toBe(false);
+  await expectNoPrivateWordsInLogcat();
+});
+
+test('tracker: the new screens fit at 200% font; light and dark screenshots for a human look', async () => {
+  mkdirSync(RESULTS, { recursive: true });
+  await clearLogcat();
+  await startServer();
+  /** Home, the 网申 list and detail, the deadline sheet, both new Settings sheets and the link choice sheet. */
+  const walk = async (page: Page, at: (name: string) => Promise<void>) => {
+    await toTab(page, '首页');
+    await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+    await at('home');
+    await toTab(page, '网申');
+    await expect(page.getByRole('button', { name: /^示例科技/ }).first()).toBeVisible();
+    await at('tracker-list');
+    await openRecord(page, '示例科技');
+    await at('tracker-detail');
+    await page.getByRole('button', { name: /^截止日期/ }).click();
+    await expect(page.getByRole('dialog', { name: '设置截止日期' })).toBeVisible();
+    await at('deadline-sheet');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '设置截止日期' })).toHaveCount(0);
+    await toTab(page, '设置');
+    await page.getByRole('button', { name: /^截止提醒/ }).click();
+    await expect(page.getByRole('dialog', { name: '截止提醒' })).toBeVisible();
+    await at('reminder-settings');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '截止提醒' })).toHaveCount(0);
+    await page.getByRole('button', { name: /^用本 App 打开网申链接/ }).click();
+    await expect(page.getByRole('dialog', { name: '用本 App 打开网申链接' })).toBeVisible();
+    await at('open-links-sheet');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '用本 App 打开网申链接' })).toHaveCount(0);
+    await shareText(`第一个 ${JOB} 第二个 ${OUTER}`);
+    await expect(page.getByRole('dialog', { name: '打开哪个链接？' })).toBeVisible({ timeout: 15_000 });
+    await at('link-choice-sheet');
+    await pressBack();
+    await expect(page.getByRole('dialog', { name: '打开哪个链接？' })).toHaveCount(0);
+  };
+  try {
+    let page = await freshHome();
+    await recordJobPage(page);
+    await openRecord(page, '示例科技');
+    await setDeadline(page, '明天');
+
+    await device.shell('settings put system font_scale 2.0');
+    page = await launch();
+    await walk(page, (name) => expectFits(page, `${name} at 200%`));
+
+    await device.shell('settings put system font_scale 1.0');
+    for (const mode of ['no', 'yes'] as const) {
+      await device.shell(`cmd uimode night ${mode}`);
+      page = await launch();
+      await page.emulateMedia({ colorScheme: null });
+      await expect.poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(mode === 'yes');
+      const look = mode === 'yes' ? 'dark' : 'light';
+      await walk(page, (name) => page.screenshot({ path: path.join(RESULTS, `it4-${name}-${look}.png`) }).then(() => undefined));
+    }
+    await expectNoPrivateWordsInLogcat();
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+  }
+});
+
+// ---- The resume keyboard: setup read back, typing entries, sensitive fields, data off, fit ----
+
+const KB_ID = 'app.raf.dev/.keyboard.ResumeKeyboardService';
+const KB_PAGE = `http://127.0.0.1:${PORTS.outer}/keyboard.html`;
+/** What must never reach the device log while the keyboard works (the whole log, not only the chromium tags). */
+const KB_WORDS = ['张三', 'zhangsan@example.com', '13800000000', '示例大学'];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The input method in use before a test (restored in its finally). */
+async function previousIme(): Promise<string> {
+  return (await device.shell('settings get secure default_input_method')).toString().trim();
+}
+
+async function enableKeyboard() {
+  await device.shell(`ime enable ${KB_ID}`);
+  await device.shell(`ime set ${KB_ID}`);
+}
+
+/** Back to the keyboard the emulator had, and the resume keyboard disabled again, as the suite found it. */
+async function restoreIme(previous: string) {
+  if (previous && previous !== 'null' && previous !== KB_ID) await device.shell(`ime set ${previous}`);
+  await device.shell(`ime disable ${KB_ID}`);
+}
+
+/** Home key, then back to the app without a restart: the page becomes visible again and re-reads the keyboard state. */
+async function comeBack(page: Page) {
+  await device.shell('input keyevent KEYCODE_HOME');
+  await sleep(1000);
+  await device.shell(`am start -n ${PKG}/.MainActivity`);
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+}
+
+interface KbNode {
+  desc: string;
+  text: string;
+  clickable: boolean;
+  selected: boolean;
+  scrollable: boolean;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+function parseNodes(xml: string): KbNode[] {
+  const unescape = (s: string) =>
+    s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const nodes: KbNode[] = [];
+  for (const match of xml.matchAll(/<node\b[^>]*>/g)) {
+    const attr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(match[0])?.[1] ?? '';
+    const bounds = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(attr('bounds'));
+    if (!bounds) continue;
+    const [x1, y1, x2, y2] = bounds.slice(1).map(Number) as [number, number, number, number];
+    nodes.push({
+      desc: unescape(attr('content-desc')),
+      text: unescape(attr('text')),
+      clickable: attr('clickable') === 'true',
+      selected: attr('selected') === 'true',
+      scrollable: attr('scrollable') === 'true',
+      x1,
+      y1,
+      x2,
+      y2,
+    });
+  }
+  return nodes;
+}
+
+/** The IME window's frame from the window manager, when the dump has no per-window wrapper. */
+async function imeFrame(): Promise<[number, number, number, number] | null> {
+  const out = (await device.shell('dumpsys window InputMethod')).toString('utf8');
+  const m = /\b(?:mFrame|frame)=\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(out);
+  return m ? (m.slice(1).map(Number) as [number, number, number, number]) : null;
+}
+
+/**
+ * The views of the input-method window: `uiautomator dump --windows` (API 33+) dumps every window, the IME's too.
+ * The keyboard and the app share a package, so the IME window is told apart by its window wrapper, or else by its
+ * frame from `dumpsys window`.
+ */
+async function kbNodes(): Promise<KbNode[]> {
+  const xml = (await device.shell('uiautomator dump --windows /sdcard/raf-kb.xml >/dev/null 2>&1; cat /sdcard/raf-kb.xml')).toString('utf8');
+  const windows = xml.split(/(?=<window\b)/).filter((part) => part.startsWith('<window'));
+  const ime = windows.filter((w) => /^<window\b[^>]*(INPUT_METHOD|InputMethod|type="2")/.test(w));
+  if (ime.length > 0) return parseNodes(ime.join(''));
+  const all = parseNodes(xml);
+  const frame = await imeFrame();
+  if (!frame) return all;
+  const [fx1, fy1, fx2, fy2] = frame;
+  return all.filter((n) => {
+    const cx = (n.x1 + n.x2) / 2;
+    const cy = (n.y1 + n.y2) / 2;
+    return cx >= fx1 && cx <= fx2 && cy >= fy1 && cy <= fy2;
+  });
+}
+
+const matches = (value: string, want: string | RegExp) => (typeof want === 'string' ? value === want : want.test(value));
+
+async function kbWait(match: (n: KbNode) => boolean, what: string, timeoutMs = 20_000): Promise<KbNode> {
+  const until = Date.now() + timeoutMs;
+  let seen: string[] = [];
+  while (Date.now() < until) {
+    const nodes = await kbNodes();
+    const node = nodes.find(match);
+    if (node) return node;
+    // Descriptions are labels only, never resume values, so they are safe to print.
+    seen = nodes.map((n) => n.desc).filter(Boolean);
+    await sleep(500);
+  }
+  throw new Error(`${what} not in the keyboard; descriptions seen: ${JSON.stringify(seen)}`);
+}
+
+/**
+ * Tap a view of the keyboard by its content description. Playwright's `device.tap({ desc })` needs its driver app,
+ * which this suite never installs (its UiAutomation connection would also lock out the `uiautomator dump` that the
+ * other tests use), so it is tried only with RAF_KB_DRIVER=1. Otherwise the IME window is read with
+ * `uiautomator dump --windows` and tapped at the centre with `input tap`.
+ */
+async function kbTap(desc: string | RegExp) {
+  if (process.env.RAF_KB_DRIVER === '1') {
+    try {
+      await device.tap({ desc }, { timeout: 5_000 });
+      return;
+    } catch {
+      // Not found by the driver: read the windows instead.
+    }
+  }
+  const node = await kbWait((n) => n.clickable && matches(n.desc || n.text, desc), `a view described ${String(desc)}`);
+  await device.shell(`input tap ${Math.round((node.x1 + node.x2) / 2)} ${Math.round((node.y1 + node.y2) / 2)}`);
+}
+
+/** A real touch on an element of a content page (a CDP click does not raise the on-screen keyboard). */
+async function touch(target: Page, selector: string) {
+  const el = target.locator(selector).first();
+  await el.scrollIntoViewIfNeeded();
+  const box = (await el.boundingBox())!;
+  const cdp = await target.context().newCDPSession(target);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + Math.min(box.height / 2, 20), gestureSourceType: 'touch' });
+  await cdp.detach().catch(() => undefined);
+  await expect.poll(() => target.evaluate(() => document.activeElement?.id), { timeout: 10_000 }).toBe(selector.slice(1));
+}
+
+/** With no readable data the keyboard follows the system locale, so its empty title does too. */
+async function systemLocale(): Promise<string> {
+  return (await device.shell('getprop persist.sys.locale')).toString().trim();
+}
+
+async function emptyTitle(): Promise<string> {
+  return (await systemLocale()).startsWith('zh') ? '输入法里还没有简历' : 'No resume in the keyboard yet';
+}
+
+async function fileExists(name: string): Promise<boolean> {
+  return (await privateFiles()).includes(name);
+}
+
+async function fileBytes(name: string): Promise<Buffer> {
+  return device.shell(`run-as ${PKG} cat files/${name}`);
+}
+
+/** Nothing of the sample resume anywhere in the device log: every tag, the keyboard's own process included. */
+async function expectCleanWholeLogcat() {
+  const log = (await device.shell('logcat -d')).toString('utf8');
+  for (const word of KB_WORDS) expect(log.includes(word), `logcat holds ${word}`).toBe(false);
+}
+
+/** Settings › 简历输入法. */
+async function openKeyboardSetup(page: Page) {
+  await toTab(page, '设置');
+  await page.getByRole('button', { name: /^简历输入法/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '简历输入法' })).toBeVisible();
+}
+
+const kbStatus = (page: Page) => page.getByRole('status', { name: '当前状态' });
+
+/** The practice field, focused with a real touch so the keyboard comes up. */
+async function focusPractice(page: Page) {
+  const field = page.getByRole('textbox', { name: '试用输入框' });
+  await field.scrollIntoViewIfNeeded();
+  const box = (await field.boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.synthesizeTapGesture', { x: box.x + box.width / 2, y: box.y + box.height / 2, gestureSourceType: 'touch' });
+  await cdp.detach().catch(() => undefined);
+  await expect(field).toBeFocused();
+  return field;
+}
+
+/** A resume with data, the keyboard enabled and in use, and the app told so (its copy written). */
+async function keyboardWithData(): Promise<Page> {
+  const page = await sampleWithPhoneAndSchool();
+  await enableKeyboard();
+  await comeBack(page);
+  await expect.poll(() => fileExists('keyboard.enc'), { timeout: 15_000, message: 'keyboard.enc written' }).toBe(true);
+  return page;
+}
+
+test('resume keyboard: the setup screen reads the state back: off, on, in use', async () => {
+  const previous = await previousIme();
+  try {
+    await device.shell(`ime disable ${KB_ID}`);
+    const page = await freshHome();
+    await openKeyboardSetup(page);
+    await expect(kbStatus(page)).toContainText('还没启用');
+    const go = page.getByRole('button', { name: '去系统设置启用', exact: true });
+    const before = page.getByText(/^启用时，安卓会提醒这个输入法/);
+    await expect(before).toBeVisible();
+    expect((await before.boundingBox())!.y, 'the explanation sits above the button').toBeLessThan((await go.boundingBox())!.y);
+    await expect(page.getByRole('list', { name: '简历输入法的做法' }).getByRole('listitem')).toHaveCount(4);
+
+    await go.click();
+    await expect
+      .poll(async () => (await device.shell('dumpsys activity activities | grep -i resumedactivity')).toString(), { timeout: 15_000 })
+      .toContain('com.android.settings');
+    await pressBack();
+    await expect.poll(() => inFront(), { timeout: 15_000 }).toBe(true);
+
+    await device.shell(`ime enable ${KB_ID}`);
+    await comeBack(page);
+    await expect(kbStatus(page)).toContainText('已启用，还没切换过去', { timeout: 15_000 });
+
+    await device.shell(`ime set ${KB_ID}`);
+    await comeBack(page);
+    await expect(kbStatus(page)).toContainText('正在使用简历输入法', { timeout: 15_000 });
+
+    // The picker shows the service's label in the system's language (kb_name: 简历输入法 / Resume keyboard).
+    const label = (await systemLocale()).startsWith('zh') ? '简历输入法' : 'Resume keyboard';
+    await page.getByRole('button', { name: '选择输入法', exact: true }).click();
+    const until = Date.now() + 15_000;
+    let picker = false;
+    while (!picker && Date.now() < until) {
+      picker = (await systemUiNodes()).some((n) => n.text === label);
+      if (!picker) await sleep(500);
+    }
+    expect(picker, `the system picker lists ${label}`).toBe(true);
+    await pressBack();
+    await expect.poll(() => inFront(), { timeout: 15_000 }).toBe(true);
+  } finally {
+    await restoreIme(previous);
+  }
+});
+
+test('resume keyboard: a module and an entry type into the practice field and into a page in the fill browser', async () => {
+  const previous = await previousIme();
+  await clearLogcat();
+  await startServer();
+  try {
+    const page = await sampleWithPhoneAndSchool();
+    // Nothing the keyboard does needs the network.
+    await airplane(true);
+    await enableKeyboard();
+    await comeBack(page);
+    await expect.poll(() => fileExists('keyboard.enc'), { timeout: 15_000, message: 'keyboard.enc written' }).toBe(true);
+    await openKeyboardSetup(page);
+    const field = await focusPractice(page);
+    await kbTap('基本信息');
+    await kbTap('姓名');
+    await expect(field).toHaveValue('张三');
+    await pressBack(); // hides the keyboard
+    await airplane(false);
+
+    await openLink(page, KB_PAGE);
+    const content = await contentPage(page, KB_PAGE);
+    await content.locator('#email').waitFor();
+    await touch(content, '#email');
+    await kbWait((n) => n.desc === '推荐' && n.selected, '推荐, selected');
+    await kbTap('邮箱');
+    await expect(content.locator('#email')).toHaveValue('zhangsan@example.com');
+
+    // A WebView hands the keyboard no placeholder (EditorInfo hintText and label are null, measured on the emulator),
+    // so a plain text field named only by 「学校」 gets no 推荐; the entry is reached through its group instead.
+    // FieldClassifierTest and EntryOrderTest cover the hint words for native fields that do pass a hint.
+    await touch(content, '#school');
+    await kbTap('教育');
+    // An entry of a repeated section is described with its place, 「第一段，学校」.
+    await kbTap(/(^|，)学校$/);
+    await expect(content.locator('#school')).toHaveValue('示例大学');
+
+    await touch(content, '#tel');
+    await kbWait((n) => n.desc === '推荐' && n.selected, '推荐, selected on a tel field');
+    await kbTap('手机号码');
+    await expect(content.locator('#tel')).toHaveValue('13800000000');
+    await expectCleanWholeLogcat();
+  } finally {
+    await airplane(false);
+    await restoreIme(previous);
+  }
+});
+
+test('resume keyboard: a password field and a code field show only typing; the switch key goes back to the previous keyboard', async () => {
+  const previous = await previousIme();
+  await clearLogcat();
+  await startServer();
+  try {
+    const page = await keyboardWithData();
+    await openLink(page, KB_PAGE);
+    const content = await contentPage(page, KB_PAGE);
+    await content.locator('#password').waitFor();
+
+    await touch(content, '#password');
+    await kbWait((n) => n.text === '密码框里不显示简历', 'the password banner');
+    const onPassword = await kbNodes();
+    for (const label of ['姓名', '邮箱', '基本信息']) expect(onPassword.some((n) => n.desc === label), `${label} on a password field`).toBe(false);
+    await kbTap('a');
+    await kbTap('b');
+    await expect.poll(() => content.locator('#password').inputValue()).toBe('ab');
+
+    // The 「像是要密码或验证码」 gate reads the field's hint, and a WebView passes none (hintText and label are null), so
+    // #code cannot be told apart from any text field here. KeyboardGateTest and FieldClassifierTest cover it; a native
+    // field with a hint is checked by hand.
+
+    await kbTap('切换到其他输入法');
+    await expect.poll(() => previousIme(), { timeout: 10_000 }).toBe(previous);
+    await expectCleanWholeLogcat();
+  } finally {
+    await restoreIme(previous);
+  }
+});
+
+test('resume keyboard: turning it off deletes its file; delete all leaves the keyboard empty', async () => {
+  const previous = await previousIme();
+  await clearLogcat();
+  try {
+    const page = await keyboardWithData();
+    const sealed = await fileBytes('keyboard.enc');
+    expect(sealed.length).toBeGreaterThan(0);
+    for (const word of ['张三', 'zhangsan@example.com']) {
+      expect(sealed.includes(Buffer.from(word, 'utf8')), `${word} in UTF-8`).toBe(false);
+      expect(sealed.includes(Buffer.from(word, 'utf16le')), `${word} in UTF-16LE`).toBe(false);
+    }
+
+    await openKeyboardSetup(page);
+    const show = page.getByRole('switch', { name: '在输入法里显示简历' });
+    await expect(show).toBeChecked();
+    await show.click();
+    await expect.poll(() => fileExists('keyboard.enc'), { timeout: 3_000, message: 'keyboard.enc removed' }).toBe(false);
+    const emptyNow = await emptyTitle();
+    await focusPractice(page);
+    await kbWait((n) => n.text === emptyNow, 'the empty state');
+    await pressBack(); // hides the keyboard
+    await show.click();
+    await expect.poll(() => fileExists('keyboard.enc'), { timeout: 10_000, message: 'keyboard.enc back' }).toBe(true);
+
+    await page.getByRole('button', { name: '返回' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '设置' })).toBeVisible();
+    await page.getByRole('button', { name: /^删除这台手机上的全部数据/ }).click();
+    await page.getByRole('dialog', { name: '删除全部数据？' }).getByRole('button', { name: '永久删除', exact: true }).click();
+    await expect(page.getByText(mzh('m.wipe.done'))).toBeVisible({ timeout: 15_000 });
+    expect(await fileExists('keyboard.enc'), 'keyboard.enc after delete all').toBe(false);
+    const left = await privateFiles();
+    expect(left).not.toContain('profile.enc');
+    // Onboarding may already have stored its fresh state under a new key; never the old data.
+    if (left.includes('state.enc')) expect((await fileBytes('state.enc')).includes(Buffer.from('zhangsan@example.com'))).toBe(false);
+
+    await expect(page.getByRole('heading', { level: 1, name: /^(你好，先说三件事|Hi! Three things first)$/ })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('radio', { name: '中' }).click();
+    await page.getByRole('button', { name: '跳过', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '首页' })).toBeVisible();
+    await openKeyboardSetup(page);
+    await focusPractice(page);
+    const empty = await emptyTitle();
+    await kbWait((n) => n.text === empty, 'the empty state after delete all');
+    expect(await fileExists('keyboard.enc')).toBe(false);
+    await pressBack();
+    await expectCleanWholeLogcat();
+  } finally {
+    await restoreIme(previous);
+  }
+});
+
+/** Host adb, as bytes (screencap is binary; hostAdb decodes text). Emulator serial only (see beforeAll). */
+function hostAdbBytes(...args: string[]): Buffer {
+  const serial = process.env.RAF_SERIAL!;
+  const sdk = process.env.ANDROID_HOME ?? path.join(process.env.LOCALAPPDATA ?? '', 'Android', 'Sdk');
+  const adb = existsSync(path.join(sdk, 'platform-tools', 'adb.exe')) ? path.join(sdk, 'platform-tools', 'adb.exe') : 'adb';
+  return execFileSync(adb, ['-s', serial, ...args], { maxBuffer: 64 * 1024 * 1024, timeout: 60_000 });
+}
+
+/** Every control of the keyboard is at least 48dp each way; single-character keys at least 48dp tall. */
+async function expectKeyboardTargets(where: string) {
+  const density = Number(/(?:Override|Physical) density: (\d+)/.exec((await device.shell('wm density')).toString())?.[1] ?? 160);
+  const dp = (px: number) => (px * 160) / density;
+  const all = await kbNodes();
+  const nodes = all.filter((n) => n.clickable && n.x2 > n.x1 && n.y2 > n.y1);
+  expect(nodes.length, `${where}: keyboard views found`).toBeGreaterThan(0);
+  // A row cut by the edge of a scrolling list is reported with its visible part only; it is measured once scrolled in.
+  const lists = all.filter((n) => n.scrollable);
+  const clipped = (n: KbNode) => lists.some((l) => n.x1 >= l.x1 && n.x2 <= l.x2 && (n.y1 <= l.y1 || n.y2 >= l.y2) && n.y1 >= l.y1 && n.y2 <= l.y2);
+  const small: string[] = [];
+  for (const n of nodes) {
+    if (clipped(n)) continue;
+    const label = n.desc || n.text;
+    const w = dp(n.x2 - n.x1);
+    const h = dp(n.y2 - n.y1);
+    // Single-character keys may be narrower than 48dp; the comma and period keys are named in words (kb_comma, kb_period).
+    const key = [...label].length === 1 || /^(逗号|句号|Comma|Period)$/.test(label);
+    if (h < 47.5 || (!key && w < 47.5)) small.push(`${label} ${w.toFixed(0)}x${h.toFixed(0)}dp`);
+  }
+  expect.soft(small, `${where}: keyboard targets under 48dp`).toEqual([]);
+  // The system draws its back and switch buttons in the IME window's bottom bar; nothing of ours may sit under them.
+  const isSystem = (n: KbNode) => /^(Back|Switch input method|返回|切换输入法)$/.test(n.desc);
+  const system = nodes.filter(isSystem);
+  const ours = nodes.filter((n) => !isSystem(n));
+  if (system.length > 0) {
+    const barTop = Math.min(...system.map((n) => n.y1));
+    const under = ours.filter((n) => n.y2 > barTop).map((n) => `${n.desc || n.text} bottom ${n.y2} > ${barTop}`);
+    expect(under, `${where}: keyboard views under the system's IME buttons`).toEqual([]);
+  }
+}
+
+test('resume keyboard: fits at 200% font, in landscape and in dark; screenshots for a human look', async () => {
+  const previous = await previousIme();
+  const rotation = (await device.shell('settings get system accelerometer_rotation')).toString().trim();
+  mkdirSync(RESULTS, { recursive: true });
+  try {
+    await keyboardWithData();
+    const looks: { name: 'light' | 'dark' | '200' | 'land'; setup: string[] }[] = [
+      { name: 'light', setup: ['cmd uimode night no', 'settings put system font_scale 1.0'] },
+      { name: 'dark', setup: ['cmd uimode night yes', 'settings put system font_scale 1.0'] },
+      { name: '200', setup: ['cmd uimode night no', 'settings put system font_scale 2.0'] },
+      { name: 'land', setup: ['settings put system font_scale 1.0', 'settings put system accelerometer_rotation 0', 'settings put system user_rotation 1'] },
+    ];
+    for (const look of looks) {
+      for (const command of look.setup) await device.shell(command);
+      // launch() force-stops the package, and Android then drops it as the current input method: choose it again.
+      const page = await launch();
+      await device.shell(`ime set ${KB_ID}`);
+      // Playwright emulates a light colour scheme on the pages it attaches to; let the page follow the system, as the
+      // review test does, and wait for the WebView to report it, so the app and the keyboard match in the screenshot.
+      await page.emulateMedia({ colorScheme: null });
+      await expect
+        .poll(() => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches), { timeout: 15_000 })
+        .toBe(look.name === 'dark');
+      await openKeyboardSetup(page);
+      await focusPractice(page);
+      await kbWait((n) => n.desc === '字母键盘', `${look.name}: the resume panel`);
+      await sleep(500);
+      await expectKeyboardTargets(`${look.name} resume panel`);
+      writeFileSync(path.join(RESULTS, `it5-kb-resume-${look.name}.png`), hostAdbBytes('exec-out', 'screencap', '-p'));
+      await kbTap('字母键盘');
+      await kbWait((n) => n.clickable && (n.desc || n.text) === '简历', `${look.name}: the typing panel`);
+      await sleep(500);
+      await expectKeyboardTargets(`${look.name} typing panel`);
+      writeFileSync(path.join(RESULTS, `it5-kb-typing-${look.name}.png`), hostAdbBytes('exec-out', 'screencap', '-p'));
+      await kbTap('简历');
+      await pressBack();
+    }
+  } finally {
+    await device.shell('settings put system font_scale 1.0');
+    await device.shell('cmd uimode night no');
+    await device.shell('settings put system user_rotation 0');
+    await device.shell(`settings put system accelerometer_rotation ${rotation === '0' ? '0' : '1'}`);
+    await restoreIme(previous);
   }
 });

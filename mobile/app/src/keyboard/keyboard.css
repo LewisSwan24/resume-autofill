@@ -1,0 +1,158 @@
+/* The resume keyboard's app side: the setup page, its modules sheet and the WeChat hint.
+   Lively Icons tokens only (--raf-*, --m-*); 1px lines, no shadows; everything wraps at 200% font. */
+
+.m-kb-setup {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+.m-kb-setup__lead {
+  margin: 0;
+}
+
+.m-kb-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 16px;
+  font-weight: 600;
+}
+
+.m-kb-status .m-icon {
+  flex: none;
+}
+
+.m-kb-step {
+  display: grid;
+  gap: 12px;
+}
+
+.m-kb-step__title {
+  margin: 0;
+  font-family: var(--raf-font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-kb-step__text {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* Same look as the onboarding promise list (.m-onb__promises), one icon per row. */
+.m-kb-promises {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 12px;
+  list-style: none;
+}
+
+.m-kb-promises li + li {
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.m-kb-promise {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+
+.m-kb-promise .m-row__tile {
+  flex: none;
+}
+
+.m-kb-step__done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.m-kb-step__ok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--m-hit);
+  margin: 0;
+  font-weight: 600;
+}
+
+.m-kb-step__ok .m-icon {
+  color: var(--raf-color-primary);
+}
+
+.m-kb-step .m-button--text {
+  min-width: var(--m-hit);
+  color: var(--raf-color-primary);
+  text-align: left;
+}
+
+/* Modules sheet: one 48px checkbox row per group. */
+.m-kb-sheet__text {
+  margin: 0 0 8px;
+  color: var(--raf-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.m-kb-groups {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m-kb-groups li + li {
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.m-kb-groups__row {
+  min-height: 48px;
+  padding: 0 4px;
+  gap: 12px;
+}
+
+/* The WeChat hint under the paste box and on the open-another-app sheet. */
+.m-kb-hint {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 12px;
+  background: var(--raf-color-surface);
+}
+
+.m-kb-hint__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-kb-hint__head .m-icon {
+  flex: none;
+}
+
+.m-kb-hint__text {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.m-kb-hint .m-button--text {
+  justify-self: start;
+  color: var(--raf-color-primary);
+  text-align: left;
+}

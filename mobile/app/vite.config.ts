@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { localPdfAssets } from './vite/localPdfAssets.ts';
 
 const appDir = fileURLToPath(new URL('.', import.meta.url));
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -13,7 +14,7 @@ const { version } = JSON.parse(readFileSync(fileURLToPath(new URL('../package.js
 export default defineConfig({
   root: appDir,
   base: './',
-  plugins: [react()],
+  plugins: [react(), localPdfAssets()],
   define: { __APP_VERSION__: JSON.stringify(version) },
   server: { fs: { allow: [repoRoot] } },
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022' },

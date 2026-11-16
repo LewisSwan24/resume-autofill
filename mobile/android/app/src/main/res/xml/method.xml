@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The resume keyboard (ResumeKeyboardService). One English subtype: it types English letters and inserts resume
+     entries. No settingsActivity: the app's own 「设置 › 简历输入法」 is where it is set up. -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:label="@string/kb_subtype"
+        android:imeSubtypeLocale="en_US"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true" />
+</input-method>

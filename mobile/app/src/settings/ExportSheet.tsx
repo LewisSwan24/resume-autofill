@@ -1,9 +1,11 @@
 // Export everything to a file: plain JSON the desktop extension reads, or the same text sealed with a password.
 // It exports what is stored (pending edits are saved first), never an unsaved value on screen. Passwords live only in
-// this sheet's state and are gone when it closes.
+// this sheet's state and are gone when it closes. With 网申 records on the phone a checkbox (on by default) adds
+// them under one extra key the desktop extension ignores.
 import { useEffect, useRef, useState } from 'react';
 import type { Profile } from '../../../../src/schema';
 import { buildExport, PASSWORD_MIN_LENGTH } from '../data/transfer';
+import type { AppState } from '../store/appStateStore';
 import { Notice, PasswordField } from '../dialogs';
 import { useMT } from '../i18n';
 import { Sheet, type ToastMessage } from '../ui';
@@ -19,6 +21,8 @@ export interface ExportSheetProps {
   saveDocument?: SaveDocument;
   showToast: (toast: Omit<ToastMessage, 'id'>) => void;
   now?: () => number;
+  /** App state: its 网申 records can go into the same file. Optional until the app passes it. */
+  appState?: AppState | null;
 }
 
 export function ExportSheet(props: ExportSheetProps) {
@@ -35,9 +39,11 @@ type Phase = 'idle' | 'encrypting' | 'saving';
 type Failure = 'read' | 'unavailable' | 'save';
 const FAILURE_KEY = { read: 'm.export.failedRead', unavailable: 'm.export.unavailable', save: 'm.export.failed' } as const;
 
-function ExportBody({ onClose, profile, readStoredProfile, saveDocument, showToast, now = Date.now }: ExportSheetProps) {
+function ExportBody({ onClose, profile, readStoredProfile, saveDocument, showToast, now = Date.now, appState }: ExportSheetProps) {
   const t = useMT();
   const [usePassword, setUsePassword] = useState(false);
+  const [withRecords, setWithRecords] = useState(true);
+  const recordCount = appState?.applications.length ?? 0;
   const [password, setPassword] = useState('');
   const [again, setAgain] = useState('');
   const [errors, setErrors] = useState<{ first?: string; second?: string }>({});
@@ -82,7 +88,8 @@ function ExportBody({ onClose, profile, readStoredProfile, saveDocument, showToa
     try {
       setPhase('encrypting');
       const stored = await readStoredProfile();
-      const file = await buildExport(stored, { password: secret, now: now() });
+      const tracker = withRecords && appState && recordCount > 0 ? appState : undefined;
+      const file = await buildExport(stored, { password: secret, now: now(), tracker });
       if (!alive()) return;
       stage = 'unavailable';
       if (!saveDocument) throw new Error('no saver');
@@ -116,6 +123,15 @@ function ExportBody({ onClose, profile, readStoredProfile, saveDocument, showToa
             {t('m.export.noAttachments')}
           </Notice>
           <Notice icon="lock">{t('m.export.unprotected')}</Notice>
+          {recordCount > 0 ? (
+            <>
+              <label className="m-check">
+                <input type="checkbox" checked={withRecords} onChange={(e) => setWithRecords(e.target.checked)} />
+                <span>{t('m.export.tracker', { n: recordCount })}</span>
+              </label>
+              <p className="m-help m-row__caption">{t('m.export.trackerNote')}</p>
+            </>
+          ) : null}
           <label className="m-check">
             <input
               type="checkbox"

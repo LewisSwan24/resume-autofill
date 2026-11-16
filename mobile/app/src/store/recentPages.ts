@@ -1,5 +1,8 @@
-// Recent application pages in app state (pure helpers): newest first, one entry per link, at most RECENT_PAGES_MAX.
-import { RECENT_PAGES_MAX, type AppState, type RecentPage } from './appStateStore';
+// Legacy (AppState v1): recent application pages, newest first, one entry per link, at most RECENT_PAGES_MAX.
+// Version 2 keeps application records instead (tracker/model/records.ts); these helpers stay for the v1 shape only
+// until their removal is agreed. recentKey is still the record key.
+import { RECENT_PAGES_MAX } from './appStateStore';
+import type { AppStateV1 as AppState, RecentPage } from './appStateMigrate';
 
 /** The link without its #fragment: two hash routes of one page count as the same page. */
 export function recentKey(url: string): string {

@@ -1,6 +1,6 @@
 // Home's paste box: a pasted link (or share text holding one) becomes a checked http(s) URL, its host and a title.
 import { describe, expect, it } from 'vitest';
-import { parseApplicationLink, type ParsedLink } from '../../../mobile/app/src/home/pasteLink';
+import { parseApplicationLink, parseApplicationLinks, type ParsedLink } from '../../../mobile/app/src/home/pasteLink';
 import { RecentPageSchema } from '../../../mobile/app/src/store/appStateStore';
 
 const ok = (r: ParsedLink) => {
@@ -88,5 +88,51 @@ describe('parseApplicationLink', () => {
     expect(() =>
       RecentPageSchema.parse({ id: 'a', url: parsed.url, host: parsed.host, title: parsed.title, addedAt: 1 }),
     ).not.toThrow();
+  });
+});
+
+describe('parseApplicationLinks', () => {
+  const urls = (text: string, max?: number) => parseApplicationLinks(text, max).map((l) => l.url);
+
+  it('parseApplicationLinks finds 0, 1 and many links', () => {
+    expect(parseApplicationLinks('明天下午面试')).toEqual([]);
+    expect(parseApplicationLinks('')).toEqual([]);
+    const one = parseApplicationLinks('【示例科技校园招聘】网申入口 https://jobs.example.com/campus');
+    expect(one).toHaveLength(1);
+    expect(one[0]).toMatchObject({ ok: true, url: 'https://jobs.example.com/campus', host: 'jobs.example.com', insecure: false });
+    expect(urls('先看 https://a.example.com/1 再看 http://b.example.com/2\n还有 https://c.example.com')).toEqual([
+      'https://a.example.com/1',
+      'http://b.example.com/2',
+      'https://c.example.com/',
+    ]);
+    expect(parseApplicationLinks('看 http://b.example.com/2')[0]!.insecure).toBe(true);
+  });
+
+  it('duplicates by fragment are dropped; at most 20', () => {
+    expect(urls('https://a.example.com/x#one https://a.example.com/x#two https://a.example.com/y')).toEqual([
+      'https://a.example.com/x#one',
+      'https://a.example.com/y',
+    ]);
+    const many = Array.from({ length: 25 }, (_, i) => `https://jobs.example.com/${i}`).join(' ');
+    expect(urls(many)).toHaveLength(20);
+    expect(urls(many, 3)).toEqual(['https://jobs.example.com/0', 'https://jobs.example.com/1', 'https://jobs.example.com/2']);
+  });
+
+  it('each link takes the text before it on its line as title', () => {
+    const links = parseApplicationLinks('示例科技校园招聘：https://a.example.com 示例银行 - https://b.example.com\nhttps://c.example.com');
+    expect(links.map((l) => l.title)).toEqual(['示例科技校园招聘', '示例银行', undefined]);
+  });
+
+  it('javascript:, file:, content: and intent: are not links', () => {
+    expect(parseApplicationLinks('javascript:alert(1) file:///sdcard/a.html content://x/y intent://scan#Intent;end')).toEqual([]);
+    expect(urls('javascript:alert(1) 然后 https://jobs.example.com')).toEqual(['https://jobs.example.com/']);
+  });
+
+  it('full-width punctuation ends a link', () => {
+    expect(urls('入口https://a.example.com/x，备用https://b.example.com/y。')).toEqual([
+      'https://a.example.com/x',
+      'https://b.example.com/y',
+    ]);
+    expect(urls('（https://a.example.com/x）')).toEqual(['https://a.example.com/x']);
   });
 });

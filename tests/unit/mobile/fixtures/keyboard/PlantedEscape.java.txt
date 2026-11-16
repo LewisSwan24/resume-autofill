@@ -1,0 +1,25 @@
+package app.raf.dev.keyboard.util;
+
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+
+import java.lang.invoke.MethodHandles;
+
+import org.json.JSONObject;
+
+import app.raf.other.Courier;
+
+// Never compiled: the second planted source for noNetworkSource.test.ts.
+final class PlantedEscape {
+    static Object run(Context context, String typed) throws Exception {
+        Courier.carry(typed);
+        context.sendOrderedBroadcast(new Intent("x"), null);
+        context.startService(new Intent("x"));
+        context.startActivity(Intent.parseUri(typed, 0));
+        context.startActivity(new Intent(Intent.ACTION_SEND).putExtra("t", typed));
+        Object handle = MethodHandles.lookup();
+        PendingIntent pending = null;
+        return new com.example.Uploader().send(new JSONObject().put("t", typed)) + handle + pending;
+    }
+}

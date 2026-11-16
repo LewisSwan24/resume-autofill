@@ -45,6 +45,11 @@ textarea {
   outline-offset: 2px;
 }
 
+/* Headings take focus only so a screen reader starts there (tabindex -1); they are not controls, so no ring. */
+:is(h1, h2, h3)[tabindex='-1']:focus {
+  outline: none;
+}
+
 .m-icon {
   width: var(--m-icon);
   height: var(--m-icon);
@@ -57,6 +62,20 @@ textarea {
   max-width: 680px;
   margin: 0 auto;
   padding: max(16px, env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom));
+}
+
+/* The status bar is drawn over the app (edge to edge): a strip of the page colour keeps scrolled text from running
+   under the clock and icons. Sheets and full-screen layers sit above it. */
+.m-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--raf-color-bg);
+  z-index: 3;
+  pointer-events: none;
 }
 
 .m-header {
@@ -480,7 +499,12 @@ textarea {
   transition: background-color 120ms ease-out;
 }
 
-.m-icon-button:active,
+/* Back / forward with no history: dimmed, like every other disabled control. */
+.m-icon-button:disabled {
+  opacity: var(--raf-opacity-disabled);
+}
+
+.m-icon-button:not(:disabled):active,
 .m-segment:active,
 .m-entry__toggle:active,
 .m-choice:active,
@@ -781,7 +805,7 @@ textarea {
   bottom: 0;
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--raf-color-border);
   background: var(--raf-color-surface);
@@ -819,8 +843,17 @@ textarea {
   box-shadow: inset 0 2px 0 var(--raf-color-primary);
 }
 
+/* The tab bar and, while a page waits, the return pill above it: in the flow at the bottom, so they take room and never
+   cover the last row, and they grow with the font. */
+.m-shell__bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
+/* --m-bottom-h is the bottom bar's measured height (App), safe area included. */
 .m-shell .m-toast-region {
-  bottom: calc(var(--m-tabbar-h, 64px) + 16px + env(safe-area-inset-bottom));
+  bottom: calc(var(--m-bottom-h, 64px) + 16px);
 }
 
 .m-shell--keyboard .m-toast-region {
@@ -1170,6 +1203,15 @@ button.m-settings-row:active {
   background: var(--raf-color-surface-hover);
 }
 
+/* A row that leads nowhere for now (the keyboard's modules row while its data is off). */
+button.m-settings-row:disabled {
+  opacity: var(--raf-opacity-disabled);
+}
+
+button.m-settings-row:disabled:active {
+  background: none;
+}
+
 .m-settings-row__text {
   display: grid;
   flex: 1 1 10em;
@@ -1285,16 +1327,6 @@ button.m-settings-row:active {
   gap: 8px;
 }
 
-.m-soon {
-  flex: none;
-  padding: 0 6px;
-  border: 1px solid var(--raf-color-border);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 20px;
-}
-
 /* ------------------------------------------------------------ jump highlight */
 
 .m-field--target {
@@ -1308,4 +1340,621 @@ button.m-settings-row:active {
   .m-field--target {
     transition: background-color 200ms ease-out, outline-color 200ms ease-out;
   }
+}
+
+/* ------------------------------------------------------------ resume import (m-ri) */
+
+/* The full-screen layer: above the shell and its tab bar, below sheets (4) and the toast (5). */
+.m-ri {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  overflow-y: auto;
+  background: var(--raf-color-bg);
+  /* The status bar is drawn over the app (edge to edge): a border keeps the scrolled content out from under it. */
+  border-top: env(safe-area-inset-top, 0px) solid var(--raf-color-bg);
+  padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
+.m-ri__page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: max(0px, calc(16px - env(safe-area-inset-top, 0px))) 16px 0;
+}
+
+.m-ri__page > .m-header {
+  flex-wrap: wrap;
+}
+
+.m-ri__page > .m-header .m-title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.m-ri-body {
+  display: grid;
+  /* The body grows to push the bar down; its rows must not stretch into the spare height. */
+  align-content: start;
+  gap: 12px;
+  flex: 1 0 auto;
+  padding-bottom: 24px;
+}
+
+.m-shell--overlay .m-tabbar {
+  display: none;
+}
+
+.m-ri-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.m-ri-card-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.m-ri-from {
+  margin-top: -4px;
+  color: var(--raf-color-text-muted);
+}
+
+/* progress */
+.m-ri-steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  list-style: none;
+}
+
+.m-ri-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--m-hit);
+  color: var(--raf-color-text-muted);
+}
+
+.m-ri-step > span:not(.m-ri-hidden) {
+  min-width: 0;
+}
+
+.m-ri-step--now {
+  color: var(--raf-color-text);
+  font-weight: var(--raf-font-weight-medium);
+}
+
+.m-ri-step--done .m-icon {
+  color: var(--raf-color-text);
+}
+
+.m-ri-step__dot {
+  flex: none;
+  width: var(--m-icon);
+  height: var(--m-icon);
+  border: 1px dashed var(--raf-color-border);
+  border-radius: 50%;
+}
+
+.m-ri-spinner {
+  flex: none;
+  width: var(--m-icon);
+  height: var(--m-icon);
+  border: var(--raf-size-spinner-width) solid var(--raf-color-border);
+  border-top-color: var(--raf-color-primary);
+  border-radius: 50%;
+  animation: m-ri-spin var(--raf-motion-duration-spinner) linear infinite;
+}
+
+@keyframes m-ri-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-ri-spinner {
+    animation: none;
+  }
+}
+
+.m-ri-status {
+  font-weight: var(--raf-font-weight-medium);
+}
+
+/* failure */
+.m-ri-fail {
+  justify-items: start;
+}
+
+.m-ri-fail__tile {
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--raf-color-border);
+}
+
+.m-ri-fail__tile .m-icon {
+  --m-icon: 48px;
+}
+
+.m-ri-fail__actions {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+/* review: summary, target */
+.m-ri-summary,
+.m-ri-target {
+  display: grid;
+  gap: 8px;
+}
+
+.m-ri-summary__text {
+  margin: 0;
+}
+
+.m-ri-target .m-choice__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.m-ri-target__new {
+  display: grid;
+  gap: 12px;
+}
+
+.m-ri-attach {
+  align-items: flex-start;
+  padding-top: 10px;
+}
+
+/* the switch look for input[role=switch]: the whole label is the target */
+.m-ri-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--m-hit);
+  cursor: pointer;
+}
+
+.m-ri-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.m-ri-switch__track {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 28px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-surface);
+}
+
+.m-ri-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 50%;
+  background: var(--raf-color-bg);
+}
+
+.m-ri-switch input:checked + .m-ri-switch__track {
+  border-color: var(--raf-color-primary);
+  background: var(--raf-color-primary);
+}
+
+.m-ri-switch input:checked + .m-ri-switch__track::after {
+  left: 19px;
+  border-color: var(--raf-color-primary);
+  background: var(--raf-color-surface);
+}
+
+.m-ri-switch input:focus-visible + .m-ri-switch__track {
+  outline: 2px solid var(--raf-color-focus);
+  outline-offset: 2px;
+}
+
+.m-ri-switch input:disabled + .m-ri-switch__track {
+  opacity: var(--raf-opacity-disabled);
+}
+
+.m-ri-switch__text {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.m-ri-switch--line {
+  display: flex;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .m-ri-switch__track,
+  .m-ri-switch__track::after {
+    transition: background-color 120ms ease-out, left 120ms ease-out;
+  }
+}
+
+/* review: modules, entries, rows */
+.m-ri-section {
+  display: grid;
+  gap: 8px;
+}
+
+.m-ri-section__title {
+  margin: 12px 0 0;
+}
+
+.m-ri-entry {
+  display: grid;
+  gap: 12px;
+}
+
+.m-ri-entry__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.m-ri-entry__titles {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.m-ri-entry__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.m-ri-entry__head .m-button--text,
+.m-ri-entry--dropped .m-button--text {
+  flex: none;
+  min-height: var(--m-hit);
+}
+
+.m-ri-entry--dropped {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  padding: 4px 8px 4px 16px;
+  border-style: dashed;
+  color: var(--raf-color-text-muted);
+}
+
+.m-ri-entry__dropped {
+  flex: 1 1 10em;
+  min-width: 0;
+}
+
+.m-ri-entry__rows {
+  display: grid;
+  gap: 16px;
+}
+
+.m-ri-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.m-ri-row + .m-ri-row {
+  padding-top: 16px;
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.m-ri-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.m-ri-row__label {
+  flex: 1 1 8em;
+  min-width: 0;
+}
+
+.m-ri-row__head .m-ri-switch {
+  flex: none;
+  margin-left: auto;
+}
+
+.m-ri-row__control .m-input,
+.m-ri-row__control .m-select,
+.m-ri-row__control .m-textarea {
+  width: 100%;
+  scroll-margin-bottom: 96px;
+}
+
+.m-ri-row--skipped .m-ri-row__control {
+  opacity: var(--raf-opacity-disabled);
+}
+
+.m-ri-row__existing {
+  color: var(--raf-color-text-muted);
+}
+
+.m-ri-row__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+}
+
+.m-ri-row__tools .m-button--text {
+  min-height: var(--m-hit);
+  padding-left: 0;
+}
+
+/* 需核对: icon and words, never colour alone; in dark the line weight carries it */
+.m-tag--check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 2px solid var(--raf-color-warning);
+}
+
+.m-tag--check .m-icon {
+  --m-icon: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .m-tag--check {
+    border-color: var(--raf-color-text);
+  }
+}
+
+/* 看原文 */
+.m-ri-source {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 8px;
+  background: var(--raf-color-surface);
+  list-style: none;
+  font-size: 13px;
+}
+
+.m-ri-source__line {
+  display: grid;
+  gap: 0;
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid transparent;
+  color: var(--raf-color-text-muted);
+}
+
+.m-ri-source__line[aria-current="true"] {
+  border-left-color: var(--raf-color-primary);
+  color: var(--raf-color-text);
+  font-weight: var(--raf-font-weight-medium);
+}
+
+@media (prefers-color-scheme: dark) {
+  .m-ri-source__line[aria-current="true"] {
+    border-left-color: var(--raf-color-text);
+  }
+}
+
+.m-ri-source__no {
+  font-size: 12px;
+}
+
+/* the sticky bottom bar */
+.m-ri-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--raf-space-3);
+  margin: 0 -16px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--raf-color-border);
+  background: var(--raf-color-surface);
+}
+
+.m-ri-bar .m-button {
+  flex: 1 1 10em;
+  min-height: var(--m-hit);
+  height: auto;
+  white-space: normal;
+}
+
+.m-ri-bar__help {
+  flex: 1 1 100%;
+}
+
+.m-ri--keyboard .m-ri-bar,
+.m-ri-bar[hidden] {
+  display: none;
+}
+
+/* merge preview */
+.m-ri-preview {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m-ri-preview > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--raf-color-border);
+}
+
+.m-ri-preview ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  color: var(--raf-color-text-muted);
+  font-size: 13px;
+}
+
+.m-ri-preview__more > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--m-hit);
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ ways in */
+
+/* Read by screen readers, not shown (the choice sheet's full URLs). */
+.m-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 「打开刚复制的链接？」 at the top of Home: a card like the others, 1px line, no shadow. */
+.m-clip {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.m-clip__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.m-clip__host,
+.m-clip__hosts {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-clip__hosts {
+  padding-left: 1.2em;
+}
+
+.m-clip__page {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.m-clip__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.m-clip__actions .m-button {
+  min-height: var(--m-hit);
+}
+
+/* 「打开哪个链接？」: one row per link, host bold and wrapping, the rest of the URL clipped to two lines. */
+.m-link-choices {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 8px;
+}
+
+.m-link-choices > li + li {
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.m-link-choice {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--m-hit);
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: var(--raf-color-text);
+  font: inherit;
+  text-align: left;
+}
+
+.m-link-choice:active {
+  background: var(--raf-color-surface-hover);
+}
+
+.m-link-choice__host {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.m-link-choice__title {
+  overflow-wrap: anywhere;
+}
+
+.m-link-choice__url {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--raf-color-text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 「用本 App 打开网申链接」: numbered steps that wrap at any font size. */
+.m-links__steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+/* A settings row whose control is a switch: the whole row is the label, at least 44px tall. */
+label.m-settings-row {
+  cursor: pointer;
+}
+
+label.m-settings-row .m-check {
+  min-height: var(--m-hit);
+  min-width: var(--m-hit);
+  justify-content: center;
 }

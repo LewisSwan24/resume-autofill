@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; form-action 'none'">
+<title>示例公司 2027 校园招聘 · 网申表（演示）</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f5f7; --card: #ffffff; --ink: #1f2328; --muted: #5b616b; --line: #d0d4da; --accent: #2457c5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181c; --card: #202329; --ink: #e9ebee; --muted: #a3a9b3; --line: #3a3f47; --accent: #8fb0ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding-bottom: 96px; }
+  header { padding: 20px 16px 8px; }
+  h1 { font-size: 1.25rem; margin: 0 0 8px; }
+  .banner { margin: 0 16px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--muted); font-size: 0.9rem; }
+  fieldset { margin: 0 16px 16px; padding: 12px 16px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  legend { font-weight: 600; padding: 0 4px; }
+  .row { margin-bottom: 12px; }
+  .row > label, .row > .label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.9rem; }
+  input:not([type=radio]):not([type=checkbox]), select, textarea { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+  textarea { min-height: 88px; }
+  .choices label { margin-right: 16px; }
+  .card { border-top: 1px dashed var(--line); padding-top: 12px; }
+  .card:first-of-type { border-top: 0; padding-top: 0; }
+  button { min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; }
+  .add { margin-bottom: 12px; }
+  iframe { display: block; width: calc(100% - 32px); height: 360px; margin: 0 16px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .agree { margin: 0 16px 16px; }
+  .bar { position: sticky; bottom: 0; display: flex; gap: 12px; justify-content: flex-end; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--line); }
+  .bar .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #notice { margin: 0 16px 16px; color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>示例公司 2027 校园招聘 · 网申表（演示）</h1>
+</header>
+<p class="banner">这是 App 自带的演示表单，填写内容不会发送到任何地方。<br>Demo form built into the app. Nothing is sent anywhere.</p>
+
+<form id="apply" novalidate>
+  <fieldset>
+    <legend>基本信息 Basic information</legend>
+    <div class="row"><label for="name">姓名 Name</label><input id="name" name="name" type="text"></div>
+    <div class="row">
+      <span class="label" id="gender-label">性别 Gender</span>
+      <div class="choices" role="radiogroup" aria-labelledby="gender-label">
+        <label><input type="radio" id="gender-male" name="gender" value="男"> 男 Male</label>
+        <label><input type="radio" id="gender-female" name="gender" value="女"> 女 Female</label>
+      </div>
+    </div>
+    <div class="row"><label for="birth">出生日期 Date of birth</label><input id="birth" name="birth" type="date"></div>
+    <div class="row"><label for="phone">手机 Mobile</label><input id="phone" name="phone" type="tel"></div>
+    <div class="row"><label for="email">邮箱 Email</label><input id="email" name="email" type="email"></div>
+    <div class="row">
+      <label for="city">现居城市 Current city</label>
+      <select id="city" name="city">
+        <option value="">请选择 Select</option>
+        <option>北京</option><option>上海</option><option>广州</option><option>深圳</option><option>杭州</option><option>其他</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="political">政治面貌 Political status</label>
+      <select id="political" name="political">
+        <option value="">请选择 Select</option>
+        <option>中共党员</option><option>中共预备党员</option><option>共青团员</option><option>群众</option><option>其他</option>
+      </select>
+    </div>
+  </fieldset>
+
+  <fieldset id="education">
+    <legend>教育经历 Education</legend>
+    <div id="edu-cards">
+      <div class="card" data-index="1">
+        <div class="row"><label for="school-1">学校 School</label><input id="school-1" name="school-1" type="text"></div>
+        <div class="row">
+          <label for="degree-1">学历 Degree</label>
+          <select id="degree-1" name="degree-1"><option value="">请选择 Select</option><option>本科</option><option>硕士</option><option>博士</option></select>
+        </div>
+        <div class="row"><label for="major-1">专业 Major</label><input id="major-1" name="major-1" type="text"></div>
+        <div class="row"><label for="edu-start-1">入学时间 Start</label><input id="edu-start-1" name="edu-start-1" type="month"></div>
+        <div class="row"><label for="edu-end-1">毕业时间 End</label><input id="edu-end-1" name="edu-end-1" type="month"></div>
+      </div>
+    </div>
+    <button type="button" class="add" id="add-education">＋ 添加教育经历</button>
+  </fieldset>
+
+  <fieldset id="internship">
+    <legend>实习经历 Internship</legend>
+    <div class="card">
+      <div class="row"><label for="company-1">公司 Company</label><input id="company-1" name="company-1" type="text"></div>
+      <div class="row"><label for="position-1">职位 Position</label><input id="position-1" name="position-1" type="text"></div>
+      <div class="row"><label for="work-start-1">开始时间 Start</label><input id="work-start-1" name="work-start-1" type="month"></div>
+      <div class="row"><label for="work-end-1">结束时间 End</label><input id="work-end-1" name="work-end-1" type="month"></div>
+      <div class="row"><label for="work-desc-1">工作内容 Duties</label><textarea id="work-desc-1" name="work-desc-1"></textarea></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>其他 More about you</legend>
+    <div class="row"><label for="skills">技能 Skills</label><input id="skills" name="skills" type="text"></div>
+    <div class="row"><label for="about">自我评价 About yourself</label><textarea id="about" name="about"></textarea></div>
+    <div class="row"><label for="resume-file">简历附件 Resume (PDF)</label><input id="resume-file" name="resume-file" type="file" accept=".pdf,application/pdf"></div>
+    <div class="row"><label for="photo-file">证件照 ID photo</label><input id="photo-file" name="photo-file" type="file" accept="image/*"></div>
+  </fieldset>
+</form>
+
+<iframe src="extra.html" title="其他信息"></iframe>
+
+<div class="agree">
+  <label><input type="checkbox" id="agree" name="agree" form="apply"> 我已阅读并同意《个人信息处理说明》（演示）</label>
+</div>
+
+<p id="notice" role="status" hidden>这是演示，没有发送任何内容。</p>
+
+<div class="bar">
+  <button type="button" id="save-draft">保存草稿</button>
+  <button type="submit" id="submit" class="primary" form="apply">提交（演示，不会发送）</button>
+</div>
+
+<script>
+  (function () {
+    var form = document.getElementById('apply');
+    var notice = document.getElementById('notice');
+    function demoOnly(event) {
+      event.preventDefault();
+      notice.hidden = false;
+    }
+    form.addEventListener('submit', demoOnly);
+    document.getElementById('save-draft').addEventListener('click', demoOnly);
+
+    var cards = document.getElementById('edu-cards');
+    document.getElementById('add-education').addEventListener('click', function () {
+      var n = cards.children.length + 1;
+      var card = cards.firstElementChild.cloneNode(true);
+      card.setAttribute('data-index', String(n));
+      card.querySelectorAll('[id]').forEach(function (el) {
+        el.id = el.id.replace(/-\d+$/, '-' + n);
+        if (el.name) el.name = el.id;
+        if ('value' in el && el.tagName !== 'SELECT') el.value = '';
+        if (el.tagName === 'SELECT') el.selectedIndex = 0;
+      });
+      card.querySelectorAll('label[for]').forEach(function (label) {
+        label.htmlFor = label.htmlFor.replace(/-\d+$/, '-' + n);
+      });
+      cards.appendChild(card);
+    });
+  })();
+</script>
+</body>
+</html>

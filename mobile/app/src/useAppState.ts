@@ -1,5 +1,6 @@
 // App state for the screens: loaded once the profile tells whether this is a first run, changed optimistically.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppStateTooNewError } from './store/appStateMigrate';
 import { defaultAppState, type AppState, type AppStateStore } from './store/appStateStore';
 
 export interface AppStateApi {
@@ -7,14 +8,19 @@ export interface AppStateApi {
   /** Apply a change to the newest state, show it at once, persist it. Resolves false (and rolls the screen back
    *  to the last stored state) when saving failed. */
   update(change: (state: AppState) => AppState): Promise<boolean>;
+  /** The stored state comes from a newer app version: it is never overwritten, changes live in memory only. */
+  readOnly: boolean;
 }
 
 /**
  * Loads once `seed` is non-null. Nothing stored: defaults, with onboarding counted as done when resumes already
  * exist (an upgrade from a build without onboarding), saved at once. Corrupt: the same defaults, saved over it.
+ * Written by a newer app version: defaults (onboarding done) in memory, the file left alone, `readOnly` true.
  */
 export function useAppState(store: AppStateStore, seed: { hasResumes: boolean } | null): AppStateApi {
   const [state, setState] = useState<AppState | null>(null);
+  const [readOnly, setReadOnly] = useState(false);
+  const readOnlyRef = useRef(false);
   /** The newest state shown, so quick updates build on each other. */
   const latest = useRef<AppState | null>(null);
   /** What the store last confirmed; failed saves roll back to it. Null while nothing could be stored (an unusable
@@ -36,9 +42,17 @@ export function useAppState(store: AppStateStore, seed: { hasResumes: boolean } 
     if (!ready || started.current) return;
     started.current = true;
     void (async () => {
-      let initial = await store.load().catch(() => null);
+      let tooNew = false;
+      let initial = await store.load().catch((error: unknown) => {
+        tooNew = error instanceof AppStateTooNewError;
+        return null;
+      });
       let confirmed: AppState | null = initial;
-      if (initial === null) {
+      if (tooNew) {
+        readOnlyRef.current = true;
+        initial = defaultAppState({ onboardingDone: true });
+        if (alive.current) setReadOnly(true);
+      } else if (initial === null) {
         const fresh = defaultAppState({ onboardingDone: hasResumes });
         confirmed = await store.save(fresh).catch(() => null);
         initial = confirmed ?? fresh;
@@ -56,6 +70,7 @@ export function useAppState(store: AppStateStore, seed: { hasResumes: boolean } 
       const next = change(base);
       latest.current = next;
       setState(next);
+      if (readOnlyRef.current) return true;
       try {
         stored.current = await store.save(next);
         return true;
@@ -71,5 +86,5 @@ export function useAppState(store: AppStateStore, seed: { hasResumes: boolean } 
     [store],
   );
 
-  return { state, update };
+  return { state, update, readOnly };
 }

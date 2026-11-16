@@ -1,6 +1,7 @@
 // Export and import of the whole profile on the phone. The plain export is exactly the desktop extension's
 // exportProfile() text, so its 「导入 JSON」 reads it; the password export wraps that text (exportCrypto.ts).
 // Attachment files never travel: their ids are kept, and on import ids missing on this phone are dropped.
+// The 网申 records can ride along under one extra key (mobileTracker) that the extension ignores.
 import {
   ATTACHMENT_SLOTS,
   MODULES,
@@ -10,7 +11,9 @@ import {
 } from '../../../../src/editor';
 import { ProfileSchema, type Locale, type Profile, type Resume } from '../../../../src/schema';
 import { isModuleFilled } from '../home/summary';
+import type { AppState } from '../store/appStateStore';
 import { sameResumeContent } from '../store/profileStore';
+import { readTracker, withTracker, type TrackerRead } from '../tracker/model/trackerTransfer';
 import { ExportCryptoError, decryptExport, encryptExport, isEncryptedExport } from './exportCrypto';
 
 export const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
@@ -29,8 +32,10 @@ function localDate(now: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export async function buildExport(profile: Profile, options: { password?: string; now: number }): Promise<ExportFile> {
-  const plain = exportProfile(profile);
+/** With `tracker` holding records, the plain text also carries them (withTracker); otherwise exactly exportProfile. */
+export async function buildExport(profile: Profile, options: { password?: string; now: number; tracker?: AppState }): Promise<ExportFile> {
+  const plain =
+    options.tracker && options.tracker.applications.length > 0 ? withTracker(exportProfile(profile), options.tracker) : exportProfile(profile);
   const base = `resume-autofill-profile-${localDate(options.now)}`;
   if (options.password) {
     return { name: `${base}-encrypted.json`, mimeType: 'application/json', text: await encryptExport(plain, options.password) };
@@ -47,7 +52,7 @@ export type ImportErrorCode =
   | 'unsupported_version';
 
 export type ImportRead =
-  | { kind: 'profile'; profile: Profile }
+  | { kind: 'profile'; profile: Profile; tracker: TrackerRead }
   | { kind: 'encrypted'; envelope: string }
   | { kind: 'error'; code: ImportErrorCode };
 
@@ -59,7 +64,7 @@ function tooLarge(text: string): boolean {
 
 function parsePlain(text: string): ImportRead {
   const parsed = parseProfileJson(text);
-  return parsed.ok ? { kind: 'profile', profile: parsed.profile } : { kind: 'error', code: parsed.code };
+  return parsed.ok ? { kind: 'profile', profile: parsed.profile, tracker: readTracker(text) } : { kind: 'error', code: parsed.code };
 }
 
 /** What a chosen file holds: a profile (migrated and validated), an encrypted envelope, or an error. */

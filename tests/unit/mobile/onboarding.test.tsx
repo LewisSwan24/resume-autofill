@@ -1,4 +1,4 @@
-// First-run onboarding: three promises, then three ways to get a resume ready (import, start blank, PDF coming).
+// First-run onboarding: three promises, then three ways to get a resume ready (import, start blank, PDF / Word).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Onboarding, type OnboardingProps } from '../../../mobile/app/src/onboarding/Onboarding';
@@ -13,6 +13,8 @@ function renderStep(step: 1 | 2, over: Partial<OnboardingProps> = {}) {
     onSkip: vi.fn(),
     onStartBlank: vi.fn(),
     onImport: vi.fn(),
+    onImportResume: vi.fn(),
+    onTryDemo: vi.fn(),
     showToast: vi.fn(),
     ...over,
   };
@@ -80,15 +82,35 @@ describe('Onboarding', () => {
     expect(p.onStartBlank).toHaveBeenLastCalledWith('en-AU');
   });
 
-  it('the PDF option is marked coming soon, aria-disabled, and says so when tapped', () => {
+  it('the PDF / Word option is live: an ordinary button that starts the resume import', () => {
     const p = renderStep(2);
-    const pdf = screen.getByRole('button', { name: /^导入 PDF 简历/ });
-    expect(pdf.getAttribute('aria-disabled')).toBe('true');
-    expect(pdf.hasAttribute('disabled')).toBe(false);
-    expect(within(pdf).getByText('即将推出')).toBeTruthy();
+    const pdf = screen.getByRole('button', { name: /^导入 PDF \/ Word 简历/ });
+    expect(pdf.hasAttribute('aria-disabled')).toBe(false);
+    expect(within(pdf).queryByText('即将推出')).toBeNull();
     fireEvent.click(pdf);
-    expect(p.showToast).toHaveBeenCalledWith({ text: 'PDF 导入还在做，先用另外两种方式吧。' });
+    expect(p.onImportResume).toHaveBeenCalledTimes(1);
+    expect(p.showToast).not.toHaveBeenCalled();
     expect(p.onImport).not.toHaveBeenCalled();
+  });
+
+  it('step 2 offers 「先试试示例表单」 last, which calls onTryDemo and nothing else', () => {
+    const p = renderStep(2);
+    const options = screen.getAllByRole('button').filter((b) => b.classList.contains('m-onb__option'));
+    expect(options.map((b) => b.querySelector('.m-row__name')?.textContent)).toEqual([
+      '从电脑导入', '从空白开始', '导入 PDF / Word 简历', '先试试示例表单',
+    ]);
+    const demo = screen.getByRole('button', { name: /^先试试示例表单/ });
+    expect(demo.querySelector('svg')?.getAttribute('data-icon')).toBe('play-circle');
+    expect(within(demo).getByText('用虚构的张三演示一次填写，不碰真实网站。')).toBeTruthy();
+    fireEvent.click(demo);
+    expect(p.onTryDemo).toHaveBeenCalledTimes(1);
+    expect(p.onSkip).not.toHaveBeenCalled();
+    expect(p.onImport).not.toHaveBeenCalled();
+  });
+
+  it('without a fill browser there is no demo option', () => {
+    renderStep(2, { onTryDemo: undefined });
+    expect(screen.queryByRole('button', { name: /^先试试示例表单/ })).toBeNull();
   });
 
   it('the language switch on the welcome step calls onLanguage', () => {

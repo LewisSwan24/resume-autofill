@@ -1,5 +1,6 @@
-// Home: the resume used for filling with its progress and missing details, the paste-a-link box, and the list of
-// recent application pages (stored in app state, with remove, clear and undo).
+// Home: the copied-link card, the resume used for filling with its progress and missing details, the paste-a-link box
+// (it hands the link to App, which records and opens it), the sample form and the applications sections
+// (the old recent-pages list is no longer shown).
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { useMemo, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -33,20 +34,34 @@ function Harness({ store, ...props }: Omit<HomeScreenProps, 'appState' | 'update
   if (!api.state) return null;
   return (
     <BackStackContext.Provider value={backStack}>
-      <HomeScreen {...props} appState={api.state} updateAppState={api.update} showToast={(t) => setToast({ ...t, id: Math.random() })} />
+      <HomeScreen {...props} appState={api.state} showToast={(t) => setToast({ ...t, id: Math.random() })} />
       <Toast toast={toast} onDone={() => setToast(null)} />
     </BackStackContext.Provider>
   );
 }
 
 let store: AppStateStore;
-let callbacks: { onJump: Mock<HomeScreenProps['onJump']>; onStartResume: Mock<HomeScreenProps['onStartResume']>; onImport: Mock<() => void>; onOpenSettings: Mock<() => void> };
+let callbacks: {
+  onJump: Mock<HomeScreenProps['onJump']>;
+  onStartResume: Mock<HomeScreenProps['onStartResume']>;
+  onImport: Mock<() => void>;
+  onOpenSettings: Mock<() => void>;
+  onOpenBrowser: Mock<HomeScreenProps['onOpenBrowser']>;
+  onOpenLink: Mock<HomeScreenProps['onOpenLink']>;
+};
 
 async function renderHome(
-  opts: { profile?: Profile | null; loadError?: string | null; state?: Partial<AppState>; store?: AppStateStore } = {},
+  opts: { profile?: Profile | null; loadError?: string | null; state?: Partial<AppState>; store?: AppStateStore; extra?: Partial<HomeScreenProps> } = {},
 ) {
   store = opts.store ?? createMemoryAppStateStore({ version: 1, onboardingDone: true, ...opts.state });
-  callbacks = { onJump: vi.fn<HomeScreenProps['onJump']>(), onStartResume: vi.fn<HomeScreenProps['onStartResume']>(), onImport: vi.fn<() => void>(), onOpenSettings: vi.fn<() => void>() };
+  callbacks = {
+    onJump: vi.fn<HomeScreenProps['onJump']>(),
+    onStartResume: vi.fn<HomeScreenProps['onStartResume']>(),
+    onImport: vi.fn<() => void>(),
+    onOpenSettings: vi.fn<() => void>(),
+    onOpenBrowser: vi.fn<HomeScreenProps['onOpenBrowser']>(),
+    onOpenLink: vi.fn<HomeScreenProps['onOpenLink']>(async () => undefined),
+  };
   render(
     <Harness
       store={store}
@@ -54,25 +69,17 @@ async function renderHome(
       loadError={opts.loadError ?? null}
       now={() => NOW}
       {...callbacks}
+      {...opts.extra}
     />,
   );
   await screen.findByRole('heading', { level: 1, name: '首页' });
 }
 
-const stored = async () => (await store.load())!;
 const box = () => screen.getByLabelText('网申链接') as HTMLInputElement;
 const typeLink = (text: string) => fireEvent.change(box(), { target: { value: text } });
 const submit = () => fireEvent.click(screen.getByRole('button', { name: '打开' }));
 const toastText = () => screen.getByRole('status').textContent ?? '';
-const recentList = () => screen.getByRole('list', { name: '最近的网申页面' });
 
-const page = (id: string, url: string, host: string, minutesAgo: number, title?: string) => ({
-  id,
-  url,
-  host,
-  addedAt: NOW - minutesAgo * MIN,
-  ...(title ? { title } : {}),
-});
 
 beforeEach(() => setLanguage('zh'));
 afterEach(() => {
@@ -160,17 +167,13 @@ describe('Home: resume in use', () => {
     expect(callbacks.onImport).toHaveBeenCalledTimes(1);
   });
 
-  it('with a load error: says so and offers Settings; recent pages still show', async () => {
-    await renderHome({
-      profile: null,
-      loadError: 'broken',
-      state: { recentPages: [page('p1', 'https://jobs.example.com/a', 'jobs.example.com', 5)] },
-    });
+  it('with a load error: says so and offers Settings; the applications still show', async () => {
+    await renderHome({ profile: null, loadError: 'broken', extra: { applications: <section aria-label="网申记录区">示例科技</section> } });
     expect(screen.getByText('读不出简历资料：broken')).toBeTruthy();
     expect(screen.getByText('可以在设置里删除全部数据后重新开始。')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '去设置' }));
     expect(callbacks.onOpenSettings).toHaveBeenCalledTimes(1);
-    expect(within(recentList()).getByText('jobs.example.com')).toBeTruthy();
+    expect(screen.getByRole('region', { name: '网申记录区' })).toBeTruthy();
   });
 });
 
@@ -183,7 +186,7 @@ describe('Home: paste a link', () => {
     expect(await screen.findByText('这段文字里没有找到链接。')).toBeTruthy();
     expect(box().getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(box());
-    expect((await stored()).recentPages).toEqual([]);
+    expect(callbacks.onOpenLink).not.toHaveBeenCalled();
   });
 
   it('an empty box says to paste a link first', async () => {
@@ -197,18 +200,19 @@ describe('Home: paste a link', () => {
     typeLink('javascript:alert(1)');
     submit();
     expect(await screen.findByText('只能打开 http 或 https 开头的网页链接。')).toBeTruthy();
-    expect((await stored()).recentPages).toEqual([]);
+    expect(callbacks.onOpenLink).not.toHaveBeenCalled();
   });
 
-  it('a valid link is saved to recent pages, the box clears, the toast says the browser is coming', async () => {
+  it('a valid link goes to App (which records and opens it) as a paste, and the box clears', async () => {
     await renderHome();
     typeLink('https://jobs.example.com/apply/123');
     submit();
-    await waitFor(async () => expect((await stored()).recentPages.map((p) => p.url)).toEqual(['https://jobs.example.com/apply/123']));
-    expect(box().value).toBe('');
-    expect(toastText()).toContain('已存到「最近的网申页面」。内置的填写浏览器还在做，下个版本就能直接打开。');
-    expect(within(recentList()).getByText('jobs.example.com')).toBeTruthy();
-    expect(within(recentList()).getByText('刚刚')).toBeTruthy();
+    await waitFor(() =>
+      expect(callbacks.onOpenLink).toHaveBeenCalledWith({ url: 'https://jobs.example.com/apply/123', host: 'jobs.example.com', insecure: false }, 'paste'),
+    );
+    expect(callbacks.onOpenLink).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(box().value).toBe(''));
+    expect(callbacks.onOpenBrowser).not.toHaveBeenCalled();
   });
 
   it('while typing a valid link it shows "将打开：host"; an http link also shows the not-encrypted note', async () => {
@@ -225,12 +229,13 @@ describe('Home: paste a link', () => {
     expect(screen.queryByText('这段文字里没有找到链接。')).toBeNull();
   });
 
-  it('share text keeps its title, shown in the row', async () => {
+  it('share text keeps its title', async () => {
     await renderHome();
     typeLink('【示例科技】2026 校招后端开发 https://jobs.example.com/a?b=1。');
     submit();
-    await waitFor(() => expect(within(recentList()).getByText('示例科技 2026 校招后端开发')).toBeTruthy());
-    expect((await stored()).recentPages[0]).toMatchObject({ url: 'https://jobs.example.com/a?b=1', title: '示例科技 2026 校招后端开发' });
+    await waitFor(() =>
+      expect(callbacks.onOpenLink).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://jobs.example.com/a?b=1', title: '示例科技 2026 校招后端开发' }), 'paste'),
+    );
   });
 
   it('paste from clipboard fills the box; when the clipboard cannot be read, says to long-press', async () => {
@@ -248,96 +253,18 @@ describe('Home: paste a link', () => {
     expect(screen.queryByRole('button', { name: '从剪贴板粘贴' })).toBeNull();
   });
 
-  it('when saving app state fails, says so and the list on screen goes back', async () => {
-    const memory = createMemoryAppStateStore({ version: 1, onboardingDone: true });
-    const failing: AppStateStore = { load: () => memory.load(), save: () => Promise.reject(new Error('disk')), clear: () => memory.clear() };
-    await renderHome({ store: failing });
-    typeLink('https://jobs.example.com/apply/9');
-    submit();
-    await waitFor(() => expect(toastText()).toContain('没能保存，请再试一次。'));
-    expect(screen.queryByText('jobs.example.com')).toBeNull();
-    expect(screen.getByText('粘贴过的链接会出现在这里。')).toBeTruthy();
-  });
 });
 
-describe('Home: recent pages', () => {
-  const two = () => ({
-    recentPages: [
-      page('p1', 'https://jobs.example.com/apply/1', 'jobs.example.com', 5, '示例科技 校招'),
-      page('p2', 'https://careers.example.com/x', 'careers.example.com', 60 * 24 * 12),
-    ],
-  });
-
-  it('recent rows show host, title and relative time', async () => {
-    await renderHome({ state: two() });
-    const rows = within(recentList()).getAllByRole('listitem');
-    expect(rows).toHaveLength(2);
-    expect(within(rows[0]!).getByText('jobs.example.com')).toBeTruthy();
-    expect(within(rows[0]!).getByText('示例科技 校招')).toBeTruthy();
-    expect(within(rows[0]!).getByText('5 分钟前')).toBeTruthy();
-    expect(within(rows[1]!).getByText('careers.example.com')).toBeTruthy();
-    expect(within(rows[1]!).getByText('11月3日')).toBeTruthy();
-  });
-
-  it('removing one offers undo, which puts it back', async () => {
-    await renderHome({ state: two() });
-    fireEvent.click(screen.getByRole('button', { name: '从列表移除：jobs.example.com' }));
-    await waitFor(() => expect(screen.queryByText('jobs.example.com')).toBeNull());
-    expect(toastText()).toContain('已移除 jobs.example.com');
-    await waitFor(async () => expect((await stored()).recentPages.map((p) => p.id)).toEqual(['p2']));
-    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
-    await waitFor(() => expect(within(recentList()).getByText('jobs.example.com')).toBeTruthy());
-    await waitFor(async () => expect((await stored()).recentPages.map((p) => p.id)).toEqual(['p1', 'p2']));
-  });
-
-  it('clear all asks first; after clearing, undo restores the list', async () => {
-    await renderHome({ state: two() });
-    fireEvent.click(screen.getByRole('button', { name: '清空' }));
-    const sheet = screen.getByRole('dialog', { name: '清空最近的网申页面？' });
-    expect(within(sheet).getByText('会移除列表里的 2 个链接，简历不受影响。')).toBeTruthy();
-    fireEvent.click(within(sheet).getByRole('button', { name: '取消' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(within(recentList()).getAllByRole('listitem')).toHaveLength(2);
-
-    fireEvent.click(screen.getByRole('button', { name: '清空' }));
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '清空' }));
-    await waitFor(() => expect(screen.getByText('粘贴过的链接会出现在这里。')).toBeTruthy());
-    expect(toastText()).toContain('已清空');
-    await waitFor(async () => expect((await stored()).recentPages).toEqual([]));
-    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
-    await waitFor(() => expect(within(recentList()).getAllByRole('listitem')).toHaveLength(2));
-  });
-
-  it('empty list says links will show up here, with nothing to clear', async () => {
+describe('Home: the sample form', () => {
+  it('「没有链接？试试示例表单」 opens the demo, never as a link to record', async () => {
     await renderHome();
-    expect(screen.getByText('粘贴过的链接会出现在这里。')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '清空' })).toBeNull();
-  });
-
-  it('a row opens the detail sheet with the full link; copy writes it to the clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('no'));
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    await renderHome({ state: two() });
-    fireEvent.click(screen.getByRole('button', { name: /^jobs\.example\.com/ }));
-    const sheet = screen.getByRole('dialog', { name: '网申页面' });
-    expect(within(sheet).getByText('https://jobs.example.com/apply/1')).toBeTruthy();
-    expect(within(sheet).getByText('内置的填写浏览器还在做。现在可以先复制链接，用手机浏览器打开。')).toBeTruthy();
-    fireEvent.click(within(sheet).getByRole('button', { name: '复制链接' }));
-    await waitFor(() => expect(toastText()).toContain('已复制'));
-    expect(writeText).toHaveBeenCalledWith('https://jobs.example.com/apply/1');
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '复制链接' }));
-    await waitFor(() => expect(toastText()).toContain('没能复制，请长按链接手动复制。'));
-  });
-
-  it('the detail sheet can remove the page from the list', async () => {
-    await renderHome({ state: two() });
-    fireEvent.click(screen.getByRole('button', { name: /^careers\.example\.com/ }));
-    await act(async () => {
-      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '从列表移除' }));
-    });
-    expect(screen.queryByRole('dialog')).toBeNull();
-    await waitFor(() => expect(screen.queryByText('careers.example.com')).toBeNull());
-    expect(toastText()).toContain('已移除 careers.example.com');
+    const demo = screen.getByRole('button', { name: /^没有链接？试试示例表单/ });
+    expect(demo.querySelector('svg')?.getAttribute('data-icon')).toBe('play-circle');
+    expect(screen.getByText('用虚构的简历演示，不碰真实网站。')).toBeTruthy();
+    fireEvent.click(demo);
+    expect(callbacks.onOpenBrowser).toHaveBeenCalledWith({ url: 'https://appassets.androidplatform.net/demo/form.html', demo: true, source: 'demo-home' });
+    await act(async () => undefined);
+    expect(callbacks.onOpenLink).not.toHaveBeenCalled();
   });
 });
 
@@ -348,5 +275,52 @@ describe('Home: icons keep one meaning each', () => {
     expect(more.querySelector('svg')?.getAttribute('data-icon')).toBe('list-ul');
     const edit = screen.getByRole('button', { name: '编辑简历' });
     expect(edit.querySelector('svg')?.getAttribute('data-icon')).toBe('person-vcard');
+  });
+});
+
+describe('Home: layout and ways in', () => {
+  it('order: heading, copied-link card, resume card, paste card, demo, applications; no recent pages', async () => {
+    await renderHome({
+      extra: {
+        clipboardCard: <section aria-label="复制卡">卡</section>,
+        applications: <section aria-label="网申记录区">示例科技</section>,
+      },
+    });
+    const main = document.body;
+    const order = [
+      screen.getByRole('heading', { level: 1, name: '首页' }),
+      screen.getByRole('region', { name: '复制卡' }),
+      screen.getByRole('button', { name: '编辑简历' }),
+      box(),
+      screen.getByRole('button', { name: /^没有链接？试试示例表单/ }),
+      screen.getByRole('region', { name: '网申记录区' }),
+    ];
+    for (let i = 1; i < order.length; i += 1) {
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(within(main).queryByText('最近的网申页面')).toBeNull();
+  });
+
+  it('the paste shortcut focuses the paste box and fills it from the clipboard, without opening', async () => {
+    const readClipboard = vi.fn(async () => '【示例科技】网申 https://jobs.example.com/campus 备用 https://b.example.com/');
+    const onPasteFocusDone = vi.fn();
+    await renderHome({ extra: { pasteFocus: { nonce: 1, read: true }, readClipboard, onPasteFocusDone } });
+    await waitFor(() => expect(box().value).toBe('https://jobs.example.com/campus'));
+    expect(document.activeElement).toBe(box());
+    expect(readClipboard).toHaveBeenCalledTimes(1);
+    expect(onPasteFocusDone).toHaveBeenCalledTimes(1);
+    expect(callbacks.onOpenLink).not.toHaveBeenCalled();
+  });
+
+  it('去粘贴链接 (no clipboard read) only focuses; a clip without a link leaves the box empty', async () => {
+    const readClipboard = vi.fn(async () => '明天下午面试');
+    await renderHome({ extra: { pasteFocus: { nonce: 2, read: false }, readClipboard, onPasteFocusDone: vi.fn() } });
+    await waitFor(() => expect(document.activeElement).toBe(box()));
+    expect(readClipboard).not.toHaveBeenCalled();
+    cleanup();
+    await renderHome({ extra: { pasteFocus: { nonce: 3, read: true }, readClipboard, onPasteFocusDone: vi.fn() } });
+    await waitFor(() => expect(readClipboard).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(document.activeElement).toBe(box()));
+    expect(box().value).toBe('');
   });
 });

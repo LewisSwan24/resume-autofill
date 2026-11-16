@@ -1,6 +1,10 @@
 // Recent application pages kept in app state: newest first, one entry per link (the #fragment ignored), at most 30.
 import { describe, expect, it } from 'vitest';
-import { RECENT_PAGES_MAX, defaultAppState } from '../../../mobile/app/src/store/appStateStore';
+import { RECENT_PAGES_MAX } from '../../../mobile/app/src/store/appStateStore';
+import { AppStateV1Schema, type AppStateV1 } from '../../../mobile/app/src/store/appStateMigrate';
+
+// Legacy helpers on the v1 shape.
+const defaultAppState = (o: Partial<AppStateV1> = {}): AppStateV1 => AppStateV1Schema.parse({ version: 1, ...o });
 import {
   addRecentPage,
   clearRecentPages,

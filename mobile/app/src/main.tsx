@@ -1,6 +1,9 @@
-// Entry of the mobile app's web UI. Wires the app to the phone: the encrypted ProfileVault stores, the wipe, the
-// "create document" saver, app info and the Android back key / pause events on a device; localStorage, IndexedDB,
-// downloads and page visibility when previewed in a desktop browser.
+// Entry of the mobile app's web UI. Wires the app to the phone: the encrypted ProfileVault stores, the wipe (which also
+// clears the fill browser's site data), the "create document" saver, files handed over by other apps (open with /
+// share), the native fill browser, app info and the Android back key / pause events on a device; links, shared text
+// and launcher shortcuts (IncomingIntent), the clipboard offer, deadline reminders, launcher shortcuts and the
+// browser role; localStorage, IndexedDB, downloads and page visibility when previewed in a desktop
+// browser (none of the phone-only plugins there).
 import './fonts.css';
 import '../../../src/ui/theme.css';
 import './styles.css';
@@ -8,7 +11,15 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App, { type Platform } from './App';
+import App, { withSiteDataClear, type Platform } from './App';
+import { createNativeFillBrowser } from './browser/native';
+import { createNativeShortcuts } from './native/appShortcuts';
+import { createNativeBrowserRole } from './native/browserRole';
+import { createNativeClipboardPeek } from './native/clipboardPeek';
+import { createNativeIncomingIntent } from './native/incomingIntent';
+import { createNativeReminders } from './native/reminders';
+import { createNativeResumeKeyboard } from './native/resumeKeyboard';
+import { createNativeIncomingSource, type IncomingFilePlugin } from './resumeImport/incoming';
 import { createLocalStorageAppStateStore, createVaultAppStateStore, type AppStateVaultPlugin } from './store/appStateStore';
 import { createIndexedDbFileStore, createVaultFileStore, toBase64, type FileVaultPlugin } from './store/fileStore';
 import { createLocalStorageStore, createVaultStore, type VaultPlugin } from './store/profileStore';
@@ -28,8 +39,12 @@ const vault = native ? registerPlugin<VaultPlugin & FileVaultPlugin & AppStateVa
 const store = vault ? createVaultStore(vault) : createLocalStorageStore(localStorage);
 const files = vault ? createVaultFileStore(vault) : createIndexedDbFileStore();
 const appState = vault ? createVaultAppStateStore(vault) : createLocalStorageAppStateStore(localStorage);
-const wiper = vault ? createVaultWiper(vault) : createStoreWiper({ profile: store, files, appState });
+/** The FillBrowser plugin (FillBrowserPlugin.java). The browser preview has none: links are saved but not opened. */
+const fillBrowser = native ? createNativeFillBrowser() : null;
+const wiper = withSiteDataClear(vault ? createVaultWiper(vault) : createStoreWiper({ profile: store, files, appState }), fillBrowser);
 const documentSaver = native ? registerPlugin<DocumentSaverPlugin>('DocumentSaver') : null;
+/** The native IncomingFile plugin (IncomingFilePlugin.java). The browser preview has no incoming files. */
+const incomingPlugin = native ? registerPlugin<IncomingFilePlugin>('IncomingFile') : null;
 
 function onHidden(handler: () => void): () => void {
   const listener = () => {
@@ -84,6 +99,20 @@ const platform: Platform = {
     const result = await documentSaver.save({ name: file.name, mimeType: file.mimeType, data: toBase64(file.bytes) });
     return result.saved ? 'saved' : 'cancelled';
   },
+  incoming: incomingPlugin ? createNativeIncomingSource(incomingPlugin) : undefined,
+  ...(fillBrowser ? { fillBrowser } : {}),
+  // On a phone only; the browser preview gets none of them, and App hides what needs them.
+  ...(native
+    ? {
+        incomingIntent: createNativeIncomingIntent(),
+        clipboard: createNativeClipboardPeek(),
+        reminders: createNativeReminders(),
+        shortcuts: createNativeShortcuts(),
+        browserRole: createNativeBrowserRole(),
+        // The resume keyboard (status, system settings, picker, its sealed copy of the resume).
+        resumeKeyboard: createNativeResumeKeyboard(),
+      }
+    : {}),
 };
 
 createRoot(document.getElementById('root')!).render(

@@ -1,0 +1,443 @@
+/* 网申记录 (tracker): list, rows, chips, detail, sheets. Lively Icons: no shadows, 1px lines; states shown by line
+   weight, fill or fade with the words always saying the state; colours only from --raf-* tokens, so dark mode
+   follows the system. Everything wraps at 200% font; every control is at least 44px. */
+
+/* ------------------------------------------------------------ list page */
+
+.rt-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rt-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--m-hit, 44px);
+}
+
+.rt-controls {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.rt-search {
+  display: grid;
+  gap: 6px;
+}
+
+.rt-search__box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rt-search__box .m-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.rt-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rt-count {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+  font-size: 12px;
+}
+
+.rt-empty {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 16px;
+}
+
+.rt-empty h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.rt-empty p {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+}
+
+/* ------------------------------------------------------------ chips (status filter and status picker) */
+
+.rt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rt-chip {
+  min-height: var(--m-hit, 44px);
+  padding: 0 14px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-surface);
+  color: var(--raf-color-text);
+  font: inherit;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.rt-chip[aria-checked='true'],
+.rt-chip[aria-pressed='true'] {
+  border: 2px solid var(--raf-color-primary);
+  padding: 0 13px;
+  background: var(--raf-color-selected);
+  color: var(--raf-color-on-selected);
+  font-weight: 600;
+}
+
+.rt-chip:disabled {
+  opacity: 0.45;
+}
+
+/* ------------------------------------------------------------ rows */
+
+.rt-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+.rt-list > li + li {
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.rt-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.rt-row__open {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.rt-row__open:active {
+  background: var(--raf-color-surface-hover);
+}
+
+.rt-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.rt-row__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rt-row__line {
+  color: var(--raf-color-text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.rt-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--raf-color-text-muted);
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------ status tag and deadline badge */
+
+.rt-status {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.rt-status--filling {
+  border: 2px solid var(--raf-color-primary);
+  padding: 0 5px;
+  line-height: 18px;
+}
+
+.rt-status--submitted {
+  border-color: var(--raf-color-selected);
+  background: var(--raf-color-selected);
+  color: var(--raf-color-on-selected);
+}
+
+.rt-status--interview {
+  border-color: var(--raf-color-primary);
+  background: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
+}
+
+.rt-status--closed {
+  opacity: 0.6;
+}
+
+.rt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--raf-color-border);
+  border-radius: 6px;
+  color: var(--raf-color-text);
+  line-height: 20px;
+}
+
+.rt-badge--today,
+.rt-badge--soon {
+  border: 2px solid var(--raf-color-primary);
+  padding: 0 5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.rt-badge--passed {
+  opacity: 0.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* accent equals ink in dark: the filled 面试 tag uses the tint and ink text. */
+  .rt-status--interview {
+    border: 2px solid var(--raf-color-primary);
+    padding: 0 5px;
+    line-height: 18px;
+    background: var(--raf-color-selected);
+    color: var(--raf-color-text);
+  }
+}
+
+/* ------------------------------------------------------------ Home sections */
+
+.rt-home {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.rt-home__section h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.rt-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  min-height: var(--m-hit, 44px);
+}
+
+/* ------------------------------------------------------------ detail */
+
+.rt-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.rt-detail__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-left: -10px;
+}
+
+.rt-detail__titles {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 6px;
+}
+
+.rt-detail__titles .m-title {
+  overflow-wrap: anywhere;
+}
+
+.rt-detail__position {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+}
+
+.rt-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.rt-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rt-link-row__host {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rt-section {
+  display: grid;
+  gap: 8px;
+}
+
+.rt-section__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rt-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.rt-setting:active {
+  background: var(--raf-color-surface-hover);
+}
+
+.rt-setting__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rt-setting__value {
+  color: var(--raf-color-text-muted);
+  font-size: 13px;
+}
+
+.rt-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 28px;
+  margin: 8px 0;
+  border: 1px solid var(--raf-color-border);
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-surface);
+}
+
+.rt-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--raf-color-border);
+  transition: transform var(--raf-motion-duration) var(--raf-motion-easing);
+}
+
+.rt-switch:checked {
+  border: 2px solid var(--raf-color-primary);
+  background: var(--raf-color-selected);
+}
+
+.rt-switch:checked::after {
+  top: 2px;
+  left: 2px;
+  background: var(--raf-color-primary);
+  transform: translateX(20px);
+}
+
+.rt-switch:disabled {
+  opacity: 0.45;
+}
+
+.rt-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-history > li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+}
+
+.rt-history > li + li {
+  border-top: 1px solid var(--raf-color-border);
+}
+
+.rt-history__when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-weight: 600;
+}
+
+.rt-history__counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--raf-color-text-muted);
+  font-size: 13px;
+}
+
+.rt-history__undone {
+  opacity: 0.6;
+}
+
+.rt-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rt-muted {
+  margin: 0;
+  color: var(--raf-color-text-muted);
+  font-size: 13px;
+}

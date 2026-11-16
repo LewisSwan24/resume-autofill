@@ -66,18 +66,42 @@ function pieces(el: Element): string[] {
   return (clone.textContent ?? '').split('\n').map(squash).filter(Boolean);
 }
 
+const isLayoutTable = (table: Element): boolean => {
+  const rows = Array.from(table.querySelectorAll(':scope > tbody > tr, :scope > tr'));
+  if (rows.length === 0 || rows.length > 3) return false;
+  return rows.some((row) =>
+    row.children.length >= 2 &&
+    Array.from(row.children).some(
+      (cell) =>
+        cell.querySelector('h1, h2, h3, h4, h5, h6, ul, ol, table') !== null ||
+        cell.querySelectorAll('p, div').length >= 4,
+    ),
+  );
+};
+
 export function linesOfHtml(html: string): TextLine[] {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const out: TextLine[] = [];
   const walk = (parent: Element): void => {
     for (const el of Array.from(parent.children)) {
       if (el.tagName === 'TABLE') {
-        for (const row of Array.from(el.querySelectorAll('tr'))) {
+        const rows = Array.from(el.querySelectorAll(':scope > tbody > tr, :scope > tr'));
+        if (isLayoutTable(el)) {
+          const maxCols = Math.max(0, ...rows.map((r) => r.children.length));
+          for (let col = 0; col < maxCols; col++) {
+            for (const row of rows) {
+              const cell = row.children[col];
+              if (cell) walk(cell);
+            }
+          }
+          continue;
+        }
+        for (const row of rows) {
           const cells = Array.from(row.children).map((c) => pieces(c).join(' ')).filter(Boolean);
           if (cells.length > 0) out.push(line(cells));
         }
       } else if (el.tagName === 'UL' || el.tagName === 'OL') {
-        for (const item of Array.from(el.querySelectorAll('li'))) {
+        for (const item of Array.from(el.querySelectorAll(':scope > li'))) {
           for (const text of pieces(item)) out.push(line([text]));
         }
       } else {

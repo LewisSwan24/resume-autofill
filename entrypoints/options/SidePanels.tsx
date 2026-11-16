@@ -4,7 +4,9 @@ import { forgetAllPlaces } from '../fab.content/placement';
 import { exportProfile, parseProfileJson } from '../../src/editor';
 import { useT, type LanguageSetting } from '../../src/i18n';
 import type { Profile, Settings } from '../../src/schema';
-import { Button, Notice, Segmented, Switch } from './ui/controls';
+import { MAPPING_PRESETS, isValidPresetId } from '../../src/templates';
+import { ApplicationRecordSchema, loadApplications, mergeTrackerRecords, saveApplications, type ApplicationRecord } from '../../src/tracker';
+import { Button, Field, Notice, Segmented, SelectInput, Switch } from './ui/controls';
 import { Dialog } from './ui/Dialog';
 import { useToast } from './ui/Toast';
 
@@ -36,6 +38,24 @@ export function SettingsPanel({ settings, onChange }: SettingsProps) {
         checked={settings.previewBeforeFill}
         onChange={(previewBeforeFill) => onChange({ ...settings, previewBeforeFill })}
       />
+      <Field label={t('options.settings.mappingPreset')} help={t('options.settings.mappingHint')}>
+        {(ctrl) => (
+          <SelectInput
+            {...ctrl}
+            value={isValidPresetId(settings.mappingPresetId) ? settings.mappingPresetId : 'default'}
+            onChange={(e) => {
+              const next = e.target.value;
+              onChange({ ...settings, ...(next === 'default' ? { mappingPresetId: undefined } : { mappingPresetId: next }) });
+            }}
+          >
+            {MAPPING_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {t(p.labelKey)}
+              </option>
+            ))}
+          </SelectInput>
+        )}
+      </Field>
       <FabPlace />
     </div>
   );
@@ -89,13 +109,21 @@ export function DataPanel({ profile, onImport }: DataProps) {
   const t = useT();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
+  const [includeTracker, setIncludeTracker] = useState(true);
   /** A file that parsed fine and waits for the "Replace your resumes?" answer. */
-  const [pending, setPending] = useState<Profile | null>(null);
+  const [pending, setPending] = useState<{ profile: Profile; tracker: ApplicationRecord[] } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
 
-  const doExport = () => {
+  const doExport = async () => {
     if (!profile) return;
-    const url = URL.createObjectURL(new Blob([exportProfile(profile)], { type: 'application/json' }));
+    let payloadText = exportProfile(profile);
+    if (includeTracker) {
+      const records = await loadApplications().catch(() => []);
+      if (records.length > 0) {
+        payloadText = JSON.stringify({ ...profile, mobileTracker: records }, null, 2);
+      }
+    }
+    const url = URL.createObjectURL(new Blob([payloadText], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = t('options.data.exportName');
@@ -118,21 +146,41 @@ export function DataPanel({ profile, onImport }: DataProps) {
       setError(t('options.data.importError', { message }));
       return;
     }
-    setPending(result.profile);
+    const tracker: ApplicationRecord[] = [];
+    try {
+      const parsedJson = JSON.parse(text) as { mobileTracker?: unknown; applications?: unknown };
+      const rawList = Array.isArray(parsedJson.mobileTracker)
+        ? parsedJson.mobileTracker
+        : Array.isArray(parsedJson.applications)
+          ? parsedJson.applications
+          : [];
+      for (const item of rawList) {
+        const valid = ApplicationRecordSchema.safeParse(item);
+        if (valid.success) tracker.push(valid.data);
+      }
+    } catch {
+      /* ignore optional tracker parse errors */
+    }
+    setPending({ profile: result.profile, tracker });
   };
 
   const confirmImport = async () => {
     const incoming = pending;
     setPending(null);
     if (!incoming) return;
-    await onImport(incoming);
-    toast.push({ text: t('options.data.importOk', { count: incoming.resumes.length }) });
+    await onImport(incoming.profile);
+    if (incoming.tracker.length > 0) {
+      const current = await loadApplications().catch(() => []);
+      await saveApplications(mergeTrackerRecords(current, incoming.tracker));
+    }
+    const extra = incoming.tracker.length > 0 ? ` ${t('options.data.trackerImported', { n: incoming.tracker.length })}` : '';
+    toast.push({ text: `${t('options.data.importOk', { count: incoming.profile.resumes.length })}${extra}` });
   };
 
   return (
     <div className="raf-form-stack">
       <div className="raf-row">
-        <Button icon="download" onClick={doExport} disabled={!profile}>
+        <Button icon="download" onClick={() => void doExport()} disabled={!profile}>
           {t('options.data.export')}
         </Button>
         <Button icon="upload" onClick={() => picker.current?.click()}>
@@ -151,6 +199,11 @@ export function DataPanel({ profile, onImport }: DataProps) {
           }}
         />
       </div>
+      <Switch
+        label={t('options.data.includeTracker')}
+        checked={includeTracker}
+        onChange={setIncludeTracker}
+      />
       <Notice>{t('options.data.note')}</Notice>
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {pending ? (

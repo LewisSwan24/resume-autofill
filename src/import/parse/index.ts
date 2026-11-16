@@ -14,17 +14,29 @@ const MAX_HEADING_CHARS = 30;
 const MIN_HEADING_CONFIDENCE = 0.9;
 const NOT_A_NAME = /(?:简历|履历|resume|curriculum vitae|\bcv\b)/i;
 
-/** A heading stands alone, says what follows, and holds no value. */
-function headingOf(line: TextLine): SectionKey | 'other_people' | 'summary' | null {
-  const t = toSimplified(line.text.trim().replace(/[：:]$/, ''));
-  if (line.cells.length > 1 || t.length > MAX_HEADING_CHARS) return null;
+function matchHeadingText(raw: string): SectionKey | 'other_people' | 'summary' | null {
+  const t = toSimplified(raw.trim().replace(/[：:]$/, ''));
+  if (!t || t.length > MAX_HEADING_CHARS || /@/.test(t)) return null;
   if (/^(?:推荐人|证明人|紧急联系人|家庭成员|家庭情况|(?:professional |character |work )?(?:referees?|references?)(?: details| contacts?| information)?|emergency contacts?(?: details| information)?|next of kin)(?:\s*\d+)?$/i.test(t)) return 'other_people';
-  if (/\d|@/.test(t)) return null;
+  if (/\d/.test(t)) return null;
   if (/^(?:个人简介|自我评价|自我介绍|个人总结|summary|profile|about me|professional summary|career summary)$/i.test(t)) return 'summary';
   // Resumes are shorter about this than application forms.
   if (/^(?:experience|relevant experience|工作|经历)$/i.test(t)) return 'work';
   const m = matchSection(t);
   return m && m.confidence >= MIN_HEADING_CONFIDENCE ? m.section : null;
+}
+
+/** A heading stands alone (or pairs with a decorative/bilingual subtitle in cell 2), says what follows, and holds no value. */
+function headingOf(line: TextLine): SectionKey | 'other_people' | 'summary' | null {
+  if (line.cells.length === 1 || line.cells.length === 0) return matchHeadingText(line.text);
+  if (line.cells.length === 2) {
+    const left = matchHeadingText(line.cells[0]!);
+    if (!left) return null;
+    const right = line.cells[1]!.trim();
+    const rightHeading = matchHeadingText(right);
+    if (rightHeading === left || /^[-–—_=|/\\·•─]+$/.test(right)) return left;
+  }
+  return null;
 }
 
 const ZH_TWO_CHAR_FAMILY = /^(?:钟离|万俟|闻人|赫连|公羊|澹台|公冶|宗政|濮阳|淳于|单于|太叔|申屠|仲孙|轩辕|鲜于|闾丘|司空|亓官|司寇|子车|颛孙|端木|巫马|公西|漆雕|乐正|壤驷|公良|拓跋|夹谷|宰父|谷梁|段干|百里|东郭|南门|呼延|羊舌|微生|梁丘|左丘|东门|西门|南宫|第五|欧阳|司马|上官|诸葛|令狐|皇甫|尉迟|公孙|慕容|东方|夏侯|司徒|长孙|宇文|轩辕|端木|南宫|独孤|百里|呼延)/;

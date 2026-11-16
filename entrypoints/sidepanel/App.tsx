@@ -11,12 +11,16 @@ import type { StatusGroupId } from '../../src/ui/status';
 import { FilterChips } from './FilterChips';
 import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
 import { EmptyState, IconButton, LoadingList, Notice, Toast } from './parts';
+import { PreviewList, type PreviewCommitPayload } from './PreviewList';
 import { ReportList } from './ReportList';
 import { ResumeSwitcher } from './ResumeSwitcher';
 import { useActiveTab } from './useActiveTab';
 import { useFieldActions } from './useFieldActions';
+import { usePreview } from './usePreview';
 import { useProfile } from './useProfile';
 import { useReport } from './useReport';
+import { sendToBackground } from '../../src/messaging';
+import { isHttpUrl, recordFillApplication } from '../../src/tracker';
 import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
 import './sidepanel.css';
@@ -37,10 +41,12 @@ export default function App() {
   const t = useT();
   const { profile } = useProfile();
   const tabId = useActiveTab();
+  const preview = usePreview(tabId, Boolean(profile?.settings.previewBeforeFill));
   const { report, loading, error, reload, patchField } = useReport(tabId);
   const { focus, apply } = useFieldActions(tabId, patchField);
   const [selected, setSelected] = useState<ReadonlySet<StatusGroupId>>(new Set());
   const [switchFailed, setSwitchFailed] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
 
   // UI language follows the stored setting.
@@ -72,6 +78,37 @@ export default function App() {
         : failed > 0
           ? t('panel.summaryFailed', { filled, failed })
           : t('panel.summaryClear', { filled });
+
+  const commitPreview = useCallback(
+    async (payload: PreviewCommitPayload) => {
+      if (tabId === null) return;
+      setPreviewBusy(true);
+      try {
+        await sendToBackground({ type: 'fill:commitPreview', tabId, ...payload });
+      } finally {
+        setPreviewBusy(false);
+      }
+    },
+    [tabId],
+  );
+
+  const cancelPreview = useCallback(() => {
+    if (tabId === null) return;
+    void sendToBackground({ type: 'fill:cancelPreview', tabId }).catch(() => undefined);
+  }, [tabId]);
+
+  const saveReportToTracker = useCallback(async () => {
+    if (!report || !isHttpUrl(report.url)) return;
+    await recordFillApplication({
+      url: report.url,
+      filled: counts.filled,
+      attention: counts.review + counts.failed,
+      skipped: Math.max(0, fields.length - counts.filled - counts.review - counts.failed),
+      ...(profile?.activeResumeId ? { resumeId: profile.activeResumeId } : {}),
+      locale: profile?.resumes.find((r) => r.id === profile.activeResumeId)?.locale,
+    });
+    setToast({ id: Date.now(), text: t('panel.savedTracker') });
+  }, [report, counts, fields.length, profile, t]);
 
   return (
     <div className="raf-panel-app">
@@ -124,7 +161,15 @@ export default function App() {
           </Notice>
         ) : null}
 
-        {loading && tabId !== null ? (
+        {preview && tabId !== null ? (
+          <PreviewList
+            preview={preview}
+            busy={previewBusy}
+            onFocus={(frameId, fieldId) => focus({ frameId, fieldId } as FieldReport)}
+            onCommit={(payload) => void commitPreview(payload)}
+            onCancel={cancelPreview}
+          />
+        ) : loading && tabId !== null ? (
           <LoadingList />
         ) : fields.length === 0 ? (
           error ? null : (
@@ -138,7 +183,15 @@ export default function App() {
         ) : (
           <>
             <section className="raf-overview">
-              <p className="raf-summary">{summary}</p>
+              <div className="raf-overview-head">
+                <p className="raf-summary">{summary}</p>
+                {report && isHttpUrl(report.url) ? (
+                  <button type="button" className="raf-btn" onClick={() => void saveReportToTracker()}>
+                    <Icon name="check-circle" size={14} />
+                    <span>{t('panel.saveTracker')}</span>
+                  </button>
+                ) : null}
+              </div>
               <FilterChips
                 counts={counts}
                 total={fields.length}

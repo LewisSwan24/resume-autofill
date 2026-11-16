@@ -10,10 +10,12 @@ import { Badge, Button, IconButton } from './parts';
 import type { FillSummary, SummaryItem } from './summarize';
 
 export interface SummaryCardProps {
-  /** Present after a fill; `null` when showing an error. */
+  /** Present after a fill; `null` when showing an error or preview prompt. */
   summary: FillSummary | null;
   /** Present when the fill request failed. */
   error: string | null;
+  /** Present when `previewBeforeFill` produced a side-panel preview. */
+  previewReady?: boolean;
   /** The card is playing its exit animation (it can no longer be used). */
   leaving?: boolean;
   /** Called once the exit animation is over (or would have been). */
@@ -51,6 +53,7 @@ function ItemRow({ item, onFocusField }: { item: SummaryItem; onFocusField: (ite
 export function SummaryCard({
   summary,
   error,
+  previewReady = false,
   leaving = false,
   onSettled,
   onClose,
@@ -128,6 +131,19 @@ export function SummaryCard({
             <div className="raf-notice__actions">
               <Button onClick={onOpenOptions}>{t('fab.error.openOptions')}</Button>
             </div>
+          </div>
+        )}
+
+        {previewReady && (
+          <div className="raf-notice" role="status" data-testid="raf-preview-ready">
+            <Icon name="info-circle" />
+            <p className="raf-notice__text">
+              <span className="raf-notice__title">{t('fab.preview.title')}</span>
+              {t('fab.preview.text')}
+            </p>
+            <Button variant="primary" block onClick={onOpenSidePanel}>
+              {t('fab.preview.open')}
+            </Button>
           </div>
         )}
 

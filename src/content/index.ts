@@ -1,5 +1,6 @@
 // Content script wiring (all frames): scan → report count, handle fill / focus / apply commands.
 import { browser } from 'wxt/browser';
+import { resolveAdapter } from '../adapters/resolve';
 import { registerAllDrivers } from '../drivers';
 import { scanDocument } from '../engine/scan';
 import { sendToBackground } from '../messaging';
@@ -30,7 +31,12 @@ export function startContentScript(doc: Document = document): () => void {
       /* a page we cannot scan must never break the page itself */
     }
   };
-  const watcher = createScanWatcher({ doc, scan, isBusy: () => handlers.isBusy() });
+  const watcher = createScanWatcher({
+    doc,
+    scan,
+    isBusy: () => handlers.isBusy(),
+    stepSignature: () => resolveAdapter(doc)?.stepSignature?.(doc) ?? null,
+  });
   handlers = createFrameHandlers({
     doc,
     idFor,

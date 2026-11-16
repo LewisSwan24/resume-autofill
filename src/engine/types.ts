@@ -156,3 +156,44 @@ export interface FillReport {
   fields: FieldReport[];
   counts: Record<Outcome, number>;
 }
+
+export interface FillFilter {
+  /** Field ids the user unchecked in previewBeforeFill. */
+  excludedFieldIds?: string[];
+  /** Per-field text overrides entered in previewBeforeFill. */
+  overrides?: Record<string, string>;
+}
+
+export interface PreviewItem {
+  fieldId: string;
+  frameId?: number;
+  fieldKey: FieldKey;
+  label: string;
+  value: string;
+  kind: string;
+  confidence: number;
+  source?: string;
+  section: SectionKey | null;
+}
+
+export interface CardDemandSummary {
+  section: SectionKey;
+  have: number;
+  need: number;
+}
+
+export interface FramePreview {
+  url: string;
+  items: PreviewItem[];
+  cardDemand: CardDemandSummary[];
+  unresolvedCount: number;
+}
+
+export interface FillPreview {
+  tabId: number;
+  url: string;
+  createdAt: number;
+  items: PreviewItem[];
+  cardDemand: CardDemandSummary[];
+  unresolvedCount: number;
+}

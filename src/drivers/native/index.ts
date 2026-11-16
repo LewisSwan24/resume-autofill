@@ -4,7 +4,7 @@ import { groupInputs } from '../../engine/discover';
 import type { Control, ControlKind } from '../../engine/types';
 import type { Driver, DriverContext, FillIntent, FillResult } from '../types';
 import { fillCheckbox, fillRadio, readChecked } from './choice';
-import { fillDate } from './date';
+import { fillDate, readDateRange } from './date';
 import { fillFile, readFiles } from './file';
 import { fillRichtext } from './richtext';
 import { fillSelect, readSelect } from './select';
@@ -22,8 +22,9 @@ function read(control: Control): string | null {
   switch (control.kind) {
     case 'text':
     case 'textarea':
-    case 'date':
       return (el as HTMLInputElement).value;
+    case 'date':
+      return control.dateRange ? readDateRange(el) : (el as HTMLInputElement).value;
     case 'select':
       return readSelect(el as HTMLSelectElement);
     case 'radio':

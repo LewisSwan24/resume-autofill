@@ -7,6 +7,8 @@ export interface ScanWatcherOptions {
   scan: () => void;
   /** True while a fill / apply is driving the page. */
   isBusy?: () => boolean;
+  /** Optional step signature reader for multi-step SPA wizards; a change schedules an immediate rescan. */
+  stepSignature?: () => string | null;
   /** Quiet period after the last mutation. Default 800 ms. */
   debounceMs?: number;
   /** Upper bound for a scan under constant mutation noise (animations). Default 5000 ms. */
@@ -32,6 +34,8 @@ export function createScanWatcher(opts: ScanWatcherOptions): ScanWatcher {
   const debounceMs = opts.debounceMs ?? 800;
   const maxWaitMs = opts.maxWaitMs ?? 5000;
   const isBusy = opts.isBusy ?? (() => false);
+  const readStep = opts.stepSignature;
+  let lastStep = readStep ? readStep() : null;
   let observer: MutationObserver | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let firstPendingAt = 0;
@@ -45,14 +49,15 @@ export function createScanWatcher(opts: ScanWatcherOptions): ScanWatcher {
   const fire = () => {
     clear();
     if (isBusy()) return; // the end of the fill reschedules via `schedule()`
+    if (readStep) lastStep = readStep();
     opts.scan();
   };
 
-  const schedule = () => {
+  const schedule = (immediate = false) => {
     const now = Date.now();
     if (!firstPendingAt) firstPendingAt = now;
     if (timer !== undefined) clearTimeout(timer);
-    const wait = Math.max(0, Math.min(debounceMs, firstPendingAt + maxWaitMs - now));
+    const wait = immediate ? 0 : Math.max(0, Math.min(debounceMs, firstPendingAt + maxWaitMs - now));
     timer = setTimeout(fire, wait);
   };
 
@@ -62,7 +67,10 @@ export function createScanWatcher(opts: ScanWatcherOptions): ScanWatcher {
       const Ctor = opts.doc.defaultView?.MutationObserver ?? globalThis.MutationObserver;
       observer = new Ctor(() => {
         if (isBusy()) return;
-        schedule();
+        const step = readStep ? readStep() : null;
+        const stepChanged = readStep !== undefined && step !== lastStep;
+        if (stepChanged) lastStep = step;
+        schedule(stepChanged);
       });
       const root = opts.doc.documentElement ?? opts.doc;
       observer.observe(root, {

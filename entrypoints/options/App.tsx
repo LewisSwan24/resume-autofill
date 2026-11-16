@@ -33,6 +33,8 @@ import { ModuleForm } from './ModuleForm';
 import { ImportReview, type ReviewProblem } from './ImportReview';
 import { ResumeList } from './ResumeList';
 import { DataPanel, SettingsPanel } from './SidePanels';
+import { TemplatesPanel } from './TemplatesPanel';
+import { TrackerPanel } from './TrackerPanel';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
 import { findJumpControl, focusAndMark, useFocusRequest } from './useFocusRequest';
 import { Accordion, AccordionItem } from './ui/Accordion';
@@ -52,7 +54,7 @@ export interface AppProps {
   autosaveDelayMs?: number;
 }
 
-type TabKey = 'editor' | 'attachments' | 'settings' | 'data';
+type TabKey = 'editor' | 'attachments' | 'settings' | 'data' | 'tracker' | 'templates';
 
 /** Sections that start expanded; the rest stay folded until asked for. */
 const OPEN_BY_DEFAULT: readonly ModuleName[] = ['basics', 'contact', 'education', 'work'];
@@ -352,6 +354,8 @@ function Options({ autosaveDelayMs }: AppProps) {
     { id: 'attachments', label: t('options.module.attachments'), icon: 'paperclip' },
     { id: 'settings', label: t('options.settings.title'), icon: 'gear' },
     { id: 'data', label: t('options.data.title'), icon: 'download' },
+    { id: 'tracker', label: t('options.tab.tracker'), icon: 'check-circle' },
+    { id: 'templates', label: t('options.tab.templates'), icon: 'file-earmark-check' },
   ];
   const linkedTitle = resume?.linkedResumeId ? profile.resumes.find((r) => r.id === resume.linkedResumeId)?.title : undefined;
   const linkOthers = linkTarget ? profile.resumes.filter((r) => r.id !== linkTarget.id) : [];
@@ -471,6 +475,16 @@ function Options({ autosaveDelayMs }: AppProps) {
           <section className="raf-card" aria-label={t('options.settings.title')}>
             <h2 className="raf-heading">{t('options.settings.title')}</h2>
             <SettingsPanel settings={profile.settings} onChange={(settings) => void commit({ ...profile, settings })} />
+          </section>
+        ) : tab === 'tracker' ? (
+          <section className="raf-card" aria-label={t('options.tracker.title')}>
+            <h2 className="raf-heading">{t('options.tracker.title')}</h2>
+            <TrackerPanel />
+          </section>
+        ) : tab === 'templates' ? (
+          <section className="raf-card" aria-label={t('options.templates.title')}>
+            <h2 className="raf-heading">{t('options.templates.title')}</h2>
+            <TemplatesPanel resume={resume} />
           </section>
         ) : (
           <section className="raf-card" aria-label={t('options.data.title')}>

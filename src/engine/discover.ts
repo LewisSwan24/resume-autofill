@@ -33,6 +33,7 @@ type Draft = Omit<Control, 'id'> & { inputs?: HTMLInputElement[] };
 const EXCLUDED_INPUT_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image']);
 const NATIVE_SELECTOR = 'input, select, textarea, [contenteditable]';
 const DISABLED_SELECTOR = '[disabled], [aria-disabled="true"]';
+const NATIVE_DATE_RANGE_SELECTOR = '[data-raf-date-range], .raf-date-range, .date-range';
 /** Phone widgets that keep the country with the number: intl-tel-input and react-phone-number-input. */
 export const PHONE_WITH_CODE_SELECTOR = '.iti, .PhoneInput';
 
@@ -325,6 +326,18 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
     if (!isVisible(group) || buttons.every(isDisabledEl)) continue;
     const options = buttons.map((b) => ({ label: text(b.textContent), disabled: isDisabledEl(b) }));
     candidates.set(group, { el: group, kind: 'radio', lib: 'aria', options });
+  }
+
+  // Native two-input date range containers (start + end in one box).
+  for (const rangeEl of Array.from(scope.querySelectorAll<HTMLElement>(NATIVE_DATE_RANGE_SELECTOR))) {
+    if (insideAny(rangeEl, blocked) || rangeEl.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
+    const inputs = Array.from(rangeEl.querySelectorAll<HTMLInputElement>('input')).filter((i) => !EXCLUDED_INPUT_TYPES.has(i.type.toLowerCase()));
+    const allDateOrMonth = inputs.length === 2 && inputs.every((i) => i.type.toLowerCase() === 'date' || i.type.toLowerCase() === 'month');
+    if (!allDateOrMonth) continue;
+    blocked.add(rangeEl);
+    if (inputs.some(isDisabledEl) || !inputs.every(isInputVisible) || isFarAway(rangeEl) || isBesideTheApplication(rangeEl)) continue;
+    const granularity = inputs.every((i) => i.type.toLowerCase() === 'month') ? 'month' : 'day';
+    candidates.set(rangeEl, { el: rangeEl, kind: 'date', lib: 'native', dateRange: true, dateGranularity: granularity });
   }
 
   // 3. Native controls.

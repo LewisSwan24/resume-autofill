@@ -1,10 +1,50 @@
 // Pure helpers: guards for frame responses, merging per-frame reports, patching one field.
-import type { FieldReport, FillReport } from '../engine/types';
+import type { CardDemandSummary, FieldReport, FillPreview, FillReport, FramePreview, PreviewItem } from '../engine/types';
 import { countOutcomes } from '../fill/report';
 
 export interface FramePart {
   frameId: number;
   report: FillReport;
+}
+
+export interface FramePreviewPart {
+  frameId: number;
+  preview: FramePreview;
+}
+
+export function isFramePreview(x: unknown): x is FramePreview {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Partial<FramePreview>;
+  return typeof p.url === 'string' && Array.isArray(p.items) && Array.isArray(p.cardDemand);
+}
+
+export function isFillPreview(x: unknown): x is FillPreview {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Partial<FillPreview>;
+  return typeof p.tabId === 'number' && Array.isArray(p.items) && Array.isArray(p.cardDemand);
+}
+
+export function mergeFramePreviews(tabId: number, parts: readonly FramePreviewPart[]): FillPreview {
+  const top = parts.find((p) => p.frameId === 0) ?? parts[0];
+  const items: PreviewItem[] = parts.flatMap(({ frameId, preview }) =>
+    preview.items.map((item) => ({ ...item, frameId })),
+  );
+  const cardMap = new Map<CardDemandSummary['section'], CardDemandSummary>();
+  for (const { preview } of parts) {
+    for (const d of preview.cardDemand) {
+      const prev = cardMap.get(d.section);
+      if (!prev || d.need - d.have > prev.need - prev.have) cardMap.set(d.section, d);
+    }
+  }
+  const unresolvedCount = parts.reduce((sum, p) => sum + (p.preview.unresolvedCount ?? 0), 0);
+  return {
+    tabId,
+    url: top?.preview.url ?? '',
+    createdAt: Date.now(),
+    items,
+    cardDemand: [...cardMap.values()],
+    unresolvedCount,
+  };
 }
 
 export function isFieldReport(x: unknown): x is FieldReport {

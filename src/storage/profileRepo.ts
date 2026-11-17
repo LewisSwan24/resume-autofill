@@ -6,11 +6,26 @@ import {
   CURRENT_SCHEMA_VERSION,
   ProfileSchema,
   ResumeSchema,
+  materializeResume,
   migrateProfile,
   type Profile,
   type Resume,
   type ResumeInput,
 } from '../schema';
+import {
+  VAULT_META_KEY,
+  changeVaultPassphrase,
+  createVaultMetaAndSession,
+  decryptProfileWithVault,
+  encryptProfileWithVault,
+  getVaultMeta,
+  getVaultStatus,
+  isEncryptedVaultBlob,
+  lockVault,
+  unlockVaultWithPassphrase,
+  type VaultEnableOptions,
+  type VaultStatus,
+} from './vault';
 
 export const PROFILE_STORAGE_KEY = 'profile';
 
@@ -40,27 +55,41 @@ function exclusive<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function readProfile(): Promise<Profile> {
+async function readProfile(options?: { touchSession?: boolean }): Promise<Profile> {
   const stored = await browser.storage.local.get(PROFILE_STORAGE_KEY);
   const raw: unknown = stored[PROFILE_STORAGE_KEY];
-  return raw === undefined ? emptyProfile() : migrateProfile(raw);
+  if (raw === undefined) return emptyProfile();
+  if (isEncryptedVaultBlob(raw)) {
+    const decrypted = await decryptProfileWithVault(raw, { touchSession: options?.touchSession ?? true });
+    return migrateProfile(decrypted);
+  }
+  return migrateProfile(raw);
 }
 
-async function writeProfile(input: Profile): Promise<Profile> {
+async function writeProfile(input: Profile, rawDekOverride?: Uint8Array<ArrayBuffer>): Promise<Profile> {
   const parsed = ProfileSchema.parse(input);
   // Invariant: `activeResumeId` points at an existing resume, and is null only when there are none.
   if (!parsed.resumes.some((r) => r.id === parsed.activeResumeId)) {
     parsed.activeResumeId = parsed.resumes[0]?.id ?? null;
   }
-  // A corrupt stored profile must not block the user from saving a good one.
-  const previous = await readProfile().catch(() => emptyProfile());
+  const vaultMeta = await getVaultMeta();
+  // When vault is enabled and locked (unless rawDekOverride is supplied during initialization),
+  // refuse writes cleanly with VaultLockedError instead of silently overwriting ciphertext.
+  const previous = vaultMeta && !rawDekOverride
+    ? await readProfile()
+    : await readProfile().catch(() => emptyProfile());
   const before = new Map(previous.resumes.map((r) => [r.id, r]));
   const now = Date.now();
   parsed.resumes = parsed.resumes.map((r) => {
     const old = before.get(r.id);
     return old && sameContent(old, r) ? { ...r, updatedAt: old.updatedAt } : { ...r, updatedAt: now };
   });
-  await browser.storage.local.set({ [PROFILE_STORAGE_KEY]: parsed });
+  if (vaultMeta || rawDekOverride) {
+    const blob = await encryptProfileWithVault(JSON.stringify(parsed), rawDekOverride);
+    await browser.storage.local.set({ [PROFILE_STORAGE_KEY]: blob });
+  } else {
+    await browser.storage.local.set({ [PROFILE_STORAGE_KEY]: parsed });
+  }
   return parsed;
 }
 
@@ -165,12 +194,77 @@ export function deleteResume(id: string): Promise<boolean> {
     const resumes = p.resumes
       .filter((r) => r.id !== id)
       .map((r) => {
-        if (r.linkedResumeId !== id) return r;
-        const { linkedResumeId: _removed, ...rest } = r;
-        return rest;
+        let updated = r;
+        if (updated.variantOf === id) {
+          // Promote child variant to standalone resume before unlinking parent so no inherited fields are lost.
+          const materialized = materializeResume(updated, p.resumes);
+          const { variantOf: _v, ...restVariant } = materialized;
+          updated = restVariant;
+        }
+        if (updated.linkedResumeId === id) {
+          const { linkedResumeId: _removed, ...rest } = updated;
+          updated = rest;
+        }
+        return updated;
       });
     await writeProfile({ ...p, resumes, activeResumeId: p.activeResumeId === id ? null : p.activeResumeId });
     return true;
+  });
+}
+
+/** Return the active resume with non-destructive variant inheritance already resolved. */
+export async function getMaterializedActiveResume(): Promise<Resume | null> {
+  const p = await readProfile();
+  const active = p.resumes.find((r) => r.id === p.activeResumeId);
+  return active ? materializeResume(active, p.resumes) : null;
+}
+
+// ------------------------------------------------------------------ Storage Vault lifecycle
+
+export async function enableProfileVault(passphrase: string, options?: VaultEnableOptions): Promise<VaultStatus> {
+  return exclusive(async () => {
+    const current = await readProfile();
+    const { rawDek } = await createVaultMetaAndSession(passphrase, options);
+    await writeProfile(current, rawDek);
+    return getVaultStatus();
+  });
+}
+
+export async function unlockProfileVault(passphrase: string): Promise<Profile> {
+  return exclusive(async () => {
+    await unlockVaultWithPassphrase(passphrase);
+    return readProfile({ touchSession: true });
+  });
+}
+
+export async function lockProfileVault(): Promise<void> {
+  await lockVault();
+}
+
+export async function changeProfileVaultPassphrase(
+  oldPassphrase: string,
+  newPassphrase: string,
+  options?: VaultEnableOptions,
+): Promise<void> {
+  return exclusive(async () => {
+    await changeVaultPassphrase(oldPassphrase, newPassphrase, options);
+  });
+}
+
+export async function disableProfileVault(passphrase: string): Promise<Profile> {
+  return exclusive(async () => {
+    const rawDek = await unlockVaultWithPassphrase(passphrase);
+    const stored = await browser.storage.local.get(PROFILE_STORAGE_KEY);
+    const raw = stored[PROFILE_STORAGE_KEY];
+    const current = isEncryptedVaultBlob(raw)
+      ? migrateProfile(await decryptProfileWithVault(raw, { touchSession: false, rawDekOverride: rawDek }))
+      : raw === undefined
+        ? emptyProfile()
+        : migrateProfile(raw);
+    await browser.storage.local.set({ [PROFILE_STORAGE_KEY]: current });
+    await browser.storage.local.remove(VAULT_META_KEY);
+    await lockVault();
+    return current;
   });
 }
 
@@ -180,9 +274,25 @@ export function deleteResume(id: string): Promise<boolean> {
  * Returns an unsubscribe function.
  */
 export function watchProfile(cb: (profile: Profile) => void): () => void {
+  let active = true;
   const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-    if (area !== 'local' || !(PROFILE_STORAGE_KEY in changes)) return;
+    if (!active || area !== 'local' || !(PROFILE_STORAGE_KEY in changes)) return;
     const raw = changes[PROFILE_STORAGE_KEY]?.newValue;
+    if (isEncryptedVaultBlob(raw)) {
+      void decryptProfileWithVault(raw, { touchSession: false })
+        .then((decrypted) => {
+          if (!active) return;
+          try {
+            cb(migrateProfile(decrypted));
+          } catch {
+            // Corrupt or unsupported version: ignore cleanly.
+          }
+        })
+        .catch(() => {
+          // Locked vault: wait until unlocked.
+        });
+      return;
+    }
     let profile: Profile;
     try {
       // Removal shows up as `undefined` in Chrome and as `null` in fake-browser.
@@ -193,5 +303,8 @@ export function watchProfile(cb: (profile: Profile) => void): () => void {
     cb(profile);
   };
   browser.storage.onChanged.addListener(listener);
-  return () => browser.storage.onChanged.removeListener(listener);
+  return () => {
+    active = false;
+    browser.storage.onChanged.removeListener(listener);
+  };
 }

@@ -15,14 +15,14 @@ import {
 import { emptyProfile, sameResumeContent } from '../../../mobile/app/src/store/profileStore';
 import { encryptExport } from '../../../mobile/app/src/data/exportCrypto';
 import { exportProfile, parseProfileJson } from '../../../src/editor';
-import { ProfileSchema, ResumeSchema, type Profile, type Resume } from '../../../src/schema';
+import { CURRENT_SCHEMA_VERSION, ProfileSchema, ResumeSchema, type Profile, type Resume } from '../../../src/schema';
 
 function resume(id: string, extra: Record<string, unknown> = {}): Resume {
   return ResumeSchema.parse({ id, title: `简历 ${id}`, locale: 'zh-CN', createdAt: 1, updatedAt: 1, ...extra });
 }
 
 function profile(resumes: Resume[], extra: Partial<Profile> = {}): Profile {
-  return ProfileSchema.parse({ schemaVersion: 1, resumes, activeResumeId: resumes[0]?.id ?? null, ...extra });
+  return ProfileSchema.parse({ schemaVersion: CURRENT_SCHEMA_VERSION, resumes, activeResumeId: resumes[0]?.id ?? null, ...extra });
 }
 
 const filled = resume('a', {
@@ -92,7 +92,7 @@ describe('import', () => {
     const read = readImport(old);
     expect(read.kind).toBe('profile');
     if (read.kind === 'profile') {
-      expect(read.profile.schemaVersion).toBe(1);
+      expect(read.profile.schemaVersion).toBe(2);
       expect(read.profile.activeResumeId).toBe('old');
     }
   });

@@ -250,6 +250,72 @@ export const CustomAnswerSchema = z.object({
   answer: text(),
 });
 
+// ---------------------------------------------------------------- variant & recipe (Schema v2)
+
+export const TRANSFORM_PRESETS = [
+  'none',
+  'trim',
+  'uppercase',
+  'lowercase',
+  'phone_local',
+  'date_ym',
+  'date_ymd',
+] as const;
+
+export const VARIANT_SECTIONS = [
+  'education',
+  'work',
+  'projects',
+  'campus',
+  'awards',
+  'languages',
+  'certificates',
+  'skills',
+  'family',
+  'referees',
+] as const;
+
+export const VariantSectionSchema = z.enum(VARIANT_SECTIONS);
+
+export const VariantMetaSchema = z.object({
+  targetRole: z.string().max(120).optional(),
+  customSummary: z.string().max(4000).optional(),
+  hiddenSections: z.array(VariantSectionSchema).max(16).optional(),
+  hiddenIndices: z.record(z.string(), z.array(z.number().int().nonnegative()).max(100)).optional(),
+  sectionOrder: z.array(VariantSectionSchema).max(16).optional(),
+  highlightedSkills: z.array(z.string().max(64)).max(60).optional(),
+  jdKeywords: z.array(z.string().max(64)).max(60).optional(),
+});
+
+export const SiteRecipeFingerprintSchema = z.object({
+  tag: z.string().min(1).max(32),
+  role: z.string().max(64).optional(),
+  inputType: z.string().max(32).optional(),
+  nameAttr: z.string().max(128).optional(),
+  autocomplete: z.string().max(64).optional(),
+  placeholder: z.string().max(160).optional(),
+  labelTokens: z.array(z.string().max(64)).max(24).default([]),
+  structuralPath: z.string().max(256).optional(),
+});
+
+export const SiteRecipeRuleSchema = z.object({
+  id: z.string().min(1).max(64),
+  fingerprint: SiteRecipeFingerprintSchema,
+  fieldKey: z.string().max(128).optional(),
+  constantValue: z.string().max(2000).optional(),
+  transformPreset: z.enum(TRANSFORM_PRESETS).default('none'),
+});
+
+export const SiteRecipeSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(120),
+  hostPattern: z.string().min(1).max(160),
+  pathPattern: z.string().max(160).optional(),
+  enabled: z.boolean().default(true),
+  updatedAt: z.number().int().nonnegative(),
+  rules: z.array(SiteRecipeRuleSchema).max(200).default([]),
+});
+
 // ---------------------------------------------------------------- resume / profile
 
 export const LOCALES = ['zh-CN', 'en-AU'] as const;
@@ -259,6 +325,8 @@ export const ResumeSchema = z.object({
   title: z.string(),
   locale: z.enum(LOCALES),
   linkedResumeId: z.string().optional(),
+  variantOf: z.string().min(1).optional(),
+  variantMeta: VariantMetaSchema.optional(),
   createdAt: z.number().default(() => Date.now()),
   updatedAt: z.number().default(() => Date.now()),
   basics: BasicsSchema.prefault({}),
@@ -283,7 +351,7 @@ export const ResumeSchema = z.object({
   customAnswers: z.array(CustomAnswerSchema).default([]),
 });
 
-export const CURRENT_SCHEMA_VERSION = 1 as const;
+export const CURRENT_SCHEMA_VERSION = 2 as const;
 
 export const SettingsSchema = z.object({
   uiLanguage: z.enum(['auto', 'zh', 'en']).default('auto'),
@@ -293,16 +361,25 @@ export const SettingsSchema = z.object({
   ollamaEnabled: z.boolean().optional(),
   ollamaEndpoint: z.string().optional(),
   ollamaModel: z.string().optional(),
+  vaultIdleTimeoutMinutes: z.number().int().min(1).max(240).optional(),
 });
 
 export const ProfileSchema = z.object({
-  schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   resumes: z.array(ResumeSchema).default([]),
   activeResumeId: z.string().nullable().default(null),
   settings: SettingsSchema.prefault({}),
+  recipes: z.array(SiteRecipeSchema).optional(),
 });
 
 // ---------------------------------------------------------------- types
+
+export type TransformPreset = (typeof TRANSFORM_PRESETS)[number];
+export type VariantSection = (typeof VARIANT_SECTIONS)[number];
+export type VariantMeta = z.infer<typeof VariantMetaSchema>;
+export type SiteRecipeFingerprint = z.infer<typeof SiteRecipeFingerprintSchema>;
+export type SiteRecipeRule = z.infer<typeof SiteRecipeRuleSchema>;
+export type SiteRecipe = z.infer<typeof SiteRecipeSchema>;
 
 export type Region = z.infer<typeof RegionSchema>;
 export type Basics = z.infer<typeof BasicsSchema>;

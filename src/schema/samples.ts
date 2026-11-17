@@ -172,7 +172,7 @@ const enInput: ResumeInput = {
 export function createSampleProfile(): Profile {
   const resumes: Resume[] = [ResumeSchema.parse(zhInput), ResumeSchema.parse(enInput)];
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     resumes,
     activeResumeId: 'sample-zh',
     settings: { uiLanguage: 'auto', previewBeforeFill: false },

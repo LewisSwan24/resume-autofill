@@ -5,7 +5,9 @@ import type { FileData } from '../drivers/types';
 import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { applyHighlights, clearHighlights, focusField } from '../fill/highlight';
 import { highlightRun, runFill, runPreview, type FillPayload, type FillRun } from '../fill/runFill';
-import type { Resume } from '../schema';
+import { collectEvidence } from '../engine/evidence';
+import { captureFieldFingerprint } from '../recipes';
+import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { FrameNeeds } from '../engine/fieldDeps';
 import { buildApplyIntent } from './intent';
@@ -33,10 +35,11 @@ export interface ApplyRequest {
 export interface FrameHandlers {
   /** What this frame could fill (scan only; touches neither the page nor any resume data). */
   needs(): FrameNeeds;
-  preview(payload: { resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId }): FramePreview;
-  fill(payload: { resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId }): Promise<FillReport>;
+  preview(payload: { resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[] }): FramePreview;
+  fill(payload: { resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[] }): Promise<FillReport>;
   focus(fieldId: string): boolean;
   apply(request: ApplyRequest): Promise<FieldReport>;
+  captureFingerprint?(fieldId: string): SiteRecipeFingerprint | null;
   /** True while a fill / apply is running. */
   isBusy(): boolean;
 }
@@ -143,6 +146,12 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
       } finally {
         leave();
       }
+    },
+
+    captureFingerprint(fieldId) {
+      const control = controls.get(fieldId);
+      if (!control || !control.el.isConnected) return null;
+      return captureFieldFingerprint(control, collectEvidence(control));
     },
   };
 }

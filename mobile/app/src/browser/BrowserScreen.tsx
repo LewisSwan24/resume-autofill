@@ -14,7 +14,7 @@ import {
   useState,
   type Ref,
 } from 'react';
-import type { Profile, Resume } from '../../../../src/schema';
+import { materializeResume, type Profile, type Resume } from '../../../../src/schema';
 import { resolveFillResume } from '../home/summary';
 import { Icon } from '../Icon';
 import { useMT } from '../i18n';
@@ -238,18 +238,18 @@ export function BrowserScreen({
     }
     if (choice.kind === 'profile') {
       const r = profile?.resumes.find((x) => x.id === choice.resumeId) ?? null;
-      if (r)
+      if (r && profile)
         return {
           pick: { kind: 'profile', resumeId: r.id },
-          resume: r,
+          resume: materializeResume(r, profile.resumes),
           sample: false,
         };
     }
     const resolved = profile ? resolveFillResume(profile, fillLanguage) : null;
-    return resolved
+    return resolved && profile
       ? {
           pick: { kind: 'profile', resumeId: resolved.resume.id },
-          resume: resolved.resume,
+          resume: materializeResume(resolved.resume, profile.resumes),
           sample: false,
         }
       : { pick: null, resume: null, sample: false };

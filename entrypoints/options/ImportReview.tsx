@@ -22,6 +22,9 @@ interface Props {
   problem?: ReviewProblem | undefined;
   onCancel: () => void;
   onSave: (draft: Draft, title: string) => void;
+  /** Optional 3-way diff merge directly into the selected existing resume. */
+  mergeTargetTitle?: string | undefined;
+  onMerge?: ((draft: Draft) => void) | undefined;
   /** Told of every change. This page can go away while the applicant looks at another tab. */
   onEdit?: (draft: Draft, title: string) => void;
 }
@@ -65,7 +68,7 @@ function groupsOf(fields: DraftField[]): Group[] {
 
 const lastOf = (path: string): string => path.split('.').pop()!;
 
-export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, problem, onCancel, onSave, onEdit }: Props) {
+export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, problem, onCancel, onSave, mergeTargetTitle, onMerge, onEdit }: Props) {
   const t = useT();
   const language = useLanguage();
   const [fields, setFields] = useState(draft.fields);
@@ -106,6 +109,11 @@ export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, 
           <Button onClick={onCancel} disabled={busy}>
             {t('common.cancel')}
           </Button>
+          {mergeTargetTitle && onMerge ? (
+            <Button disabled={busy} onClick={() => onMerge({ locale, fields })}>
+              {t('options.import.mergeExisting', { title: mergeTargetTitle })}
+            </Button>
+          ) : null}
           <Button variant="primary" icon="check-lg" disabled={busy} onClick={() => onSave({ locale, fields }, title.trim() || fileName)}>
             {t('options.import.save')}
           </Button>

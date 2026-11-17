@@ -15,6 +15,7 @@ import { MAPPING_PRESETS, isValidPresetId } from '../../src/templates';
 import { extractTrackerFromParsed } from '../../src/sync';
 import { loadApplications, mergeTrackerRecords, saveApplications, type ApplicationRecord } from '../../src/tracker';
 import { SyncPanel } from './SyncPanel';
+import { VaultPanel } from './VaultPanel';
 import { Button, Field, Input, Notice, Segmented, SelectInput, Switch } from './ui/controls';
 import { Dialog } from './ui/Dialog';
 import { useToast } from './ui/Toast';
@@ -156,6 +157,7 @@ export function SettingsPanel({ settings, onChange }: SettingsProps) {
       </div>
       {detectStatus ? <Notice>{detectStatus}</Notice> : null}
       <FabPlace />
+      <VaultPanel />
     </div>
   );
 }

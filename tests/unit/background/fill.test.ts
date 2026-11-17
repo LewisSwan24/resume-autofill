@@ -262,7 +262,7 @@ describe('data minimisation (frame:needs → frame:fill)', () => {
     await seedSamplesIfEmpty();
     const sent = stubFrames({ 0: needs({ fieldKeys: ['contact.email'] }), 1: needs({ fieldKeys: ['contact.phone'] }) });
     await runFillRequest(9, { listFrameIds: async () => [0, 1] });
-    expect(sent.map((s) => `${s.msg.type}@${s.frameId}`).filter((t) => !t.startsWith('report:'))).toEqual([
+    expect(sent.map((s) => `${s.msg.type}@${s.frameId}`).filter((t) => !t.startsWith('report:') && !t.startsWith('wizard:'))).toEqual([
       'frame:needs@0', 'frame:fill@0', 'frame:needs@1', 'frame:fill@1',
     ]);
     const ids = fills(sent).map((s) => s.msg.runId);

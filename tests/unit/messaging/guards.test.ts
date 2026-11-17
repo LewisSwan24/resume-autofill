@@ -63,8 +63,10 @@ describe('isValidMessage', () => {
     expect([...MESSAGE_TYPES].sort()).toEqual(
       [
         'scan:result', 'scan:total', 'fill:request', 'fill:commitPreview', 'fill:cancelPreview',
-        'scan:query', 'frame:needs', 'frame:preview', 'frame:fill', 'report:updated', 'preview:updated',
-        'field:focus', 'frame:focus', 'field:apply', 'frame:apply', 'ui:openOptions', 'ui:openSidePanel',
+        'scan:query', 'wizard:query', 'wizard:clear', 'wizard:updated',
+        'frame:needs', 'frame:preview', 'frame:fill', 'report:updated', 'preview:updated',
+        'field:focus', 'frame:focus', 'field:apply', 'frame:apply',
+        'field:captureFingerprint', 'frame:captureFingerprint', 'ui:openOptions', 'ui:openSidePanel',
       ].sort(),
     );
   });

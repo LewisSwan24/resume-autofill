@@ -23,6 +23,7 @@ export interface ReportListProps {
   onFocus: (field: FieldReport) => void;
   onApply: (field: FieldReport, input: ApplyInput) => Promise<ApplyResult>;
   onSaveCustomAnswer?: (question: string, answer: string) => Promise<void>;
+  onRecordRecipe?: (field: FieldReport, answerText: string) => Promise<void>;
   /** Called after a field was applied successfully (the app shows a Toast). */
   onApplied?: () => void;
 }
@@ -34,6 +35,7 @@ function FieldItem({
   onFocus,
   onApply,
   onSaveCustomAnswer,
+  onRecordRecipe,
   onApplied,
 }: { field: FieldReport } & Omit<ReportListProps, 'fields'>) {
   const t = useT();
@@ -279,6 +281,16 @@ function FieldItem({
               <button type="submit" className="raf-btn" disabled={busy}>
                 {t('panel.save')}
               </button>
+              {onRecordRecipe && field.frameId !== undefined ? (
+                <button
+                  type="button"
+                  className="raf-btn raf-btn-small"
+                  disabled={busy}
+                  onClick={() => void onRecordRecipe(field, draft)}
+                >
+                  {t('panel.recipe.record')}
+                </button>
+              ) : null}
             </div>
             {supportsAiDraft && onSaveCustomAnswer ? (
               <label className="raf-save-custom">
@@ -300,7 +312,7 @@ function FieldItem({
   );
 }
 
-export function ReportList({ fields, resume, settings, onFocus, onApply, onSaveCustomAnswer, onApplied }: ReportListProps) {
+export function ReportList({ fields, resume, settings, onFocus, onApply, onSaveCustomAnswer, onRecordRecipe, onApplied }: ReportListProps) {
   return (
     <ul className="raf-list" role="list">
       {fields.map((field) => (
@@ -312,6 +324,7 @@ export function ReportList({ fields, resume, settings, onFocus, onApply, onSaveC
           onFocus={onFocus}
           onApply={onApply}
           onSaveCustomAnswer={onSaveCustomAnswer}
+          onRecordRecipe={onRecordRecipe}
           onApplied={onApplied}
         />
       ))}

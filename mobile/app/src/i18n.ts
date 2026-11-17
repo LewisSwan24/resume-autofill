@@ -809,6 +809,9 @@ const zh = {
   'm.tpl.exportDocx': '导出 Word (.docx)',
   'm.tpl.printUnsupported': '当前预览环境不支持原生打印，已尝试调用网页打印。',
   'm.ai.hint': '记忆参考：{text}',
+  'm.variant.badge': '派生变体',
+  'm.jd.row': 'JD 离线匹配速查',
+  'm.jd.score': '匹配度 {score}%（命中 {hit}/{total}）',
 } as const;
 
 export type MobileKey = keyof typeof zh;
@@ -1615,6 +1618,9 @@ const en: Record<MobileKey, string> = {
   'm.tpl.exportDocx': 'Save Word (.docx)',
   'm.tpl.printUnsupported': 'Native print bridge is unavailable in browser preview.',
   'm.ai.hint': 'Suggested: {text}',
+  'm.variant.badge': 'Variant',
+  'm.jd.row': 'Offline JD Match Check',
+  'm.jd.score': 'Match {score}% ({hit}/{total} keywords)',
 };
 
 const MOBILE: Record<Language, Record<string, string>> = { zh, en };

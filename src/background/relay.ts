@@ -1,5 +1,6 @@
 // Relay of single-field commands from the FAB / side panel to the frame that owns the control.
 import type { FieldReport } from '../engine/types';
+import type { SiteRecipeFingerprint } from '../schema';
 import { sendToFrame } from '../messaging';
 import { FRAME_TIMEOUT_MS, withTimeout } from './frames';
 import { isFieldReport, isSectionRow, sameField } from './merge';
@@ -52,4 +53,19 @@ export async function relayApply(input: ApplyInput, deps: RelayDeps = {}): Promi
   const patched = await patchStoredField(tabId, frameId, field);
   // Prefer the stored row: it keeps the label / key / section the page may have lost.
   return patched?.fields.find((f) => sameField(f, frameId, fieldId)) ?? field;
+}
+
+export async function relayCaptureFingerprint(
+  tabId: number,
+  frameId: number,
+  fieldId: string,
+  deps: RelayDeps = {},
+): Promise<SiteRecipeFingerprint | null> {
+  if (isSectionRow(fieldId)) return null;
+  const send = deps.send ?? sendToFrame;
+  const answer = await withTimeout(
+    send(tabId, frameId, { type: 'frame:captureFingerprint', fieldId }),
+    deps.timeoutMs ?? FRAME_TIMEOUT_MS,
+  );
+  return answer && typeof answer === 'object' ? (answer as SiteRecipeFingerprint) : null;
 }

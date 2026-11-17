@@ -9,7 +9,7 @@ import { planFill, type FillStep } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
 import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { isVisible } from '../engine/visibility';
-import type { Resume } from '../schema';
+import type { Resume, SiteRecipe } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import { ensureCards, type SectionGrowth } from './ensureCards';
 import { fillEntryEditors } from './entryEditors';
@@ -21,6 +21,7 @@ export interface FillPayload {
   resume: Resume;
   files: Record<string, FileData>;
   presetId?: MappingPresetId;
+  recipes?: SiteRecipe[];
 }
 
 export interface RunFillOptions {
@@ -129,6 +130,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     files,
     {
       ...(payload.presetId ? { presetId: payload.presetId } : {}),
+      ...(payload.recipes ? { recipes: payload.recipes } : {}),
       ...(doc.title ? { pageTitle: doc.title } : {}),
       ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
     },
@@ -208,6 +210,7 @@ export function runPreview(doc: Document, payload: FillPayload, opts: Pick<RunFi
     payload.files,
     {
       ...(payload.presetId ? { presetId: payload.presetId } : {}),
+      ...(payload.recipes ? { recipes: payload.recipes } : {}),
       ...(doc.title ? { pageTitle: doc.title } : {}),
       ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
     },

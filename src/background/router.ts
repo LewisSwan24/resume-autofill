@@ -10,8 +10,10 @@ import { targetOfField, type ProfileTarget } from '../editor/fieldTarget';
 import { openProfileAt } from '../ui/pages';
 import { cancelPreviewRequest, commitPreviewRequest, runFillRequest, type PreviewApproval } from './fill';
 import { isSectionRow } from './merge';
-import { relayApply, relayFocus, type ApplyInput } from './relay';
+import { relayApply, relayCaptureFingerprint, relayFocus, type ApplyInput } from './relay';
 import { loadScanTotal, recordScan } from './tabState';
+import { clearWizardSession, loadWizardSession } from './wizardSession';
+import type { SiteRecipeFingerprint } from '../schema';
 
 export type BgSender = Omit<Sender, 'tab'> & { frameId?: number; tab?: { id?: number } };
 export type SendResponse = (response?: unknown) => void;
@@ -22,6 +24,7 @@ export interface RouterDeps {
   cancelPreview?(tabId: number): Promise<void>;
   focus(tabId: number, frameId: number, fieldId: string): Promise<void>;
   apply(input: ApplyInput): Promise<FieldReport | null>;
+  captureFingerprint?(tabId: number, frameId: number, fieldId: string): Promise<SiteRecipeFingerprint | null>;
   /** Record a frame's count; resolves to the tab total. */
   recordScan(tabId: number, frameId: number, count: number): Promise<number>;
   pushTotal(tabId: number, total: number): Promise<void>;
@@ -39,6 +42,7 @@ export const defaultRouterDeps: RouterDeps = {
   cancelPreview: (tabId) => cancelPreviewRequest(tabId),
   focus: (tabId, frameId, fieldId) => relayFocus(tabId, frameId, fieldId),
   apply: (input) => relayApply(input),
+  captureFingerprint: (tabId, frameId, fieldId) => relayCaptureFingerprint(tabId, frameId, fieldId),
   recordScan,
   pushTotal: async (tabId, total) => {
     await sendToFrame(tabId, 0, { type: 'scan:total', total });
@@ -135,6 +139,30 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
           () => sendResponse(undefined),
         );
         return true;
+      }
+
+      case 'field:captureFingerprint': {
+        if (!fromPage || !isIndex(message.tabId) || !isIndex(message.frameId) || typeof message.fieldId !== 'string') return false;
+        const capture = deps.captureFingerprint ?? relayCaptureFingerprint;
+        capture(message.tabId, message.frameId, message.fieldId).then(
+          (fp) => sendResponse(fp ?? null),
+          () => sendResponse(null),
+        );
+        return true;
+      }
+
+      case 'wizard:query': {
+        const tabId = fromPage ? message.tabId : contentTabId;
+        if (!isIndex(tabId)) return false;
+        loadWizardSession(tabId).then(sendResponse, () => sendResponse(null));
+        return true;
+      }
+
+      case 'wizard:clear': {
+        const tabId = fromPage ? message.tabId : contentTabId;
+        if (!isIndex(tabId)) return false;
+        void clearWizardSession(tabId).catch(() => undefined);
+        return false;
       }
 
       case 'ui:openSidePanel': {

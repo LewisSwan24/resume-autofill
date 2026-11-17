@@ -1031,6 +1031,7 @@ function AppContent({
           saveDocument={saveDocument}
           appInfo={appInfo}
           onImport={importFlow.start}
+          onApplySyncedProfile={(synced) => editor.edit(() => synced, { immediate: true })}
           onWipe={wipeAll}
           clearSiteData={fillBrowser ? () => fillBrowser.clearSiteData() : undefined}
           showToast={showToast}

@@ -7,9 +7,10 @@ import type { FileData } from '../drivers/types';
 import { waitFor } from '../drivers/wait';
 import { planFill, type FillStep } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
-import type { Control, FieldReport, FillReport } from '../engine/types';
+import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { isVisible } from '../engine/visibility';
 import type { Resume } from '../schema';
+import type { MappingPresetId } from '../templates/presets';
 import { ensureCards, type SectionGrowth } from './ensureCards';
 import { fillEntryEditors } from './entryEditors';
 import { runStep } from './runStep';
@@ -19,11 +20,14 @@ import { countOutcomes } from './report';
 export interface FillPayload {
   resume: Resume;
   files: Record<string, FileData>;
+  presetId?: MappingPresetId;
 }
 
 export interface RunFillOptions {
   /** Keeps control ids stable across scans / runs (the content script owns a WeakMap). */
   idFor?: (el: HTMLElement) => string;
+  /** Preview exclusions and value overrides chosen by the user. */
+  filter?: FillFilter;
 }
 
 export interface FillRun {
@@ -118,14 +122,34 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const scan: ScanResult = scanDocument(doc, idFor);
   // An editor that is open now is someone's own typing, not a card to fill. See fillEntryEditors.
   const free = scan.contexts.flatMap((ctx, i) => (ctx.control.fixedSection ? [] : [{ ctx, cls: scan.classifications[i]! }]));
-  const plan = planFill(free.map((f) => f.ctx), free.map((f) => f.cls), resume, files);
+  const plan = planFill(
+    free.map((f) => f.ctx),
+    free.map((f) => f.cls),
+    resume,
+    files,
+    {
+      ...(payload.presetId ? { presetId: payload.presetId } : {}),
+      ...(doc.title ? { pageTitle: doc.title } : {}),
+      ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
+    },
+  );
 
   const controls = new Map<string, Control>();
   for (const ctx of scan.contexts) controls.set(ctx.control.id, ctx.control);
 
+  const excluded = new Set(opts.filter?.excludedFieldIds ?? []);
+  const overrides = opts.filter?.overrides ?? {};
+  const plannedSteps = plan.steps
+    .filter((s) => !excluded.has(s.fieldId))
+    .map((s) =>
+      Object.hasOwn(overrides, s.fieldId)
+        ? { ...s, intent: { kind: 'text' as const, text: overrides[s.fieldId]! } }
+        : s,
+    );
+
   const results: FieldReport[] = [...plan.reports];
   // Files first: many forms read an uploaded resume and write over their fields with what they find.
-  const steps = [...plan.steps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
+  const steps = [...plannedSteps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
   const uploadBusy = adapter?.uploadBusy;
   let uploaded = false;
   let read = false;
@@ -167,6 +191,42 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     counts: countOutcomes(fields),
   };
   return { report, controls, growth };
+}
+
+/**
+ * Dry-run preview: scan and plan without clicking add buttons, mutating DOM controls, or applying highlights.
+ */
+export function runPreview(doc: Document, payload: FillPayload, opts: Pick<RunFillOptions, 'idFor'> = {}): FramePreview {
+  registerAllDrivers();
+  const idFor = opts.idFor ?? makeIdFor();
+  const scan = scanDocument(doc, idFor);
+  const free = scan.contexts.flatMap((ctx, i) => (ctx.control.fixedSection ? [] : [{ ctx, cls: scan.classifications[i]! }]));
+  const plan = planFill(
+    free.map((f) => f.ctx),
+    free.map((f) => f.cls),
+    payload.resume,
+    payload.files,
+    {
+      ...(payload.presetId ? { presetId: payload.presetId } : {}),
+      ...(doc.title ? { pageTitle: doc.title } : {}),
+      ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
+    },
+  );
+  return {
+    url: doc.location?.href ?? '',
+    items: plan.steps.map((s) => ({
+      fieldId: s.fieldId,
+      fieldKey: s.fieldKey,
+      label: s.label,
+      value: intentDisplay(s.intent),
+      kind: s.intent.kind,
+      confidence: s.confidence,
+      ...(s.source !== undefined ? { source: s.source } : {}),
+      section: s.section ?? null,
+    })),
+    cardDemand: plan.cardDemand.filter((d) => d.need > d.have).map(({ section, have, need }) => ({ section, have, need })),
+    unresolvedCount: plan.reports.filter((r) => r.outcome === 'needs_review' || r.outcome === 'unmatched').length,
+  };
 }
 
 /** Outline every field of a run by its outcome (content script helper). */

@@ -288,6 +288,11 @@ export const CURRENT_SCHEMA_VERSION = 1 as const;
 export const SettingsSchema = z.object({
   uiLanguage: z.enum(['auto', 'zh', 'en']).default('auto'),
   previewBeforeFill: z.boolean().default(false),
+  mappingPresetId: z.string().optional(),
+  aiLayerMode: z.enum(['bm25_only', 'auto_local', 'ollama']).optional(),
+  ollamaEnabled: z.boolean().optional(),
+  ollamaEndpoint: z.string().optional(),
+  ollamaModel: z.string().optional(),
 });
 
 export const ProfileSchema = z.object({

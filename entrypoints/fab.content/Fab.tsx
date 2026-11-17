@@ -25,6 +25,7 @@ export const DEFAULT_REPORT_TIMEOUT_MS = 60_000;
 type View =
   | { kind: 'idle' }
   | { kind: 'filling' }
+  | { kind: 'preview' }
   | { kind: 'done'; summary: FillSummary }
   | { kind: 'error'; message: string };
 
@@ -64,7 +65,7 @@ function canAnimate(): boolean {
   return typeof window.matchMedia === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-type CardView = Extract<View, { kind: 'done' | 'error' }>;
+type CardView = Extract<View, { kind: 'done' | 'error' | 'preview' }>;
 
 export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const t = useT();
@@ -133,6 +134,10 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
         setView({ kind: 'error', message: key ? t(key) : code || t('fab.error.generic') });
         return;
       }
+      if (res.preview) {
+        setView({ kind: 'preview' });
+        return;
+      }
       // Acknowledged: stay in "filling" until the report arrives; guard against it never coming.
       timerRef.current = setTimeout(() => {
         if (run === runRef.current && viewRef.current.kind === 'filling') {
@@ -154,7 +159,7 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   }, [clearTimer, setView]);
 
   const filling = view.kind === 'filling';
-  const cardView: CardView | null = view.kind === 'done' || view.kind === 'error' ? view : null;
+  const cardView: CardView | null = view.kind === 'done' || view.kind === 'error' || view.kind === 'preview' ? view : null;
   const shown = cardView ?? leaving;
   const detected = looksUnderRead(total, boxes)
     ? t('fab.detected.few', { n: total, boxes })
@@ -178,6 +183,7 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
           key={cardView ? 'open' : 'leaving'}
           summary={shown.kind === 'done' ? shown.summary : null}
           error={shown.kind === 'error' ? shown.message : null}
+          previewReady={shown.kind === 'preview'}
           leaving={!cardView}
           onSettled={() => setLeaving(null)}
           onClose={close}

@@ -6,6 +6,7 @@ import type { FillStep } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
 import type { Locale, Resume } from '../schema';
 import { getFieldKeyDef } from '../schema/fieldKeys';
+import type { MappingPresetId } from '../templates/presets';
 import { FILL_THRESHOLD, REVIEW_THRESHOLD } from './classify';
 import type { Classification, FieldContext, FieldKey, FieldReport, SectionKey } from './types';
 import { entryCount, resolveValue, toIntent } from './values';
@@ -63,7 +64,7 @@ export function planFill(
   classifications: Classification[],
   resume: Resume,
   files: Record<string, FileData> = {},
-  opts: { now?: Date } = {},
+  opts: { now?: Date; presetId?: MappingPresetId; pageTitle?: string; pageUrl?: string } = {},
 ): FillPlan {
   const hasInternshipSection = classifications.some((c) => c.section === 'internship');
   const steps: FillStep[] = [];
@@ -113,6 +114,8 @@ export function planFill(
       dialCode: resume.contact.phoneCountryCode.trim(),
       genderAnswer: resume.diversity.genderAnswer,
       askedAs: report.label,
+      ...(opts.presetId ? { presetId: opts.presetId } : {}),
+      presetCtx: { resume, ...(opts.pageTitle ? { pageTitle: opts.pageTitle } : {}), ...(opts.pageUrl ? { pageUrl: opts.pageUrl } : {}) },
     });
     if (!intent && def.type === 'period' && ctx.control.kind === 'date') {
       // A job still going, or a picker that holds one date: what to put is for the applicant to say.

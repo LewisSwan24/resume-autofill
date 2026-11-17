@@ -62,7 +62,8 @@ describe('isValidMessage', () => {
   it('knows the full documented set, including ui:* messages', () => {
     expect([...MESSAGE_TYPES].sort()).toEqual(
       [
-        'scan:result', 'scan:total', 'fill:request', 'scan:query', 'frame:needs', 'frame:fill', 'report:updated',
+        'scan:result', 'scan:total', 'fill:request', 'fill:commitPreview', 'fill:cancelPreview',
+        'scan:query', 'frame:needs', 'frame:preview', 'frame:fill', 'report:updated', 'preview:updated',
         'field:focus', 'frame:focus', 'field:apply', 'frame:apply', 'ui:openOptions', 'ui:openSidePanel',
       ].sort(),
     );

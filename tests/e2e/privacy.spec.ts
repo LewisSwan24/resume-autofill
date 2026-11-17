@@ -92,11 +92,30 @@ test('the scripts that run on pages have no way to send anything', () => {
   for (const file of manifest.content_scripts.flatMap((entry) => entry.js)) expect(scripts).toContain(path.basename(file));
 });
 
-test('the parsers are not in what runs on pages, and the manifest asks for nothing new', () => {
+test('the parsers and local AI fetchers are not in what runs on pages, and the manifest asks for nothing new', () => {
   const read = (file: string): string => readFileSync(path.join(EXT, file), 'utf8');
   for (const file of ['background.js', 'content-scripts/content.js', 'content-scripts/fab.js']) {
-    expect(read(file), file).not.toMatch(/GlobalWorkerOptions|convertToHtml/);
+    expect(read(file), file).not.toMatch(/GlobalWorkerOptions|convertToHtml|api\/generate|api\/tags|LanguageModel|ai\.languageModel/);
   }
-  const manifest = JSON.parse(read('manifest.json')) as { permissions: string[] };
+  const manifest = JSON.parse(read('manifest.json')) as { permissions: string[]; content_security_policy?: { extension_pages?: string } };
   expect(manifest.permissions.sort()).toEqual(['sidePanel', 'storage', 'unlimitedStorage', 'webNavigation']);
+  const csp = manifest.content_security_policy?.extension_pages ?? '';
+  expect(csp).toContain("connect-src 'self' http://127.0.0.1:* http://localhost:*");
+  expect(csp).not.toMatch(/https:/);
+});
+
+test('extension pages never contact localhost Ollama automatically while disabled', async ({ context, serviceWorker, extensionId }) => {
+  await waitForSeed(serviceWorker);
+  const loopbackSeen: string[] = [];
+  context.on('request', (req) => {
+    const url = req.url();
+    if (url.includes('127.0.0.1') || url.includes('localhost')) loopbackSeen.push(url);
+  });
+  for (const name of ['options.html', 'sidepanel.html']) {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/${name}`);
+    await page.waitForTimeout(300);
+    await page.close();
+  }
+  expect(loopbackSeen).toEqual([]);
 });

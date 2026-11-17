@@ -487,6 +487,10 @@ export function BrowserScreen({
             canUndo={run.phase === 'done' && !run.undo}
             fallbackNote={fallbackNote}
             unanswered={run.phase === 'done' ? run.unanswered : 0}
+            resume={(() => {
+              const id = fillResume.pick?.kind === 'profile' ? fillResume.pick.resumeId : null;
+              return id ? (profile?.resumes.find((r) => r.id === id) ?? null) : null;
+            })()}
             onLocate={(row) => void locate(row)}
             onUndo={() => void session.undo()}
             onClose={() => setSheet(null)}

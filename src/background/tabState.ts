@@ -1,10 +1,11 @@
 // Per-tab state in `storage.session` (trusted contexts only; survives service worker restarts):
 //   report:<tabId> → merged FillReport        scan:<tabId> → { [frameId]: fillable count }
 import { browser } from 'wxt/browser';
-import type { FieldReport, FillReport } from '../engine/types';
-import { isFillReport, patchReportField } from './merge';
+import type { FieldReport, FillPreview, FillReport } from '../engine/types';
+import { isFillPreview, isFillReport, patchReportField } from './merge';
 
 export const reportKey = (tabId: number): string => `report:${tabId}`;
+export const previewKey = (tabId: number): string => `preview:${tabId}`;
 export const scanKey = (tabId: number): string => `scan:${tabId}`;
 
 /** Serialises read-modify-write sequences (the worker is single-threaded, awaits interleave). */
@@ -26,6 +27,21 @@ export async function loadReport(tabId: number): Promise<FillReport | null> {
 
 export function saveReport(tabId: number, report: FillReport): Promise<void> {
   return exclusive(() => browser.storage.session.set({ [reportKey(tabId)]: report }));
+}
+
+export async function loadPreview(tabId: number): Promise<FillPreview | null> {
+  const key = previewKey(tabId);
+  const stored = await browser.storage.session.get(key);
+  const value: unknown = stored[key];
+  return isFillPreview(value) ? value : null;
+}
+
+export function savePreview(tabId: number, preview: FillPreview): Promise<void> {
+  return exclusive(() => browser.storage.session.set({ [previewKey(tabId)]: preview }));
+}
+
+export function clearPreview(tabId: number): Promise<void> {
+  return exclusive(() => browser.storage.session.remove(previewKey(tabId)));
 }
 
 /** Patch one row of the stored report. Resolves to the new report, or null when nothing is stored / the row is unknown. */
@@ -68,7 +84,7 @@ export async function loadScanTotal(tabId: number): Promise<number> {
 /** Forget scan counts and the report of a tab (navigation / tab closed). */
 export function clearTabState(tabId: number, opts: { keepReport?: boolean } = {}): Promise<void> {
   return exclusive(async () => {
-    const keys = opts.keepReport ? [scanKey(tabId)] : [scanKey(tabId), reportKey(tabId)];
+    const keys = opts.keepReport ? [scanKey(tabId), previewKey(tabId)] : [scanKey(tabId), reportKey(tabId), previewKey(tabId)];
     await browser.storage.session.remove(keys);
   });
 }

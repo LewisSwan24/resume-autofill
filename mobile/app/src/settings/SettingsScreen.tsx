@@ -22,6 +22,8 @@ import { FILL_LANGUAGE_LABELS, FillLanguageSheet } from './FillLanguageSheet';
 import { LanguageSwitch } from './LanguageSwitch';
 import { OpenLinksSheet } from './OpenLinksSheet';
 import { PrivacyScreen } from './PrivacyScreen';
+import { SyncSheet } from './SyncSheet';
+import { TemplateExportSheet } from './TemplateExportSheet';
 
 export interface SettingsScreenProps {
   profile: Profile | null;
@@ -40,6 +42,8 @@ export interface SettingsScreenProps {
   saveDocument?: SaveDocument;
   appInfo?: AppInfo;
   onImport: () => void;
+  /** Called when a chunked `.raf` or WebRTC sync produces a new profile. */
+  onApplySyncedProfile?: (profile: Profile) => void;
   /** App's wipeAll; false on failure. */
   onWipe: () => Promise<boolean>;
   /** Clear the fill browser's cookies, web storage and cache; absent without the plugin (browser preview). */
@@ -72,7 +76,7 @@ function reminderValueKey(r: AppState['reminders']): string {
   return 'm.remind.valueNone';
 }
 
-type OpenSheet = 'fill' | 'export' | 'siteData' | 'wipe' | 'about' | 'links' | 'reminders' | null;
+type OpenSheet = 'fill' | 'export' | 'sync' | 'templates' | 'siteData' | 'wipe' | 'about' | 'links' | 'reminders' | null;
 
 /** A setting that is on or off: a checkbox with role="switch", named by its label and described by its hint.
  *  Exported for the resume keyboard's setup page. */
@@ -215,6 +219,8 @@ export function SettingsScreen(props: SettingsScreenProps) {
       <ul className="m-card m-settings-group">
         <Row icon="download" label={t('m.settings.export')} onClick={() => setSheet('export')} />
         <Row icon="upload" label={t('m.settings.import')} onClick={props.onImport} />
+        <Row icon="arrow-repeat" label={t('m.sync.row')} value={t('m.sync.rowHint')} onClick={() => setSheet('sync')} />
+        <Row icon="file-earmark-pdf" label={t('m.tpl.row')} value={t('m.tpl.rowHint')} onClick={() => setSheet('templates')} />
         {props.clearSiteData ? (
           <Row icon="trash" label={t('m.settings.siteData')} value={t('m.settings.siteDataHint')} onClick={() => setSheet('siteData')} />
         ) : null}
@@ -243,6 +249,25 @@ export function SettingsScreen(props: SettingsScreenProps) {
         profile={profile}
         readStoredProfile={props.readStoredProfile}
         appState={appState}
+        saveDocument={props.saveDocument}
+        showToast={showToast}
+      />
+      <SyncSheet
+        open={sheet === 'sync'}
+        onClose={close}
+        profile={profile}
+        readStoredProfile={props.readStoredProfile}
+        onApplyProfile={props.onApplySyncedProfile}
+        files={props.files}
+        appState={appState}
+        updateAppState={updateAppState}
+        saveDocument={props.saveDocument}
+        showToast={showToast}
+      />
+      <TemplateExportSheet
+        open={sheet === 'templates'}
+        onClose={close}
+        profile={profile}
         saveDocument={props.saveDocument}
         showToast={showToast}
       />

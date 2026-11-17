@@ -105,10 +105,47 @@ export function findGutter(pieces: Piece[], pageWidth: number): number | null {
   return isColumn(pieces.filter((p) => p.x < gutter)) && isColumn(pieces.filter((p) => p.x >= gutter)) ? gutter : null;
 }
 
+const MIN_BAND_GAP = 16;
+
+/** Split a page into vertical bands when a wide gap separates a full-width banner from multi-column content below. */
+function bandsOf(pieces: Piece[]): Piece[][] {
+  const rows = rowsOf(pieces);
+  if (rows.length < MIN_COLUMN_LINES + 1) return [pieces];
+  const bands: Piece[][] = [];
+  let current: Piece[] = [...rows[0]!];
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1]!;
+    const next = rows[i]!;
+    const prevY = lowest(prev.map((p) => p.y));
+    const nextY = highest(next.map((p) => p.y));
+    const maxFont = Math.max(...prev.map((p) => p.fontSize), ...next.map((p) => p.fontSize), 10);
+    if (prevY - nextY > Math.max(MIN_BAND_GAP, maxFont * 1.6)) {
+      bands.push(current);
+      current = [...next];
+    } else {
+      current.push(...next);
+    }
+  }
+  bands.push(current);
+  return bands;
+}
+
+function readBand(band: Piece[], page: number, pageWidth: number): TextLine[] {
+  const gutter = findGutter(band, pageWidth);
+  const parts = gutter === null ? [band] : [band.filter((p) => p.x < gutter), band.filter((p) => p.x >= gutter)];
+  return parts.flatMap((part) => rowsOf(part).map((row) => lineOf(row, page)));
+}
+
 export function linesOfPage(pieces: Piece[], page: number, pageWidth: number): TextLine[] {
   const real = pieces.filter((p) => p.text.trim()).slice(0, MAX_PIECES_PER_PAGE);
   if (real.length === 0) return [];
-  const gutter = findGutter(real, pageWidth);
-  const parts = gutter === null ? [real] : [real.filter((p) => p.x < gutter), real.filter((p) => p.x >= gutter)];
-  return parts.flatMap((part) => rowsOf(part).map((row) => lineOf(row, page)));
+  const fullGutter = findGutter(real, pageWidth);
+  if (fullGutter !== null) return readBand(real, page, pageWidth);
+
+  const bands = bandsOf(real);
+  if (bands.length === 1) return readBand(real, page, pageWidth);
+  // If no individual band is multi-column, keep original single-band row order so spacing doesn't re-group lines.
+  const hasColumnBand = bands.some((b) => findGutter(b, pageWidth) !== null);
+  if (!hasColumnBand) return readBand(real, page, pageWidth);
+  return bands.flatMap((b) => readBand(b, page, pageWidth));
 }

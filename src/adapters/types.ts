@@ -91,4 +91,6 @@ export interface AtsAdapter {
   uploadBusy?: string;
   /** For a page that sends no new file under the name of one it already holds, whatever is in it. */
   heldFile?: HeldFile;
+  /** Returns a stable signature of the current wizard step (for SPA multi-step ATS forms). */
+  stepSignature?: (doc: Document) => string | null;
 }

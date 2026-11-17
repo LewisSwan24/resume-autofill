@@ -2,10 +2,11 @@
 import { registerAllDrivers } from '../drivers';
 import { executeStep, type FillStep } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
-import type { Control, FieldReport, FillReport } from '../engine/types';
+import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { applyHighlights, clearHighlights, focusField } from '../fill/highlight';
-import { highlightRun, runFill, type FillPayload, type FillRun } from '../fill/runFill';
+import { highlightRun, runFill, runPreview, type FillPayload, type FillRun } from '../fill/runFill';
 import type { Resume } from '../schema';
+import type { MappingPresetId } from '../templates/presets';
 import type { FrameNeeds } from '../engine/fieldDeps';
 import { buildApplyIntent } from './intent';
 import { computeFrameNeeds } from './needs';
@@ -32,7 +33,8 @@ export interface ApplyRequest {
 export interface FrameHandlers {
   /** What this frame could fill (scan only; touches neither the page nor any resume data). */
   needs(): FrameNeeds;
-  fill(payload: { resume: Resume; files: Record<string, FileData> }): Promise<FillReport>;
+  preview(payload: { resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId }): FramePreview;
+  fill(payload: { resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId }): Promise<FillReport>;
   focus(fieldId: string): boolean;
   apply(request: ApplyRequest): Promise<FieldReport>;
   /** True while a fill / apply is running. */
@@ -55,9 +57,9 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
     if (--busy === 0) deps.onIdle?.();
   };
 
-  async function doFill(payload: FillPayload): Promise<FillReport> {
+  async function doFill(payload: FillPayload, filter?: FillFilter): Promise<FillReport> {
     clearHighlights();
-    const result = await run(deps.doc, payload, { idFor: deps.idFor });
+    const result = await run(deps.doc, payload, { idFor: deps.idFor, ...(filter ? { filter } : {}) });
     controls = result.controls;
     reports = new Map(result.report.fields.map((f) => [f.fieldId, f]));
     highlightRun(result);
@@ -70,11 +72,14 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
 
     needs: () => (deps.computeNeeds ?? computeFrameNeeds)(deps.doc, deps.idFor),
 
+    preview: (payload) => runPreview(deps.doc, payload, { idFor: deps.idFor }),
+
     fill(payload) {
       // A second request while one is running joins it instead of driving the page twice.
       if (filling) return filling;
       enter();
-      const current = doFill(payload).finally(() => {
+      const { filter, ...rest } = payload;
+      const current = doFill(rest, filter).finally(() => {
         filling = null;
         leave();
       });

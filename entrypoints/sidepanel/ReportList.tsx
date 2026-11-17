@@ -2,9 +2,11 @@
 // (status tile, name, the value, a right-hand badge, chevron); the expanded area holds the status badge, the
 // confidence bar, a human-readable source, candidate buttons, the manual edit and "Locate".
 // Right-hand badge: confidence for filled rows, the outlined status badge (icon + word) for every other outcome.
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { computeLocalFieldSuggestion, generateReviewDraft, type AiDraftOutcome } from '../../src/ai';
 import type { FieldReport } from '../../src/engine/types';
 import { useT } from '../../src/i18n';
+import type { Resume, Settings } from '../../src/schema';
 import { Icon } from '../../src/ui/Icon';
 import { targetOfField } from '../../src/editor/fieldTarget';
 import { openProfileAt } from '../../src/ui/pages';
@@ -16,23 +18,48 @@ import type { ApplyInput, ApplyResult } from './useFieldActions';
 
 export interface ReportListProps {
   fields: readonly FieldReport[];
+  resume?: Resume | null;
+  settings?: Settings;
   onFocus: (field: FieldReport) => void;
   onApply: (field: FieldReport, input: ApplyInput) => Promise<ApplyResult>;
+  onSaveCustomAnswer?: (question: string, answer: string) => Promise<void>;
   /** Called after a field was applied successfully (the app shows a Toast). */
   onApplied?: () => void;
 }
 
-function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport } & Omit<ReportListProps, 'fields'>) {
+function FieldItem({
+  field,
+  resume,
+  settings,
+  onFocus,
+  onApply,
+  onSaveCustomAnswer,
+  onApplied,
+}: { field: FieldReport } & Omit<ReportListProps, 'fields'>) {
   const t = useT();
   const inputId = useId();
   const [draft, setDraft] = useState(field.value ?? field.observed ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiDraft, setAiDraft] = useState<AiDraftOutcome | null>(null);
+  const [aiEmpty, setAiEmpty] = useState(false);
+  const [saveCustom, setSaveCustom] = useState(false);
 
   // Follow the field when the page reports a new value (e.g. after a refresh), but never while the user types.
   useEffect(() => {
     setDraft(field.value ?? field.observed ?? '');
   }, [field.value, field.observed]);
+
+  const supportsAiDraft =
+    Boolean(resume) &&
+    Boolean(field.label.trim()) &&
+    (field.outcome === 'unmatched' || field.outcome === 'needs_review' || field.outcome === 'no_data');
+
+  const localSuggestion = useMemo(() => {
+    if (!supportsAiDraft || !resume) return null;
+    return computeLocalFieldSuggestion(field.label, resume).matches[0] ?? null;
+  }, [supportsAiDraft, resume, field.label]);
 
   const label = field.label || field.fieldKey || field.fieldId;
   const value = displayValue(field);
@@ -57,6 +84,9 @@ function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport 
     const result = await onApply(field, input);
     setBusy(false);
     if (result.ok) {
+      if (saveCustom && onSaveCustomAnswer && 'text' in input && input.text.trim() && field.label.trim()) {
+        await onSaveCustomAnswer(field.label.trim(), input.text.trim());
+      }
       onApplied?.();
       return;
     }
@@ -151,6 +181,80 @@ function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport 
             </div>
           ) : null}
 
+          {supportsAiDraft ? (
+            <div className="raf-ai-box">
+              {localSuggestion ? (
+                <div className="raf-ai-preview">
+                  <span className="raf-help">
+                    {t('panel.ai.suggestion', { source: localSuggestion.sourceLabel })}
+                  </span>
+                  <p className="raf-ai-text">{localSuggestion.text}</p>
+                  <button
+                    type="button"
+                    className="raf-btn raf-btn-small"
+                    onClick={() => setDraft(localSuggestion.text)}
+                  >
+                    {t('panel.ai.useDraft')}
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="raf-ai-actions">
+                <button
+                  type="button"
+                  className="raf-btn raf-btn-small"
+                  disabled={aiBusy}
+                  onClick={async () => {
+                    if (!resume) return;
+                    setAiBusy(true);
+                    setAiEmpty(false);
+                    try {
+                      const outcome = await generateReviewDraft({
+                        questionLabel: field.label,
+                        sectionHint: field.section,
+                        resume,
+                        settings,
+                      });
+                      setAiDraft(outcome);
+                      setAiEmpty(outcome === null);
+                    } finally {
+                      setAiBusy(false);
+                    }
+                  }}
+                >
+                  <Icon name="info-circle" size={14} />
+                  <span>{aiBusy ? t('panel.ai.generating') : t('panel.ai.generate')}</span>
+                </button>
+              </div>
+
+              {aiDraft ? (
+                <div className="raf-ai-preview">
+                  <span className="raf-help">
+                    {t('panel.ai.suggestion', {
+                      source: t(`panel.ai.source.${aiDraft.source}`),
+                    })}
+                  </span>
+                  {aiDraft.fallbackUsed ? <span className="raf-help">{t('panel.ai.fallbackNotice')}</span> : null}
+                  {aiDraft.injectionDetected ? (
+                    <span className="raf-help raf-help-error" role="alert">
+                      {t('panel.ai.injectionWarn')}
+                    </span>
+                  ) : null}
+                  <p className="raf-ai-text">{aiDraft.text}</p>
+                  <button
+                    type="button"
+                    className="raf-btn raf-btn-small"
+                    onClick={() => setDraft(aiDraft.text)}
+                  >
+                    {t('panel.ai.useDraft')}
+                  </button>
+                </div>
+              ) : aiEmpty ? (
+                <p className="raf-help">{t('panel.ai.noDraft')}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           <form
             className="raf-field"
             onSubmit={(event) => {
@@ -176,6 +280,12 @@ function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport 
                 {t('panel.save')}
               </button>
             </div>
+            {supportsAiDraft && onSaveCustomAnswer ? (
+              <label className="raf-save-custom">
+                <input type="checkbox" checked={saveCustom} onChange={(e) => setSaveCustom(e.target.checked)} />
+                <span className="raf-help">{t('panel.ai.saveCustom')}</span>
+              </label>
+            ) : null}
             <span className="raf-help">{t('panel.editHelp')}</span>
             {error ? (
               <span className="raf-help raf-help-error" role="alert">
@@ -190,11 +300,20 @@ function FieldItem({ field, onFocus, onApply, onApplied }: { field: FieldReport 
   );
 }
 
-export function ReportList({ fields, onFocus, onApply, onApplied }: ReportListProps) {
+export function ReportList({ fields, resume, settings, onFocus, onApply, onSaveCustomAnswer, onApplied }: ReportListProps) {
   return (
     <ul className="raf-list" role="list">
       {fields.map((field) => (
-        <FieldItem key={fieldKey(field)} field={field} onFocus={onFocus} onApply={onApply} onApplied={onApplied} />
+        <FieldItem
+          key={fieldKey(field)}
+          field={field}
+          resume={resume}
+          settings={settings}
+          onFocus={onFocus}
+          onApply={onApply}
+          onSaveCustomAnswer={onSaveCustomAnswer}
+          onApplied={onApplied}
+        />
       ))}
     </ul>
   );

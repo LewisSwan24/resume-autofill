@@ -19,10 +19,18 @@ export function createContentListener(handlers: FrameHandlers): ContentListener 
           .then(sendResponse, () => sendResponse(undefined));
         return true;
       }
-      case 'frame:fill': {
-        const { resume, files } = message;
+      case 'frame:preview': {
+        const { resume, files, presetId } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
-        handlers.fill({ resume, files }).then(sendResponse, () => sendResponse(undefined));
+        Promise.resolve()
+          .then(() => handlers.preview({ resume, files, ...(presetId ? { presetId } : {}) }))
+          .then(sendResponse, () => sendResponse(undefined));
+        return true;
+      }
+      case 'frame:fill': {
+        const { resume, files, filter, presetId } = message;
+        if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
+        handlers.fill({ resume, files, ...(filter ? { filter } : {}), ...(presetId ? { presetId } : {}) }).then(sendResponse, () => sendResponse(undefined));
         return true;
       }
       case 'frame:focus': {

@@ -73,13 +73,14 @@ export const NOTHING_TO_FILL = 'nothing_to_fill';
  * A frame that rejects (no content script), times out, is skipped by prepare or answers with something
  * that is not a report is skipped; the others still count. Result order follows rameIds.
  */
-export async function collectFrameReports<P = undefined>(
+export async function collectFrames<P, R>(
   frameIds: readonly number[],
   send: (frameId: number, prepared: P) => Promise<unknown>,
+  validate: (x: unknown) => x is R,
   opts: CollectOptions<P> = {},
-): Promise<FramePart[]> {
+): Promise<Array<{ frameId: number; result: R }>> {
   const timeoutMs = opts.timeoutMs ?? FRAME_TIMEOUT_MS;
-  const parts: FramePart[] = [];
+  const parts: Array<{ frameId: number; result: R }> = [];
   for (const frameId of frameIds) {
     try {
       let prepared = undefined as P;
@@ -96,11 +97,25 @@ export async function collectFrameReports<P = undefined>(
         prepared = answer;
       }
       const answer = await withTimeout(Promise.resolve().then(() => send(frameId, prepared)), timeoutMs);
-      if (!isFillReport(answer)) throw new Error('Malformed frame report');
-      parts.push({ frameId, report: answer });
+      if (!validate(answer)) throw new Error('Malformed frame response');
+      parts.push({ frameId, result: answer });
     } catch (error) {
       opts.onSkip?.(frameId, error);
     }
   }
   return parts;
+}
+
+export async function collectFrameReports<P = undefined>(
+  frameIds: readonly number[],
+  send: (frameId: number, prepared: P) => Promise<unknown>,
+  opts: CollectOptions<P> = {},
+): Promise<FramePart[]> {
+  const parts = await collectFrames<P, FramePart['report']>(
+    frameIds,
+    send,
+    isFillReport,
+    opts,
+  );
+  return parts.map(({ frameId, result }) => ({ frameId, report: result }));
 }

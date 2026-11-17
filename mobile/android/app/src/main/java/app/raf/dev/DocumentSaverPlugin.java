@@ -30,11 +30,17 @@ import java.util.concurrent.Executors;
 @CapacitorPlugin(name = "DocumentSaver")
 public class DocumentSaverPlugin extends Plugin {
     private static final String MIME_JSON = "application/json";
+    private static final String MIME_BIN = "application/octet-stream";
+    private static final String MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private static final int MAX_NAME_LENGTH = 128;
-    private static final int MAX_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_BYTES = 64 * 1024 * 1024;
     private static final String BAD_INPUT = "BAD_INPUT";
     private static final String NO_PICKER = "NO_PICKER";
     private static final String WRITE_FAILED = "WRITE_FAILED";
+
+    private static boolean allowedMime(String mime) {
+        return MIME_JSON.equals(mime) || MIME_BIN.equals(mime) || MIME_DOCX.equals(mime);
+    }
 
     private final ExecutorService writer = Executors.newSingleThreadExecutor();
 
@@ -50,7 +56,7 @@ public class DocumentSaverPlugin extends Plugin {
     public void save(PluginCall call) {
         String name = call.getString("name");
         String mimeType = call.getString("mimeType");
-        byte[] bytes = validName(name) && MIME_JSON.equals(mimeType) ? decode(call.getString("data")) : null;
+        byte[] bytes = validName(name) && allowedMime(mimeType) ? decode(call.getString("data")) : null;
         if (bytes == null) {
             call.reject("Bad file name, type or data", BAD_INPUT);
             return;

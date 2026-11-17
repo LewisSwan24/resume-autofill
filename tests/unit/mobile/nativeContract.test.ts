@@ -133,7 +133,7 @@ describe('ways-in and reminder plugins', () => {
     expect((await load('resumeKeyboard.ts')).RESUME_KEYBOARD_EVENTS).toEqual(['stateChange']);
   });
 
-  it('MainActivity registers all ten plugins before super.onCreate', () => {
+  it('MainActivity registers all plugins before super.onCreate', () => {
     const source = javaOf('MainActivity.java');
     const onCreate = source.slice(source.indexOf('public void onCreate('));
     const superAt = onCreate.indexOf('super.onCreate(');
@@ -142,9 +142,9 @@ describe('ways-in and reminder plugins', () => {
     expect(sorted(registered)).toEqual(sorted([
       'ProfileVaultPlugin', 'DocumentSaverPlugin', 'IncomingFilePlugin', 'FillBrowserPlugin',
       'IncomingIntentPlugin', 'ClipboardPeekPlugin', 'RemindersPlugin', 'AppShortcutsPlugin', 'BrowserRolePlugin',
-      'ResumeKeyboardPlugin',
+      'ResumeKeyboardPlugin', 'PrintBridgePlugin',
     ]));
-    expect([...source.matchAll(/registerPlugin\(/g)]).toHaveLength(10);
+    expect([...source.matchAll(/registerPlugin\(/g)]).toHaveLength(11);
   });
 
   it('window focus reaches ClipboardPeekPlugin through the bridge', () => {

@@ -18,6 +18,7 @@ describe('content listener', () => {
     fakeBrowser.reset();
     handlers = {
       needs: vi.fn().mockReturnValue({ fieldKeys: ['contact.email'], repeatSections: [], attachmentKeys: [] }),
+      preview: vi.fn().mockReturnValue({ url: '', items: [], cardDemand: [], unresolvedCount: 0 }),
       fill: vi.fn().mockResolvedValue({ fields: [] }),
       focus: vi.fn().mockReturnValue(true),
       apply: vi.fn().mockResolvedValue({ fieldId: 'c1' }),

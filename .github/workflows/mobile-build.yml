@@ -1,0 +1,70 @@
+name: Mobile Release Build & Security Checks
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  android-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install dependencies & build web assets
+        run: |
+          pnpm install --frozen-lockfile
+          cd mobile && npm ci && npm run build && npx cap sync android
+      - name: Run Android Dev/Prod unit & IME no-network bytecode tests
+        working-directory: mobile/android
+        run: ./gradlew testDevDebugUnitTest testProdReleaseUnitTest --no-daemon
+      - name: Build R8 minified Release APK & AAB
+        working-directory: mobile/android
+        env:
+          RAF_VERSION_CODE: ${{ github.run_number }}
+          RAF_VERSION_NAME: 0.1.${{ github.run_number }}
+        run: ./gradlew assembleProdRelease bundleProdRelease --no-daemon
+      - name: Upload unsigned/CI Release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-prod-release
+          path: |
+            mobile/android/app/build/outputs/apk/prod/release/*.apk
+            mobile/android/app/build/outputs/bundle/prodRelease/*.aab
+
+  ios-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies & sync Capacitor iOS
+        run: |
+          pnpm install --frozen-lockfile
+          cd mobile && npm ci && npm run build
+          if [ -f ios/App/App.xcodeproj/project.pbxproj ]; then
+            npx cap sync ios
+          else
+            npx cap add ios && npx cap sync ios
+          fi
+      - name: Verify iOS native plugin Swift syntax & build when Xcode project is present
+        working-directory: mobile/ios/App
+        run: |
+          swiftc -parse App/AppDelegate.swift App/Plugins/*.swift KeyboardExtension/*.swift ShareExtension/*.swift
+          if [ -f App.xcodeproj/project.pbxproj ]; then
+            pod install
+            xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build
+          fi

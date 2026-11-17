@@ -4,6 +4,7 @@ import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOp
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
 import type { GenderAnswer, Locale, Region, Resume } from '../schema';
 import { getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
+import { formatWithPreset, type InterpolationContext, type MappingPresetId } from '../templates/presets';
 import type { Control, FieldKey, OptionInfo, SectionKey } from './types';
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -310,6 +311,10 @@ export interface IntentOptions {
   home?: Region;
   /** How to answer a gender question that offers a way to decline. Without it: from the resume. */
   genderAnswer?: GenderAnswer;
+  /** Optional autofill text formatting / interpolation preset. */
+  presetId?: MappingPresetId;
+  /** Context used to expand {{company}}, {{role}}, etc. placeholders. */
+  presetCtx?: InterpolationContext;
 }
 
 const isTextLike = (c: Control) => c.kind === 'text' || c.kind === 'textarea' || c.kind === 'richtext';
@@ -472,7 +477,7 @@ export function toIntent(
     const [start = '', end = ''] = raw.split('/');
     if (kind === 'date') {
       const [from, to] = control.dateRange ? [dateIntent(start, control), dateIntent(end, control)] : [null, null];
-      if (from?.kind === 'date' && end === STILL_GOING && control.lib === 'feishu') {
+      if (from?.kind === 'date' && end === STILL_GOING && (control.lib === 'feishu' || control.lib === 'native')) {
         return { kind: 'dateFrom', display: `${from.display} ~ ${locale === 'zh-CN' ? '至今' : 'Present'}`, start: from };
       }
       if (from?.kind !== 'date' || to?.kind !== 'date') return null;
@@ -559,7 +564,7 @@ export function toIntent(
     default: {
       // text, longtext, number
       if (typeof raw === 'object') return null;
-      const text = String(raw);
+      const text = formatWithPreset(def.key, String(raw), locale, opts.presetId ?? 'default', opts.presetCtx);
       if (def.key === 'education.classYear') {
         const year = new RegExp(`(?<!\\d)${text}(?!\\d)`);
         if (!hasPickList(control)) return isTextLike(control) ? { kind: 'text', text: locale === 'zh-CN' ? `${text}届` : text } : null;

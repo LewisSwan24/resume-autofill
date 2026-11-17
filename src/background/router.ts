@@ -8,7 +8,7 @@ import { isFromExtension, isFromExtensionPage, isValidMessage, sendToFrame, type
 import type { FieldReport } from '../engine/types';
 import { targetOfField, type ProfileTarget } from '../editor/fieldTarget';
 import { openProfileAt } from '../ui/pages';
-import { runFillRequest } from './fill';
+import { cancelPreviewRequest, commitPreviewRequest, runFillRequest, type PreviewApproval } from './fill';
 import { isSectionRow } from './merge';
 import { relayApply, relayFocus, type ApplyInput } from './relay';
 import { loadScanTotal, recordScan } from './tabState';
@@ -18,6 +18,8 @@ export type SendResponse = (response?: unknown) => void;
 
 export interface RouterDeps {
   fill(tabId: number): Promise<FillRequestResponse>;
+  commitPreview?(tabId: number, approval: PreviewApproval): Promise<FillRequestResponse>;
+  cancelPreview?(tabId: number): Promise<void>;
   focus(tabId: number, frameId: number, fieldId: string): Promise<void>;
   apply(input: ApplyInput): Promise<FieldReport | null>;
   /** Record a frame's count; resolves to the tab total. */
@@ -33,6 +35,8 @@ export interface RouterDeps {
 
 export const defaultRouterDeps: RouterDeps = {
   fill: (tabId) => runFillRequest(tabId),
+  commitPreview: (tabId, approval) => commitPreviewRequest(tabId, approval),
+  cancelPreview: (tabId) => cancelPreviewRequest(tabId),
   focus: (tabId, frameId, fieldId) => relayFocus(tabId, frameId, fieldId),
   apply: (input) => relayApply(input),
   recordScan,
@@ -87,6 +91,23 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
         if (contentTabId === undefined) return false;
         deps.fill(contentTabId).then(sendResponse, (e) => sendResponse({ ok: false, error: errorMessage(e) }));
         return true;
+      }
+
+      case 'fill:commitPreview': {
+        if (!fromPage || !isIndex(message.tabId)) return false;
+        const commit = deps.commitPreview ?? commitPreviewRequest;
+        const approval: PreviewApproval = {
+          ...(message.excludedByFrame ? { excludedByFrame: message.excludedByFrame } : {}),
+          ...(message.overridesByFrame ? { overridesByFrame: message.overridesByFrame } : {}),
+        };
+        commit(message.tabId, approval).then(sendResponse, (e) => sendResponse({ ok: false, error: errorMessage(e) }));
+        return true;
+      }
+
+      case 'fill:cancelPreview': {
+        if (!fromPage || !isIndex(message.tabId)) return false;
+        void (deps.cancelPreview ?? cancelPreviewRequest)(message.tabId).catch(() => undefined);
+        return false;
       }
 
       case 'field:focus': {

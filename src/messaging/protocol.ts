@@ -2,9 +2,10 @@
 // Every message is `{ type: string, ... }`; see docs/plans/2026-11-04-m1-implementation-plan.md §0.5.
 import { browser } from 'wxt/browser';
 import type { FrameNeeds } from '../engine/fieldDeps';
-import type { FieldReport, FillReport } from '../engine/types';
+import type { FieldReport, FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
 import type { FileData } from '../drivers/types';
 import type { Resume } from '../schema';
+import type { MappingPresetId } from '../templates/presets';
 
 // ------------------------------------------------------------------ messages
 
@@ -16,13 +17,21 @@ export type BgToFrame =
   | { type: 'scan:total'; total: number }
   /** Ask what the frame could fill (no resume data attached); answered with FrameNeeds. */
   | { type: 'frame:needs' }
-  | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData> }
+  | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId }
+  | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId }
   | { type: 'frame:focus'; fieldId: string }
   | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string };
 
 /** FAB / side panel / options → background */
 export type UiToBg =
   | { type: 'fill:request' }
+  | {
+      type: 'fill:commitPreview';
+      tabId: number;
+      excludedByFrame?: Record<number, string[]>;
+      overridesByFrame?: Record<number, Record<string, string>>;
+    }
+  | { type: 'fill:cancelPreview'; tabId: number }
   /** FAB → background: re-send the current scan:total (the first push can arrive before the FAB listens). */
   | { type: 'scan:query' }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
@@ -32,7 +41,9 @@ export type UiToBg =
   | { type: 'ui:openSidePanel' };
 
 /** background → top frame and extension pages (runtime broadcast; no response expected) */
-export type BgBroadcast = { type: 'report:updated'; tabId: number; report: FillReport };
+export type BgBroadcast =
+  | { type: 'report:updated'; tabId: number; report: FillReport }
+  | { type: 'preview:updated'; tabId: number; preview: FillPreview | null };
 
 export type Message = ContentToBg | BgToFrame | UiToBg | BgBroadcast;
 export type MessageType = Message['type'];
@@ -43,13 +54,16 @@ export type BgInbound = ContentToBg | UiToBg;
 
 export interface FillRequestResponse {
   ok: boolean;
+  preview?: boolean;
   error?: string;
 }
 
 /** Response payload per message type; messages not listed are fire-and-forget (`void`). */
 export interface ResponseMap {
   'fill:request': FillRequestResponse;
+  'fill:commitPreview': FillRequestResponse;
   'frame:needs': FrameNeeds;
+  'frame:preview': FramePreview;
   'frame:fill': FillReport;
   'field:apply': FieldReport;
   'frame:apply': FieldReport;
@@ -67,10 +81,14 @@ const TYPE_TABLE = {
   'scan:result': true,
   'scan:total': true,
   'fill:request': true,
+  'fill:commitPreview': true,
+  'fill:cancelPreview': true,
   'scan:query': true,
   'frame:needs': true,
+  'frame:preview': true,
   'frame:fill': true,
   'report:updated': true,
+  'preview:updated': true,
   'field:focus': true,
   'frame:focus': true,
   'field:apply': true,

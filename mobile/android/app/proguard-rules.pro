@@ -1,21 +1,26 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# R8 / ProGuard rules for Resume Autofill (Capacitor plugins, WebView JS bridges, and offline IME service)
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Capacitor runtime annotations & plugin lifecycle methods
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keepclassmembers class * extends com.getcapacitor.Plugin {
+    @com.getcapacitor.PluginMethod <methods>;
+    @com.getcapacitor.annotation.PluginMethod <methods>;
+    @com.getcapacitor.annotation.ActivityCallback <methods>;
+    @com.getcapacitor.annotation.PermissionCallback <methods>;
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# App entrypoints, background receivers, providers, and isolated IME service
+-keep class app.raf.dev.MainActivity { *; }
+-keep class app.raf.dev.ShortcutActivity { *; }
+-keep class app.raf.dev.ReminderReceiver { *; }
+-keep class app.raf.dev.BootReceiver { *; }
+-keep class app.raf.dev.ChooserStreamProvider { *; }
+-keep class app.raf.dev.keyboard.** { *; }
+-keep class app.raf.dev.VaultCrypto { *; }
+
+# Keep @JavascriptInterface callbacks (if any) and WebView message listeners
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

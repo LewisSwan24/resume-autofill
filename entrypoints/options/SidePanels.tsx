@@ -5,7 +5,9 @@ import { exportProfile, parseProfileJson } from '../../src/editor';
 import { useT, type LanguageSetting } from '../../src/i18n';
 import type { Profile, Settings } from '../../src/schema';
 import { MAPPING_PRESETS, isValidPresetId } from '../../src/templates';
-import { ApplicationRecordSchema, loadApplications, mergeTrackerRecords, saveApplications, type ApplicationRecord } from '../../src/tracker';
+import { extractTrackerFromParsed } from '../../src/sync';
+import { loadApplications, mergeTrackerRecords, saveApplications, type ApplicationRecord } from '../../src/tracker';
+import { SyncPanel } from './SyncPanel';
 import { Button, Field, Notice, Segmented, SelectInput, Switch } from './ui/controls';
 import { Dialog } from './ui/Dialog';
 import { useToast } from './ui/Toast';
@@ -120,7 +122,14 @@ export function DataPanel({ profile, onImport }: DataProps) {
     if (includeTracker) {
       const records = await loadApplications().catch(() => []);
       if (records.length > 0) {
-        payloadText = JSON.stringify({ ...profile, mobileTracker: records }, null, 2);
+        payloadText = JSON.stringify(
+          {
+            ...profile,
+            mobileTracker: { format: 'resume-autofill-mobile-tracker', version: 1, applications: records },
+          },
+          null,
+          2,
+        );
       }
     }
     const url = URL.createObjectURL(new Blob([payloadText], { type: 'application/json' }));
@@ -148,16 +157,7 @@ export function DataPanel({ profile, onImport }: DataProps) {
     }
     const tracker: ApplicationRecord[] = [];
     try {
-      const parsedJson = JSON.parse(text) as { mobileTracker?: unknown; applications?: unknown };
-      const rawList = Array.isArray(parsedJson.mobileTracker)
-        ? parsedJson.mobileTracker
-        : Array.isArray(parsedJson.applications)
-          ? parsedJson.applications
-          : [];
-      for (const item of rawList) {
-        const valid = ApplicationRecordSchema.safeParse(item);
-        if (valid.success) tracker.push(valid.data);
-      }
+      tracker.push(...extractTrackerFromParsed(JSON.parse(text)));
     } catch {
       /* ignore optional tracker parse errors */
     }
@@ -206,6 +206,7 @@ export function DataPanel({ profile, onImport }: DataProps) {
       />
       <Notice>{t('options.data.note')}</Notice>
       {error ? <Notice tone="danger">{error}</Notice> : null}
+      <SyncPanel profile={profile} onApplyProfile={onImport} />
       {pending ? (
         <Dialog
           title={t('options.data.importTitle')}

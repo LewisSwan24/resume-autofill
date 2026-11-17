@@ -27,6 +27,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppShortcutsPlugin.class);
         registerPlugin(BrowserRolePlugin.class);
         registerPlugin(ResumeKeyboardPlugin.class);
+        registerPlugin(PrintBridgePlugin.class);
         // The app survives the shared WebView renderer dying (see FillBrowserPlugin.crashListener).
         bridgeBuilder.addWebViewListener(FillBrowserPlugin.crashListener(this));
         incomingHandled = savedInstanceState != null && savedInstanceState.getBoolean(KEY_INCOMING_HANDLED);

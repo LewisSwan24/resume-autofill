@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FieldReport } from '../../src/engine/types';
 import { resolveLanguage, setLanguage, useT } from '../../src/i18n';
-import { setUiLanguage } from '../../src/storage';
+import { loadProfile, saveProfile, setUiLanguage } from '../../src/storage';
 import { Icon } from '../../src/ui/Icon';
 import { LanguageToggle } from '../../src/ui/LanguageToggle';
 import { HELP_PAGE, openExtensionPage, openProfilePage } from '../../src/ui/pages';
@@ -96,6 +96,31 @@ export default function App() {
     if (tabId === null) return;
     void sendToBackground({ type: 'fill:cancelPreview', tabId }).catch(() => undefined);
   }, [tabId]);
+
+  const activeResume = useMemo(
+    () => profile?.resumes.find((r) => r.id === profile.activeResumeId) ?? null,
+    [profile],
+  );
+
+  const saveCustomAnswer = useCallback(async (question: string, answer: string) => {
+    const q = question.trim();
+    const a = answer.trim();
+    if (!q || !a) return;
+    const current = await loadProfile();
+    const targetId = current.activeResumeId;
+    if (!targetId) return;
+    const now = Date.now();
+    const nextResumes = current.resumes.map((r) => {
+      if (r.id !== targetId) return r;
+      const idx = r.customAnswers.findIndex((item) => item.question.trim().toLowerCase() === q.toLowerCase());
+      const customAnswers =
+        idx >= 0
+          ? r.customAnswers.map((item, i) => (i === idx ? { question: q, answer: a } : item))
+          : [...r.customAnswers, { question: q, answer: a }];
+      return { ...r, customAnswers, updatedAt: now };
+    });
+    await saveProfile({ ...current, resumes: nextResumes });
+  }, []);
 
   const saveReportToTracker = useCallback(async () => {
     if (!report || !isHttpUrl(report.url)) return;
@@ -203,7 +228,15 @@ export default function App() {
             {rows.length === 0 ? (
               <EmptyState compact icon="search" text={t('panel.filter.none')} />
             ) : (
-              <ReportList fields={rows} onFocus={focus} onApply={apply} onApplied={onApplied} />
+              <ReportList
+                fields={rows}
+                resume={activeResume}
+                settings={profile?.settings}
+                onFocus={focus}
+                onApply={apply}
+                onSaveCustomAnswer={saveCustomAnswer}
+                onApplied={onApplied}
+              />
             )}
           </>
         )}

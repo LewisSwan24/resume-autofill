@@ -3,6 +3,8 @@
 // and the footer: the app never submits, undo this fill (once), done. After undo it shows what came back and what the
 // person must change back by hand.
 import { useId, useState } from 'react';
+import { retrieveBm25Matches } from '../../../../src/ai/bm25';
+import type { Resume } from '../../../../src/schema';
 import type { SectionKey } from '../../../../src/schema/fieldKeys';
 import { OUTCOME_STATUS } from '../../../../src/ui/status';
 import { Icon, type IconName } from '../Icon';
@@ -37,12 +39,13 @@ export interface ReportSheetProps {
   fallbackNote: string | null;
   /** Frames that got the fill but sent no report: the page may have changed without rows to show. */
   unanswered?: number;
+  resume?: Resume | null;
   onLocate: (row: ReportRow) => void;
   onUndo: () => void;
   onClose: () => void;
 }
 
-export function ReportSheet({ open, model, canUndo, fallbackNote, unanswered = 0, onLocate, onUndo, onClose }: ReportSheetProps) {
+export function ReportSheet({ open, model, canUndo, fallbackNote, unanswered = 0, resume = null, onLocate, onUndo, onClose }: ReportSheetProps) {
   const t = useMT();
   return (
     <DockedSheet open={open && model !== null} title={t('m.br.report.title')} onClose={onClose} className="m-br-sheet--report">
@@ -52,6 +55,7 @@ export function ReportSheet({ open, model, canUndo, fallbackNote, unanswered = 0
           canUndo={canUndo}
           fallbackNote={fallbackNote}
           unanswered={unanswered}
+          resume={resume}
           onLocate={onLocate}
           onUndo={onUndo}
           onClose={onClose}
@@ -61,7 +65,7 @@ export function ReportSheet({ open, model, canUndo, fallbackNote, unanswered = 0
   );
 }
 
-function ReportBody({ model, canUndo, fallbackNote, unanswered = 0, onLocate, onUndo, onClose }: Omit<ReportSheetProps, 'open' | 'model'> & { model: ReportModel }) {
+function ReportBody({ model, canUndo, fallbackNote, unanswered = 0, resume = null, onLocate, onUndo, onClose }: Omit<ReportSheetProps, 'open' | 'model'> & { model: ReportModel }) {
   const t = useMT();
   const id = useId();
   const [group, setGroup] = useState<GroupId>(model.initialGroup);
@@ -98,7 +102,7 @@ function ReportBody({ model, canUndo, fallbackNote, unanswered = 0, onLocate, on
             ))}
           </div>
           <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${group}`}>
-            {rows.length === 0 ? <p className="m-empty">{t(`m.br.report.empty.${group}`)}</p> : <Rows rows={rows} onLocate={onLocate} />}
+            {rows.length === 0 ? <p className="m-empty">{t(`m.br.report.empty.${group}`)}</p> : <Rows rows={rows} resume={resume} onLocate={onLocate} />}
           </div>
         </>
       )}
@@ -185,23 +189,27 @@ function UndoneView({ model, onLocate }: { model: ReportModel; onLocate: (row: R
   );
 }
 
-function Rows({ rows, onLocate }: { rows: readonly ReportRow[]; onLocate: (row: ReportRow) => void }) {
+function Rows({ rows, resume = null, onLocate }: { rows: readonly ReportRow[]; resume?: Resume | null; onLocate: (row: ReportRow) => void }) {
   return (
     <ul className="m-br-rows">
       {rows.map((row) => (
         <li key={row.key}>
-          <Row row={row} onLocate={onLocate} />
+          <Row row={row} resume={resume} onLocate={onLocate} />
         </li>
       ))}
     </ul>
   );
 }
 
-function Row({ row, onLocate }: { row: ReportRow; onLocate: (row: ReportRow) => void }) {
+function Row({ row, resume = null, onLocate }: { row: ReportRow; resume?: Resume | null; onLocate: (row: ReportRow) => void }) {
   const t = useMT();
   const status = OUTCOME_STATUS[row.outcome];
   const label = row.label ?? t('fab.item.unnamed');
   const section = sectionLabelKey(row.sectionKey);
+  const bm25Hint =
+    resume && row.label && (row.outcome === 'unmatched' || row.outcome === 'needs_review' || row.outcome === 'no_data')
+      ? (retrieveBm25Matches(row.label, resume, 1)[0]?.text ?? null)
+      : null;
   const content = (
     <>
       <span className="m-br-row__icon">
@@ -214,6 +222,7 @@ function Row({ row, onLocate }: { row: ReportRow; onLocate: (row: ReportRow) => 
         </span>
         <span className="m-row__name">{label}</span>
         {row.value !== null ? <span className="m-br-row__value">{t('m.br.report.value', { value: row.value })}</span> : null}
+        {bm25Hint ? <span className="m-row__caption">{t('m.ai.hint', { text: bm25Hint })}</span> : null}
       </span>
       {row.focusable ? <Icon name="chevron-right" /> : null}
     </>

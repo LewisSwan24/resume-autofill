@@ -4,11 +4,18 @@ import { forgetAllPlaces } from '../fab.content/placement';
 import { exportProfile, parseProfileJson } from '../../src/editor';
 import { useT, type LanguageSetting } from '../../src/i18n';
 import type { Profile, Settings } from '../../src/schema';
+import {
+  DEFAULT_OLLAMA_ENDPOINT,
+  DEFAULT_OLLAMA_MODEL,
+  checkChromeAiAvailability,
+  isValidLoopbackOllamaUrl,
+  listOllamaModels,
+} from '../../src/ai';
 import { MAPPING_PRESETS, isValidPresetId } from '../../src/templates';
 import { extractTrackerFromParsed } from '../../src/sync';
 import { loadApplications, mergeTrackerRecords, saveApplications, type ApplicationRecord } from '../../src/tracker';
 import { SyncPanel } from './SyncPanel';
-import { Button, Field, Notice, Segmented, SelectInput, Switch } from './ui/controls';
+import { Button, Field, Input, Notice, Segmented, SelectInput, Switch } from './ui/controls';
 import { Dialog } from './ui/Dialog';
 import { useToast } from './ui/Toast';
 
@@ -21,6 +28,36 @@ interface SettingsProps {
 
 export function SettingsPanel({ settings, onChange }: SettingsProps) {
   const t = useT();
+  const [endpointDraft, setEndpointDraft] = useState(settings.ollamaEndpoint ?? DEFAULT_OLLAMA_ENDPOINT);
+  const [endpointError, setEndpointError] = useState<string | null>(null);
+  const [detectStatus, setDetectStatus] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+
+  const aiMode = settings.aiLayerMode ?? (settings.ollamaEnabled ? 'ollama' : 'auto_local');
+
+  const checkCapabilities = async () => {
+    setDetecting(true);
+    try {
+      const chromeState = await checkChromeAiAvailability();
+      const lines = [t('options.settings.chromeAiState', { state: chromeState })];
+      if (aiMode === 'ollama') {
+        const res = await listOllamaModels(endpointDraft);
+        if (res.ok) {
+          lines.push(
+            res.models.length > 0
+              ? t('options.settings.ollamaModelsOk', { models: res.models.slice(0, 6).join(', ') })
+              : t('options.settings.ollamaEmpty'),
+          );
+        } else {
+          lines.push(t('options.settings.ollamaUnreachable', { error: res.error ?? 'unreachable' }));
+        }
+      }
+      setDetectStatus(lines.join(' · '));
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   return (
     <div className="raf-form-stack raf-form-stack--cols">
       <Segmented<LanguageSetting>
@@ -58,6 +95,66 @@ export function SettingsPanel({ settings, onChange }: SettingsProps) {
           </SelectInput>
         )}
       </Field>
+      <Field label={t('options.settings.aiMode')} help={t('options.settings.aiHint')}>
+        {(ctrl) => (
+          <SelectInput
+            {...ctrl}
+            value={aiMode}
+            onChange={(e) => {
+              const next = e.target.value as 'bm25_only' | 'auto_local' | 'ollama';
+              onChange({
+                ...settings,
+                aiLayerMode: next,
+                ollamaEnabled: next === 'ollama',
+              });
+            }}
+          >
+            <option value="bm25_only">{t('options.settings.aiBm25Only')}</option>
+            <option value="auto_local">{t('options.settings.aiAutoLocal')}</option>
+            <option value="ollama">{t('options.settings.aiOllama')}</option>
+          </SelectInput>
+        )}
+      </Field>
+      {aiMode === 'ollama' ? (
+        <>
+          <Field label={t('options.settings.ollamaEndpoint')} error={endpointError}>
+            {(ctrl) => (
+              <Input
+                {...ctrl}
+                value={endpointDraft}
+                placeholder={DEFAULT_OLLAMA_ENDPOINT}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEndpointDraft(val);
+                  const trimmed = val.trim();
+                  if (!trimmed || isValidLoopbackOllamaUrl(trimmed)) {
+                    setEndpointError(null);
+                    onChange({ ...settings, ollamaEndpoint: trimmed || DEFAULT_OLLAMA_ENDPOINT });
+                  } else {
+                    setEndpointError(t('options.settings.ollamaEndpointInvalid'));
+                  }
+                }}
+              />
+            )}
+          </Field>
+          <Field label={t('options.settings.ollamaModel')}>
+            {(ctrl) => (
+              <Input
+                {...ctrl}
+                value={settings.ollamaModel ?? DEFAULT_OLLAMA_MODEL}
+                placeholder={DEFAULT_OLLAMA_MODEL}
+                onChange={(e) => onChange({ ...settings, ollamaModel: e.target.value.trim() || DEFAULT_OLLAMA_MODEL })}
+              />
+            )}
+          </Field>
+        </>
+      ) : null}
+      <div className="raf-row">
+        <Button icon="search" disabled={detecting} onClick={() => void checkCapabilities()}>
+          {t('options.settings.ollamaDetect')}
+        </Button>
+      </div>
+      {detectStatus ? <Notice>{detectStatus}</Notice> : null}
       <FabPlace />
     </div>
   );

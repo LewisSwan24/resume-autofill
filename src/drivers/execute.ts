@@ -1,5 +1,6 @@
 // Execute one planned fill step: pick the driver, try (at most) twice, read back, build the report.
 import type { Control, FieldKey, FieldReport, SectionKey } from '../engine/types';
+import { querySelectorDeep } from '../engine/shadow';
 import { slotOf, type Slot } from './slot';
 import { closeDropdown } from './dropdown';
 import { valuesEquivalent } from './equivalence';
@@ -115,7 +116,10 @@ async function attempt(
 function followRebuilt(control: Control, doc: Document, slot: Slot | null): void {
   const old = control.el;
   if (old.isConnected) return;
-  const next = old.id ? doc.getElementById(old.id) : null;
+  const escapedId = old.id ? (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(old.id) : old.id.replace(/["\\]/g, '\\$&')) : '';
+  const next = old.id
+    ? (doc.getElementById(old.id) ?? (escapedId ? (querySelectorDeep(doc, `#${escapedId}`) as HTMLElement | null) : null))
+    : null;
   if (next && next.tagName === old.tagName && next.getAttribute('type') === old.getAttribute('type')) {
     control.el = next;
     return;

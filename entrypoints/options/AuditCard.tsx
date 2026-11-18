@@ -7,11 +7,11 @@ import type { Resume } from '../../src/schema';
 import { Badge, Button, Notice } from './ui/controls';
 
 const DIM_KEY: Record<AuditDimensionId, MessageKey> = {
-  contactCompleteness: 'audit.dim.contactCompleteness',
-  quantificationDensity: 'audit.dim.quantificationDensity',
-  actionVerbDiversity: 'audit.dim.actionVerbDiversity',
-  timelineConsistency: 'audit.dim.timelineConsistency',
-  skillsAndQaReadiness: 'audit.dim.skillsAndQaReadiness',
+  contactCompleteness: 'options.audit.dim.contactCompleteness',
+  quantificationDensity: 'options.audit.dim.quantificationDensity',
+  actionVerbDiversity: 'options.audit.dim.actionVerbDiversity',
+  timelineConsistency: 'options.audit.dim.timelineConsistency',
+  skillsAndQaReadiness: 'options.audit.dim.skillsAndQaReadiness',
 };
 
 interface AuditCardProps {

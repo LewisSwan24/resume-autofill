@@ -47,7 +47,7 @@ describe('audit/auditResume', () => {
     const quant = report.dimensions.find((d) => d.id === 'quantificationDensity')!;
 
     expect(quant.score).toBe(0);
-    expect(timeline.findings.some((f) => f.messageKey === 'audit.finding.reversedDates')).toBe(true);
+    expect(timeline.findings.some((f) => f.messageKey === 'options.audit.finding.reversedDates')).toBe(true);
     expect(timeline.findings.some((f) => f.target?.module === 'work' && f.target.field === 'startDate')).toBe(true);
   });
 

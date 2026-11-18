@@ -82,19 +82,19 @@ function auditContactCompleteness(resume: Resume): AuditDimensionReport {
 
   const hasName = Boolean(resume.basics.familyName.trim() || resume.basics.givenName.trim() || resume.basics.preferredName.trim());
   if (hasName) pts += 25;
-  else findings.push({ id: 'contact-name', dimensionId: 'contactCompleteness', severity: 'high', messageKey: 'audit.finding.missingName', target: targetOfField('basics.familyName') });
+  else findings.push({ id: 'contact-name', dimensionId: 'contactCompleteness', severity: 'high', messageKey: 'options.audit.finding.missingName', target: targetOfField('basics.familyName') });
 
   if (EMAIL_RE.test(resume.contact.email.trim())) pts += 25;
-  else findings.push({ id: 'contact-email', dimensionId: 'contactCompleteness', severity: 'high', messageKey: 'audit.finding.missingEmail', target: targetOfField('contact.email') });
+  else findings.push({ id: 'contact-email', dimensionId: 'contactCompleteness', severity: 'high', messageKey: 'options.audit.finding.missingEmail', target: targetOfField('contact.email') });
 
   if (resume.contact.phone.trim().length >= 6) pts += 20;
-  else findings.push({ id: 'contact-phone', dimensionId: 'contactCompleteness', severity: 'high', messageKey: 'audit.finding.missingPhone', target: targetOfField('contact.phone') });
+  else findings.push({ id: 'contact-phone', dimensionId: 'contactCompleteness', severity: 'high', messageKey: 'options.audit.finding.missingPhone', target: targetOfField('contact.phone') });
 
   if (resume.jobIntention.positions.length > 0 && resume.jobIntention.cities.length > 0) pts += 15;
-  else findings.push({ id: 'contact-intention', dimensionId: 'contactCompleteness', severity: 'medium', messageKey: 'audit.finding.missingIntention', target: targetOfField('jobIntention.positions') });
+  else findings.push({ id: 'contact-intention', dimensionId: 'contactCompleteness', severity: 'medium', messageKey: 'options.audit.finding.missingIntention', target: targetOfField('jobIntention.positions') });
 
   if (resume.education.length > 0 && resume.education.some((e) => e.school.trim().length > 0)) pts += 15;
-  else findings.push({ id: 'contact-edu', dimensionId: 'contactCompleteness', severity: 'medium', messageKey: 'audit.finding.missingEducation', target: targetOfField('education.school', 'education[0].school') });
+  else findings.push({ id: 'contact-edu', dimensionId: 'contactCompleteness', severity: 'medium', messageKey: 'options.audit.finding.missingEducation', target: targetOfField('education.school', 'education[0].school') });
 
   const score = Math.min(100, pts);
   return { id: 'contactCompleteness', score, weight: 0.25, status: statusOf(score), findings };
@@ -112,7 +112,7 @@ function auditQuantificationDensity(resume: Resume): AuditDimensionReport {
       id: 'quant-no-exp',
       dimensionId: 'quantificationDensity',
       severity: 'high',
-      messageKey: 'audit.finding.noExperienceEntries',
+      messageKey: 'options.audit.finding.noExperienceEntries',
       target: targetOfField('work.description', 'work[0].description'),
     });
     return { id: 'quantificationDensity', score: 0, weight: 0.25, status: 'needs_work', findings };
@@ -127,7 +127,7 @@ function auditQuantificationDensity(resume: Resume): AuditDimensionReport {
         id: `quant-${e.kind}-${e.idx}`,
         dimensionId: 'quantificationDensity',
         severity: e.kind === 'work' ? 'high' : 'medium',
-        messageKey: 'audit.finding.unquantifiedExperience',
+        messageKey: 'options.audit.finding.unquantifiedExperience',
         messageParams: { name: e.label },
         target: targetOfField(`${e.kind}.description`, `${e.kind}[${e.idx}].description`),
       });
@@ -153,7 +153,7 @@ function auditActionVerbDiversity(resume: Resume): AuditDimensionReport {
       id: 'verbs-empty',
       dimensionId: 'actionVerbDiversity',
       severity: 'medium',
-      messageKey: 'audit.finding.lowVerbDiversity',
+      messageKey: 'options.audit.finding.lowVerbDiversity',
       messageParams: { count: 0 },
       target: targetOfField('work.description', 'work[0].description'),
     });
@@ -180,7 +180,7 @@ function auditActionVerbDiversity(resume: Resume): AuditDimensionReport {
       id: 'verbs-low',
       dimensionId: 'actionVerbDiversity',
       severity: score < 50 ? 'medium' : 'low',
-      messageKey: 'audit.finding.lowVerbDiversity',
+      messageKey: 'options.audit.finding.lowVerbDiversity',
       messageParams: { count: matched.size },
       target: firstTarget,
     });
@@ -207,7 +207,7 @@ function auditTimelineConsistency(resume: Resume): AuditDimensionReport {
           id: `timeline-missing-${module}-${idx}`,
           dimensionId: 'timelineConsistency',
           severity: 'low',
-          messageKey: 'audit.finding.incompleteDates',
+          messageKey: 'options.audit.finding.incompleteDates',
           messageParams: { name: row.label },
           target: targetOfField(`${module}.startDate`, `${module}[${idx}].startDate`),
         });
@@ -219,7 +219,7 @@ function auditTimelineConsistency(resume: Resume): AuditDimensionReport {
           id: `timeline-reversed-${module}-${idx}`,
           dimensionId: 'timelineConsistency',
           severity: 'high',
-          messageKey: 'audit.finding.reversedDates',
+          messageKey: 'options.audit.finding.reversedDates',
           messageParams: { name: row.label },
           target: targetOfField(`${module}.startDate`, `${module}[${idx}].startDate`),
         });
@@ -239,7 +239,7 @@ function auditTimelineConsistency(resume: Resume): AuditDimensionReport {
             id: `timeline-gap-${module}-${curr.idx}`,
             dimensionId: 'timelineConsistency',
             severity: 'low',
-            messageKey: 'audit.finding.timelineGap',
+            messageKey: 'options.audit.finding.timelineGap',
             messageParams: { months: curr.start - prev.end, name: curr.label },
             target: targetOfField(`${module}.startDate`, `${module}[${curr.idx}].startDate`),
           });
@@ -279,7 +279,7 @@ function auditSkillsAndQaReadiness(resume: Resume): AuditDimensionReport {
       id: 'readiness-skills',
       dimensionId: 'skillsAndQaReadiness',
       severity: 'medium',
-      messageKey: 'audit.finding.fewSkills',
+      messageKey: 'options.audit.finding.fewSkills',
       messageParams: { count: resume.skills.length },
       target: targetOfField('skills.name', 'skills[0].name'),
     });
@@ -291,7 +291,7 @@ function auditSkillsAndQaReadiness(resume: Resume): AuditDimensionReport {
       id: 'readiness-intro',
       dimensionId: 'skillsAndQaReadiness',
       severity: 'medium',
-      messageKey: 'audit.finding.shortSelfIntro',
+      messageKey: 'options.audit.finding.shortSelfIntro',
       target: targetOfField('misc.selfIntroduction'),
     });
   }
@@ -304,7 +304,7 @@ function auditSkillsAndQaReadiness(resume: Resume): AuditDimensionReport {
       id: 'readiness-qa',
       dimensionId: 'skillsAndQaReadiness',
       severity: 'low',
-      messageKey: 'audit.finding.fewCustomAnswers',
+      messageKey: 'options.audit.finding.fewCustomAnswers',
       messageParams: { count: validQa },
       target: targetOfField('customAnswers.question', 'customAnswers[0].question'),
     });

@@ -95,7 +95,7 @@ test('the scripts that run on pages have no way to send anything', () => {
 test('the parsers and local AI fetchers are not in what runs on pages, and the manifest asks for nothing new', () => {
   const read = (file: string): string => readFileSync(path.join(EXT, file), 'utf8');
   for (const file of ['background.js', 'content-scripts/content.js', 'content-scripts/fab.js']) {
-    expect(read(file), file).not.toMatch(/GlobalWorkerOptions|convertToHtml|api\/generate|api\/tags|LanguageModel|ai\.languageModel/);
+    expect(read(file), file).not.toMatch(/GlobalWorkerOptions|convertToHtml|api\/generate|api\/tags|api\/embeddings|LanguageModel|ai\.languageModel/);
   }
   const manifest = JSON.parse(read('manifest.json')) as { permissions: string[]; content_security_policy?: { extension_pages?: string } };
   expect(manifest.permissions.sort()).toEqual(['sidePanel', 'storage', 'unlimitedStorage', 'webNavigation']);

@@ -20,23 +20,45 @@ export function createContentListener(handlers: FrameHandlers): ContentListener 
         return true;
       }
       case 'frame:preview': {
-        const { resume, files, presetId } = message;
+        const { resume, files, presetId, recipes } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
         Promise.resolve()
-          .then(() => handlers.preview({ resume, files, ...(presetId ? { presetId } : {}) }))
+          .then(() =>
+            handlers.preview({
+              resume,
+              files,
+              ...(presetId ? { presetId } : {}),
+              ...(Array.isArray(recipes) ? { recipes } : {}),
+            }),
+          )
           .then(sendResponse, () => sendResponse(undefined));
         return true;
       }
       case 'frame:fill': {
-        const { resume, files, filter, presetId } = message;
+        const { resume, files, filter, presetId, recipes } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
-        handlers.fill({ resume, files, ...(filter ? { filter } : {}), ...(presetId ? { presetId } : {}) }).then(sendResponse, () => sendResponse(undefined));
+        handlers
+          .fill({
+            resume,
+            files,
+            ...(filter ? { filter } : {}),
+            ...(presetId ? { presetId } : {}),
+            ...(Array.isArray(recipes) ? { recipes } : {}),
+          })
+          .then(sendResponse, () => sendResponse(undefined));
         return true;
       }
       case 'frame:focus': {
         if (typeof message.fieldId !== 'string') return false;
         handlers.focus(message.fieldId);
         return false;
+      }
+      case 'frame:captureFingerprint': {
+        if (typeof message.fieldId !== 'string') return false;
+        Promise.resolve()
+          .then(() => handlers.captureFingerprint?.(message.fieldId) ?? null)
+          .then(sendResponse, () => sendResponse(null));
+        return true;
       }
       case 'frame:apply': {
         if (typeof message.fieldId !== 'string') return false;

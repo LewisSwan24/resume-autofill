@@ -22,6 +22,7 @@ import {
 import { resolveLanguage, setLanguage, useT, type MessageKey } from '../../src/i18n';
 import type { Locale, Profile, Resume } from '../../src/schema';
 import { draftToResume, refusedPaths } from '../../src/import/draft';
+import { applyDiffMergeDecisions } from '../../src/import/diffMerge';
 import type { ExtractFailure, TextLine } from '../../src/import/extract/types';
 import { parseResume, type Draft } from '../../src/import/parse';
 import { cleanLines } from '../../src/import/parse/clean';
@@ -33,15 +34,17 @@ import { ModuleForm } from './ModuleForm';
 import { ImportReview, type ReviewProblem } from './ImportReview';
 import { ResumeList } from './ResumeList';
 import { DataPanel, SettingsPanel } from './SidePanels';
+import { TailorPanel } from './TailorPanel';
 import { TemplatesPanel } from './TemplatesPanel';
 import { TrackerPanel } from './TrackerPanel';
+import { VaultPanel } from './VaultPanel';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
 import { findJumpControl, focusAndMark, useFocusRequest } from './useFocusRequest';
 import { Accordion, AccordionItem } from './ui/Accordion';
 import { Badge, Button, EmptyState, Field, Input, Notice, SelectInput } from './ui/controls';
 import { Dialog } from './ui/Dialog';
 import { Tabs, panelId, tabId, type TabItem } from './ui/Tabs';
-import { ToastProvider } from './ui/Toast';
+import { ToastProvider, useToast } from './ui/Toast';
 import { LanguageToggle } from '../../src/ui/LanguageToggle';
 import { HELP_PAGE, openExtensionPage } from '../../src/ui/pages';
 import '../../src/ui/fonts.css';
@@ -54,7 +57,7 @@ export interface AppProps {
   autosaveDelayMs?: number;
 }
 
-type TabKey = 'editor' | 'attachments' | 'settings' | 'data' | 'tracker' | 'templates';
+type TabKey = 'editor' | 'attachments' | 'tailor' | 'settings' | 'data' | 'tracker' | 'templates';
 
 /** Sections that start expanded; the rest stay folded until asked for. */
 const OPEN_BY_DEFAULT: readonly ModuleName[] = ['basics', 'contact', 'education', 'work'];
@@ -100,7 +103,8 @@ const IMPORT_FAILURES: Record<ExtractFailure, MessageKey> = {
 
 function Options({ autosaveDelayMs }: AppProps) {
   const t = useT();
-  const { profile, loadError, status, saveError, issues, commit } = useProfileEditor(autosaveDelayMs);
+  const toast = useToast();
+  const { profile, loadError, vaultLocked, status, saveError, issues, reload, commit } = useProfileEditor(autosaveDelayMs);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('editor');
   const [open, setOpen] = useState<ReadonlySet<ModuleName>>(() => new Set(OPEN_BY_DEFAULT));
@@ -228,6 +232,17 @@ function Options({ autosaveDelayMs }: AppProps) {
     if (turn === importTurn.current) setImported(null);
   };
 
+  const mergeImportIntoExisting = async (turn: number, target: Resume, draft: Draft) => {
+    const incoming = draftToResume(draft, { id: target.id, title: target.title });
+    const merged = applyDiffMergeDecisions(target, incoming);
+    const current = latest.current;
+    if (!current) return;
+    const next = updateResume(current, target.id, () => merged);
+    await commit(next, { immediate: true });
+    toast.push({ text: t('options.import.mergeDone') });
+    if (turn === importTurn.current) setImported(null);
+  };
+
   const duplicate = (source: Resume) => {
     if (!profile) return;
     const copy = duplicateResume(source, { title: `${source.title}${t('options.copySuffix')}` });
@@ -334,7 +349,11 @@ function Options({ autosaveDelayMs }: AppProps) {
     return (
       <div className="raf-app">
         {header}
-        {loadError ? (
+        {vaultLocked ? (
+          <div className="raf-single raf-form-stack">
+            <VaultPanel mode="unlock" onUnlocked={reload} />
+          </div>
+        ) : loadError ? (
           <div className="raf-single raf-form-stack">
             <Notice tone="danger">{loadError}</Notice>
             <section className="raf-card" aria-label={t('options.data.title')}>
@@ -352,12 +371,14 @@ function Options({ autosaveDelayMs }: AppProps) {
   const tabs: TabItem<TabKey>[] = [
     { id: 'editor', label: t('options.tab.editor'), icon: 'pencil' },
     { id: 'attachments', label: t('options.module.attachments'), icon: 'paperclip' },
+    { id: 'tailor', label: t('options.tab.tailor'), icon: 'search' },
     { id: 'settings', label: t('options.settings.title'), icon: 'gear' },
     { id: 'data', label: t('options.data.title'), icon: 'download' },
     { id: 'tracker', label: t('options.tab.tracker'), icon: 'check-circle' },
     { id: 'templates', label: t('options.tab.templates'), icon: 'file-earmark-check' },
   ];
   const linkedTitle = resume?.linkedResumeId ? profile.resumes.find((r) => r.id === resume.linkedResumeId)?.title : undefined;
+  const baseVariantTitle = resume?.variantOf ? profile.resumes.find((r) => r.id === resume.variantOf)?.title : undefined;
   const linkOthers = linkTarget ? profile.resumes.filter((r) => r.id !== linkTarget.id) : [];
   const resumeScoped = tab === 'editor' || tab === 'attachments';
 
@@ -383,6 +404,9 @@ function Options({ autosaveDelayMs }: AppProps) {
         </Field>
         <div className="raf-resume-head__meta">
           <Badge>{resume.locale}</Badge>
+          {baseVariantTitle !== undefined ? (
+            <Badge>{t('options.variant.badge', { base: baseVariantTitle || '—' })}</Badge>
+          ) : null}
           {linkedTitle !== undefined ? <span className="raf-caption">{t('options.linkedTo', { title: linkedTitle || '—' })}</span> : null}
         </div>
       </div>
@@ -451,6 +475,8 @@ function Options({ autosaveDelayMs }: AppProps) {
                   {...(imported.title === undefined ? {} : { title: imported.title })}
                   busy={!!imported.saving}
                   problem={imported.problem}
+                  mergeTargetTitle={resume?.title}
+                  onMerge={resume ? (d) => void mergeImportIntoExisting(imported.turn, resume, d) : undefined}
                   onCancel={() => {
                     importTurn.current++;
                     setImported(null);
@@ -471,6 +497,8 @@ function Options({ autosaveDelayMs }: AppProps) {
               )}
             </main>
           </>
+        ) : tab === 'tailor' ? (
+          <TailorPanel profile={profile} resume={resume} onCommit={commit} onSelectResume={setSelectedId} />
         ) : tab === 'settings' ? (
           <section className="raf-card" aria-label={t('options.settings.title')}>
             <h2 className="raf-heading">{t('options.settings.title')}</h2>
@@ -484,7 +512,7 @@ function Options({ autosaveDelayMs }: AppProps) {
         ) : tab === 'templates' ? (
           <section className="raf-card" aria-label={t('options.templates.title')}>
             <h2 className="raf-heading">{t('options.templates.title')}</h2>
-            <TemplatesPanel resume={resume} />
+            <TemplatesPanel resume={resume} allResumes={profile.resumes} />
           </section>
         ) : (
           <section className="raf-card" aria-label={t('options.data.title')}>

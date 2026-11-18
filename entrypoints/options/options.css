@@ -420,6 +420,8 @@ body {
 
 .raf-review__actions {
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: var(--raf-space-2);
 }
 

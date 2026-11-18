@@ -1,7 +1,7 @@
 // Options tab: offline resume template preview + Word (.docx) & printable PDF export.
 import { useMemo, useRef, useState } from 'react';
 import { useT } from '../../src/i18n';
-import type { Resume } from '../../src/schema';
+import { materializeResume, type Resume } from '../../src/schema';
 import {
   RESUME_TEMPLATES,
   renderResumeDocx,
@@ -13,26 +13,31 @@ import { Button, EmptyState, Notice } from './ui/controls';
 
 interface TemplatesPanelProps {
   resume: Resume | null;
+  allResumes?: readonly Resume[];
 }
 
-export function TemplatesPanel({ resume }: TemplatesPanelProps) {
+export function TemplatesPanel({ resume, allResumes }: TemplatesPanelProps) {
   const t = useT();
   const [templateId, setTemplateId] = useState<ResumeTemplateId>('ats_clean');
   const [exportingDocx, setExportingDocx] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const html = useMemo(() => (resume ? renderResumeHtml(resume, templateId) : ''), [resume, templateId]);
+  const effectiveResume = useMemo(
+    () => (resume ? materializeResume(resume, allResumes ?? [resume]) : null),
+    [resume, allResumes],
+  );
+  const html = useMemo(() => (effectiveResume ? renderResumeHtml(effectiveResume, templateId) : ''), [effectiveResume, templateId]);
 
-  if (!resume) {
+  if (!effectiveResume) {
     return <EmptyState icon="file-earmark-text">{t('options.templates.noResume')}</EmptyState>;
   }
 
-  const baseName = (resumeFullName(resume) || resume.title.trim() || 'resume').replace(/[\\/:*?"<>|]/g, '_');
+  const baseName = (resumeFullName(effectiveResume) || effectiveResume.title.trim() || 'resume').replace(/[\\/:*?"<>|]/g, '_');
 
   const downloadDocx = async () => {
     setExportingDocx(true);
     try {
-      const bytes = await renderResumeDocx(resume, templateId);
+      const bytes = await renderResumeDocx(effectiveResume, templateId);
       const copy = new Uint8Array(bytes.byteLength);
       copy.set(bytes);
       const blob = new Blob([copy.buffer], {

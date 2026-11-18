@@ -5,13 +5,15 @@ import type { FileData } from '../drivers/types';
 import { ATTACHMENT_PROP, isEmptyNeeds, parseFrameNeeds, type AttachmentKey, type FrameNeeds } from '../engine/fieldDeps';
 import type { FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
 import { sendToFrame, type FillRequestResponse } from '../messaging';
-import type { Resume } from '../schema';
+import { materializeResume, type Resume, type SiteRecipe } from '../schema';
+import { BUILTIN_SITE_RECIPES, matchRecipesForPage } from '../recipes';
 import { isValidPresetId, type MappingPresetId } from '../templates/presets';
-import { fileToFileData, getFile, loadProfile } from '../storage';
+import { VaultLockedError, fileToFileData, getFile, loadProfile } from '../storage';
 import { FRAME_TIMEOUT_MS, NEEDS_TIMEOUT_MS, collectFrameReports, collectFrames, listFrameIds } from './frames';
 import { isFramePreview, mergeFramePreviews, mergeFrameReports } from './merge';
 import { buildResumeSubset } from './subset';
 import { clearPreview, loadPreview, savePreview, saveReport } from './tabState';
+import { recordWizardStep, type WizardSessionState } from './wizardSession';
 
 export interface PreviewApproval {
   excludedByFrame?: Record<number, string[]>;
@@ -43,13 +45,21 @@ export interface FramePayload {
   files: Record<string, FileData>;
   filter?: FillFilter;
   presetId?: MappingPresetId;
+  recipes?: SiteRecipe[];
 }
 
 const defaultSendFill = (tabId: number, frameId: number, p: FramePayload): Promise<unknown> =>
   sendToFrame(tabId, frameId, { type: 'frame:fill', ...p });
 
 const defaultSendPreview = (tabId: number, frameId: number, p: FramePayload): Promise<unknown> =>
-  sendToFrame(tabId, frameId, { type: 'frame:preview', runId: p.runId, resume: p.resume, files: p.files, ...(p.presetId ? { presetId: p.presetId } : {}) });
+  sendToFrame(tabId, frameId, {
+    type: 'frame:preview',
+    runId: p.runId,
+    resume: p.resume,
+    files: p.files,
+    ...(p.presetId ? { presetId: p.presetId } : {}),
+    ...(p.recipes ? { recipes: p.recipes } : {}),
+  });
 
 const defaultSendNeeds = (tabId: number, frameId: number): Promise<unknown> =>
   sendToFrame(tabId, frameId, { type: 'frame:needs' });
@@ -116,6 +126,14 @@ export async function broadcastPreview(tabId: number, preview: FillPreview | nul
   ]);
 }
 
+export async function broadcastWizard(tabId: number, session: WizardSessionState | null): Promise<void> {
+  const message = { type: 'wizard:updated', tabId, session } as const;
+  await Promise.allSettled([
+    browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    browser.runtime.sendMessage(message),
+  ]);
+}
+
 /** Keep the service worker alive while a long fill runs (any extension API call resets the idle timer). */
 function keepAlive(): () => void {
   const timer = setInterval(() => {
@@ -140,7 +158,13 @@ function frameFilter(approval: PreviewApproval | undefined, frameId: number): Fi
   };
 }
 
-async function runPreviewInternal(tabId: number, resume: Resume, presetId: MappingPresetId | undefined, deps: FillDeps): Promise<FillRequestResponse> {
+async function runPreviewInternal(
+  tabId: number,
+  resume: Resume,
+  presetId: MappingPresetId | undefined,
+  recipes: SiteRecipe[] | undefined,
+  deps: FillDeps,
+): Promise<FillRequestResponse> {
   const runId = crypto.randomUUID();
   const frameIds = await (deps.listFrameIds ?? listFrameIds)(tabId);
   const sendNeeds = deps.sendNeeds ?? defaultSendNeeds;
@@ -153,6 +177,7 @@ async function runPreviewInternal(tabId: number, resume: Resume, presetId: Mappi
         resume: buildResumeSubset(resume, needs),
         files: await loadAttachmentMeta(resume, needs.attachmentKeys),
         ...(presetId ? { presetId } : {}),
+        ...(recipes && recipes.length > 0 ? { recipes } : {}),
       };
       return sendPreview(tabId, frameId, payload);
     },
@@ -186,16 +211,28 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
   inFlight.add(tabId);
   const stop = keepAlive();
   try {
-    const profile = await loadProfile();
-    const resume = profile.resumes.find((r) => r.id === profile.activeResumeId) ?? null;
-    if (!resume) return { ok: false, error: 'no_resume' };
+    let profile;
+    try {
+      profile = await loadProfile();
+    } catch (error) {
+      if (error instanceof VaultLockedError) return { ok: false, error: 'vault_locked' };
+      throw error;
+    }
+    const rawActive = profile.resumes.find((r) => r.id === profile.activeResumeId) ?? null;
+    if (!rawActive) return { ok: false, error: 'no_resume' };
+    const resume = materializeResume(rawActive, profile.resumes);
 
     const presetId = isValidPresetId(profile.settings.mappingPresetId) && profile.settings.mappingPresetId !== 'default'
       ? profile.settings.mappingPresetId
       : undefined;
 
+    const tabInfo = await browser.tabs.get(tabId).catch(() => null);
+    const tabUrl = typeof tabInfo?.url === 'string' ? tabInfo.url : '';
+    const allRecipes = [...(profile.recipes ?? []), ...BUILTIN_SITE_RECIPES];
+    const pageRecipes = tabUrl ? matchRecipesForPage(allRecipes, tabUrl) : undefined;
+
     if (profile.settings.previewBeforeFill && !deps.forceFill) {
-      return await runPreviewInternal(tabId, resume, presetId, deps);
+      return await runPreviewInternal(tabId, resume, presetId, pageRecipes, deps);
     }
 
     const runId = crypto.randomUUID();
@@ -213,6 +250,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
           files: await loadAttachmentFiles(resume, needs.attachmentKeys),
           ...(filter ? { filter } : {}),
           ...(presetId ? { presetId } : {}),
+          ...(pageRecipes && pageRecipes.length > 0 ? { recipes: pageRecipes } : {}),
         };
         return sendFill(tabId, frameId, payload);
       },
@@ -233,8 +271,10 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     const hadPreview = deps.forceFill || (await loadPreview(tabId)) !== null;
     if (hadPreview) await clearPreview(tabId);
     await saveReport(tabId, report);
+    const wizard = report.counts.filled > 0 ? await recordWizardStep(tabId, report.url || tabUrl, resume) : null;
     await Promise.allSettled([
       ...(hadPreview ? [broadcastPreview(tabId, null)] : []),
+      ...(wizard ? [broadcastWizard(tabId, wizard)] : []),
       broadcastReport(tabId, report),
     ]);
     return { ok: true };

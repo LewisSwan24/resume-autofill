@@ -8,6 +8,7 @@ import {
   LIBRARY_OVERLAY_SELECTOR,
   LIBRARY_ROOT_SELECTOR, isMokaDialCode } from '../drivers/libraries';
 import { groupInputs } from './discover';
+import { collectShadowHostAttributes, findExternalHostLabels, parentElementOrHost, resolveByIdAcrossRoots } from './shadow';
 import { EVIDENCE_WEIGHTS, type Control, type Evidence, type EvidenceSource } from './types';
 
 /** Native form fields (everything `discover` can report, minus buttons / hidden inputs). */
@@ -285,7 +286,7 @@ function consentAbove(c: Ctx): string | null {
       const raw = s.nodeType === 3 ? (s.textContent ?? '') : textWithoutControls(s as Element);
       if (asksForConsent(cleanEvidenceText(raw, Infinity))) return raw;
     }
-    const parent = node.parentElement;
+    const parent = parentElementOrHost(node);
     if (!parent || /^(BODY|HTML|FORM)$/.test(parent.tagName) || hasOtherFields(parent, c)) return null;
     node = parent;
   }
@@ -327,7 +328,7 @@ function nearbyText(c: Ctx, reach = MAX_NEARBY_LEVELS): string | null {
       // An answer written before its button is no question.
       if (t && !answers.has(t)) return t;
     }
-    const parent = node.parentElement;
+    const parent = parentElementOrHost(node);
     if (!parent || /^(BODY|HTML|FORM)$/.test(parent.tagName) || hasOtherFields(parent, c)) return null;
     if (level >= USUAL_NEARBY_LEVELS && PAGE_PART_TAGS.test(parent.tagName)) return null;
     node = parent;
@@ -380,11 +381,14 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
   };
 
   push('label-for', control.fixedLabel ?? control.questionText, { label: true });
-  // label[for] → control (or inner input of a library widget)
+  // label[for] → control (or inner input of a library widget, including outer shadow hosts)
   if (c.ids.size > 0) {
     for (const l of Array.from(c.root.querySelectorAll('label[for]'))) {
       if (c.ids.has(l.getAttribute('for') ?? '')) push('label-for', textWithoutControls(l), { label: true });
     }
+  }
+  for (const l of findExternalHostLabels(c.el, c.ids)) {
+    push('label-for', textWithoutControls(l), { label: true });
   }
   // wrapping <label>
   if (!c.optionGroup) {
@@ -399,27 +403,30 @@ export function analyzeControl(control: Control): EvidenceAnalysis {
   if (!c.optionGroup) {
     const refs = (c.el.closest('label[aria-labelledby]')?.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
     for (const id of refs) {
-      const n = c.root.getElementById(id);
+      const n = resolveByIdAcrossRoots(c.el, id);
       if (n) push('aria-labelledby', textWithoutControls(n));
     }
   }
-  // aria-labelledby / aria-label
+  // aria-labelledby / aria-label (resolving across open ShadowRoot boundaries too)
   for (const h of c.hosts) {
     const refs = (h.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
     const parts = refs
       .filter((id) => id !== h.id)
-      .map((id) => c.root.getElementById(id))
+      .map((id) => resolveByIdAcrossRoots(c.el, id))
       .filter((n): n is HTMLElement => !!n)
       .map((n) => textWithoutControls(n));
     if (parts.length > 0) push('aria-labelledby', parts.join(' '));
   }
   for (const h of c.hosts) push('aria-label', h.getAttribute('aria-label'));
+  for (const attr of collectShadowHostAttributes(c.el)) {
+    push(attr.source, attr.text, { label: true });
+  }
   // A single control inside [role=group][aria-labelledby] (Element Plus form items): the group label names it.
   if (!c.optionGroup) {
     const group = c.el.closest('[role=group][aria-labelledby]');
     if (group && !c.hosts.includes(group) && !hasOtherFields(group, c)) {
       const names = (group.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
-      const text = names.map((id) => c.root.getElementById(id)).filter((n): n is HTMLElement => !!n).map((n) => textWithoutControls(n)).join(' ');
+      const text = names.map((id) => resolveByIdAcrossRoots(c.el, id)).filter((n): n is HTMLElement => !!n).map((n) => textWithoutControls(n)).join(' ');
       push('aria-labelledby', text);
     }
   }

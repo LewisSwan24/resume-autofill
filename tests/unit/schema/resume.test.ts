@@ -104,7 +104,7 @@ describe('ProfileSchema', () => {
   });
 
   it('rejects a wrong schemaVersion', () => {
-    expect(ProfileSchema.safeParse({ schemaVersion: 2 }).success).toBe(false);
+    expect(ProfileSchema.safeParse({ schemaVersion: 3 }).success).toBe(false);
     expect(ProfileSchema.safeParse({}).success).toBe(false);
   });
 });

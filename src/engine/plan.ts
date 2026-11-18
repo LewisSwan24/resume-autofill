@@ -4,7 +4,8 @@ import { countryAskedAbout, livesInCountry } from '../dictionary/places';
 import { FIELD_SYNONYMS } from '../dictionary';
 import type { FillStep } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
-import type { Locale, Resume } from '../schema';
+import { matchRecipesForPage, resolveRecipeForControl } from '../recipes';
+import type { Locale, Resume, SiteRecipe } from '../schema';
 import { getFieldKeyDef } from '../schema/fieldKeys';
 import type { MappingPresetId } from '../templates/presets';
 import { FILL_THRESHOLD, REVIEW_THRESHOLD } from './classify';
@@ -64,9 +65,13 @@ export function planFill(
   classifications: Classification[],
   resume: Resume,
   files: Record<string, FileData> = {},
-  opts: { now?: Date; presetId?: MappingPresetId; pageTitle?: string; pageUrl?: string } = {},
+  opts: { now?: Date; presetId?: MappingPresetId; pageTitle?: string; pageUrl?: string; recipes?: readonly SiteRecipe[] } = {},
 ): FillPlan {
   const hasInternshipSection = classifications.some((c) => c.section === 'internship');
+  const matchingRecipes =
+    opts.recipes && opts.recipes.length > 0 && opts.pageUrl
+      ? matchRecipesForPage(opts.recipes, opts.pageUrl)
+      : [];
   const steps: FillStep[] = [];
   const reports: FieldReport[] = [];
 
@@ -80,6 +85,42 @@ export function planFill(
     if (cls.reason === 'never_fill') {
       reports.push({ ...report, fieldKey: null, confidence: 1 });
       return;
+    }
+
+    // Check explicit SiteRecipe matches before falling back to heuristic classification.
+    if (matchingRecipes.length > 0) {
+      const recipeRes = resolveRecipeForControl(ctx, matchingRecipes, resume, {
+        section: cls.section,
+        hasInternshipSection,
+        files,
+        askedAs: report.label,
+        ...(opts.now ? { now: opts.now } : {}),
+        ...(opts.presetId ? { presetId: opts.presetId } : {}),
+        ...(opts.pageTitle ? { pageTitle: opts.pageTitle } : {}),
+        ...(opts.pageUrl ? { pageUrl: opts.pageUrl } : {}),
+      });
+      if (recipeRes.hit) {
+        steps.push({
+          fieldId: ctx.control.id,
+          fieldKey: (recipeRes.hit.fieldKey ?? ('customAnswers.answer' as FieldKey)),
+          intent: recipeRes.hit.intent,
+          confidence: 1,
+          source: recipeRes.hit.source,
+          label: report.label,
+          section: recipeRes.hit.section ?? cls.section,
+        });
+        return;
+      }
+      if (recipeRes.noDataFieldKey) {
+        reports.push({
+          ...report,
+          fieldKey: recipeRes.noDataFieldKey,
+          outcome: 'no_data',
+          confidence: 1,
+          ...(recipeRes.ruleSource ? { source: recipeRes.ruleSource } : {}),
+        });
+        return;
+      }
     }
     const def = cls.fieldKey ? getFieldKeyDef(cls.fieldKey) : undefined;
     if (!cls.fieldKey || !def || cls.confidence < REVIEW_THRESHOLD - EPS) {

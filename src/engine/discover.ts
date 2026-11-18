@@ -19,6 +19,7 @@ import {
   type LibraryWidget,
 } from '../drivers/libraries';
 import type { Control, OptionInfo } from './types';
+import { shadowClosest } from './shadow';
 import { isInputVisible, isFarAway, isOutOfSight, isVisible } from './visibility';
 
 export interface DiscoverOptions {
@@ -154,7 +155,7 @@ function nativeKey(map: Map<unknown, Map<string, HTMLInputElement[]>>, form: unk
  * either way. The exception is the whole page behind an open dialog, hidden from the top of the body down.
  */
 function isHiddenFromReaders(el: Element): boolean {
-  const block = el.closest('[aria-hidden="true"]');
+  const block = shadowClosest(el, '[aria-hidden="true"]');
   if (!block) return false;
   if (block.parentElement !== el.ownerDocument.body) return true;
   const dialog = el.ownerDocument.querySelector('[role=dialog], [role=alertdialog], [aria-modal="true"], dialog[open]');
@@ -257,7 +258,14 @@ function isYesNoGroup(group: HTMLElement, buttons: HTMLElement[]): boolean {
   return others.length === 0 || (others.length === 1 && /^(?:checkbox|radio)$/.test(others[0]!.type ?? ''));
 }
 
-function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapter | null): void {
+function scanScope(
+  scope: Document | ShadowRoot,
+  out: Draft[],
+  adapter: AtsAdapter | null,
+  visitedRoots: Set<Document | ShadowRoot> = new Set(),
+): void {
+  if (visitedRoots.has(scope)) return;
+  visitedRoots.add(scope);
   // 1. Library widget roots (outermost wins). Disabled / unsupported / hidden ones still
   //    consume their inner inputs.
   const blocked = new Set<Element>();
@@ -441,7 +449,9 @@ function scanScope(scope: Document | ShadowRoot, out: Draft[], adapter: AtsAdapt
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>('*'))) {
     const draft = candidates.get(el);
     if (draft) out.push(draft);
-    if (el.shadowRoot) scanScope(el.shadowRoot, out, adapter);
+    if (el.shadowRoot && !visitedRoots.has(el.shadowRoot)) {
+      scanScope(el.shadowRoot, out, adapter, visitedRoots);
+    }
   }
 }
 

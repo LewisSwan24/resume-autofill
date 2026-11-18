@@ -1,10 +1,25 @@
-// Adapters for sites the general engine cannot fully read. Ashby needs none so far.
+// Adapters for sites the general engine cannot fully read.
+import { ashby } from './ashby';
+import { bytedanceCampus, nowcoderCampus, tencentCareers } from './cnPortals';
 import { greenhouse } from './greenhouse';
 import { lever } from './lever';
 import { pageup } from './pageup';
+import { smartrecruiters } from './smartrecruiters';
 import { successfactors } from './successfactors';
 import type { AtsAdapter } from './types';
 import { workable } from './workable';
 import { workday } from './workday';
 
-export const ADAPTERS: readonly AtsAdapter[] = [greenhouse, lever, workable, workday, successfactors, pageup];
+export const ADAPTERS: readonly AtsAdapter[] = [
+  greenhouse,
+  lever,
+  workable,
+  workday,
+  successfactors,
+  pageup,
+  ashby,
+  smartrecruiters,
+  bytedanceCampus,
+  nowcoderCampus,
+  tencentCareers,
+];

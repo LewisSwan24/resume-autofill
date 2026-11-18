@@ -1,5 +1,6 @@
 // Picks the adapter for a page: by address, then by page marker, otherwise none and the general engine
 // works alone. Runs per frame on that frame's own address.
+import { querySelectorDeep } from '../engine/shadow';
 import { ADAPTERS } from './index';
 import type { AtsAdapter } from './types';
 
@@ -25,7 +26,7 @@ export function matchesUrl(pattern: string, href: string): boolean {
 }
 
 function hasMarker(root: Document | ShadowRoot, selectors: readonly string[]): boolean {
-  return selectors.some((s) => root.querySelector(s) !== null);
+  return selectors.some((s) => querySelectorDeep(root, s) !== null);
 }
 
 export function resolveAdapter(

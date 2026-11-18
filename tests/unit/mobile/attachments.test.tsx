@@ -11,7 +11,8 @@ import { setLanguage, translate } from '../../../src/i18n';
 import { ProfileSchema, ResumeSchema, type Profile, type Resume } from '../../../src/schema';
 
 const WAIT = { timeout: 4000 };
-const SWEEP = 30;
+// Keep undo sweep comfortably above Windows' ~15.6ms timer quantum under parallel load.
+const SWEEP = 100;
 const zh = (key: string, params?: Record<string, string | number>) => translate('zh', key, params);
 const RESUME = zh('options.attach.resume');
 const PHOTO = zh('options.attach.photo');

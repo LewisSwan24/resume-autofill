@@ -1,6 +1,6 @@
 // Mobile offline resume template exporter: 4 layouts + Word (.docx) + native PrintManager / UIPrint PDF bridge.
 import { useMemo, useState } from 'react';
-import type { Profile } from '../../../../src/schema';
+import { materializeResume, type Profile } from '../../../../src/schema';
 import {
   RESUME_TEMPLATES,
   renderResumeDocx,
@@ -38,7 +38,8 @@ function TemplateExportBody({ profile, saveDocument, printBridge, showToast }: T
 
   const resume = useMemo(() => {
     if (!profile || profile.resumes.length === 0) return null;
-    return profile.resumes.find((r) => r.id === profile.activeResumeId) ?? profile.resumes[0]!;
+    const raw = profile.resumes.find((r) => r.id === profile.activeResumeId) ?? profile.resumes[0]!;
+    return materializeResume(raw, profile.resumes);
   }, [profile]);
 
   const html = useMemo(() => (resume ? renderResumeHtml(resume, templateId) : ''), [resume, templateId]);

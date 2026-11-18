@@ -718,6 +718,7 @@ button.raf-list-item__main:focus-visible {
 
 .raf-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: var(--raf-space-1);
   max-width: 100%;
 }

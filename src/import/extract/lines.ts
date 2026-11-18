@@ -1,4 +1,5 @@
 // From positioned pieces of text to lines in reading order, with two columns read one after the other.
+import { segmentLayoutBlocks } from './layout2d';
 import type { TextLine } from './types';
 
 export interface Piece {
@@ -30,7 +31,7 @@ const MAX_PIECES_PER_PAGE = 20_000;
 const lowest = (values: number[]): number => values.reduce((a, b) => (b < a ? b : a), Infinity);
 const highest = (values: number[]): number => values.reduce((a, b) => (b > a ? b : a), -Infinity);
 
-function rowsOf(pieces: Piece[]): Piece[][] {
+export function rowsOf(pieces: Piece[]): Piece[][] {
   const sorted = [...pieces].sort((a, b) => b.y - a.y || a.x - b.x);
   const rows: Piece[][] = [];
   for (const piece of sorted) {
@@ -142,9 +143,16 @@ export function linesOfPage(pieces: Piece[], page: number, pageWidth: number): T
   const fullGutter = findGutter(real, pageWidth);
   if (fullGutter !== null) return readBand(real, page, pageWidth);
 
+  // Try recursive XY-Cut on the whole page first so a vertical section gap inside one column
+  // doesn't prematurely slice multi-column bodies before spanning headers are isolated.
+  const blocks = segmentLayoutBlocks(real, pageWidth);
+  if (blocks.length > 1) {
+    return blocks.flatMap((block) => rowsOf(block).map((row) => lineOf(row, page)));
+  }
+
   const bands = bandsOf(real);
   if (bands.length === 1) return readBand(real, page, pageWidth);
-  // If no individual band is multi-column, keep original single-band row order so spacing doesn't re-group lines.
+  // If no individual band is multi-column, preserve original single-column row order.
   const hasColumnBand = bands.some((b) => findGutter(b, pageWidth) !== null);
   if (!hasColumnBand) return readBand(real, page, pageWidth);
   return bands.flatMap((b) => readBand(b, page, pageWidth));

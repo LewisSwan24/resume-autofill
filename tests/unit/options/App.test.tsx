@@ -87,7 +87,15 @@ describe('Options page – shell', () => {
   it('every tab carries its word as the accessible name and in its DOM', async () => {
     await renderApp();
     const names = screen.getAllByRole('tab').map((t) => t.getAttribute('aria-label'));
-    expect(names).toEqual(['Editor', 'Attachments', 'Settings', 'Import / Export', 'Applications', 'Templates']);
+    expect(names).toEqual([
+      'Editor',
+      'Attachments',
+      'JD Tailor & Recipes',
+      'Settings',
+      'Import / Export',
+      'Applications',
+      'Templates',
+    ]);
     // The word is in the DOM of every tab (CSS shows it from 768px up), not only on the selected one.
     for (const tab of screen.getAllByRole('tab')) expect(tab.textContent!.trim()).toBe(tab.getAttribute('aria-label'));
   });

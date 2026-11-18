@@ -19,6 +19,9 @@ import { useFieldActions } from './useFieldActions';
 import { usePreview } from './usePreview';
 import { useProfile } from './useProfile';
 import { useReport } from './useReport';
+import { browser } from 'wxt/browser';
+import { materializeResume, type SiteRecipe } from '../../src/schema';
+import { wizardKey, type WizardSessionState } from '../../src/background/wizardSession';
 import { sendToBackground } from '../../src/messaging';
 import { isHttpUrl, recordFillApplication } from '../../src/tracker';
 import '../../src/ui/fonts.css';
@@ -39,7 +42,7 @@ function ProfileButton({ label }: { label: string }) {
 
 export default function App() {
   const t = useT();
-  const { profile } = useProfile();
+  const { profile, vaultLocked } = useProfile();
   const tabId = useActiveTab();
   const preview = usePreview(tabId, Boolean(profile?.settings.previewBeforeFill));
   const { report, loading, error, reload, patchField } = useReport(tabId);
@@ -47,6 +50,7 @@ export default function App() {
   const [selected, setSelected] = useState<ReadonlySet<StatusGroupId>>(new Set());
   const [switchFailed, setSwitchFailed] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [wizard, setWizard] = useState<WizardSessionState | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
 
   // UI language follows the stored setting.
@@ -97,9 +101,76 @@ export default function App() {
     void sendToBackground({ type: 'fill:cancelPreview', tabId }).catch(() => undefined);
   }, [tabId]);
 
-  const activeResume = useMemo(
-    () => profile?.resumes.find((r) => r.id === profile.activeResumeId) ?? null,
-    [profile],
+  const activeResume = useMemo(() => {
+    const raw = profile?.resumes.find((r) => r.id === profile.activeResumeId) ?? null;
+    return raw && profile ? materializeResume(raw, profile.resumes) : raw;
+  }, [profile]);
+
+  useEffect(() => {
+    setWizard(null);
+    if (tabId === null) return;
+    const key = wizardKey(tabId);
+    void browser.storage.session
+      .get(key)
+      .then((stored) => {
+        const res = stored[key] as WizardSessionState | undefined;
+        if (res && typeof res.stepCount === 'number') setWizard(res);
+      })
+      .catch(() => undefined);
+  }, [tabId, report?.finishedAt]);
+
+  const recordFieldRecipe = useCallback(
+    async (field: FieldReport, answerText: string) => {
+      if (tabId === null || field.frameId === undefined || !report?.url) return;
+      let host = '';
+      try {
+        host = new URL(report.url).hostname;
+      } catch {
+        return;
+      }
+      if (!host) return;
+      const fp = await sendToBackground({
+        type: 'field:captureFingerprint',
+        tabId,
+        frameId: field.frameId,
+        fieldId: field.fieldId,
+      }).catch(() => null);
+      if (!fp) {
+        setToast({ id: Date.now(), text: t('panel.recipe.failed') });
+        return;
+      }
+      const current = await loadProfile();
+      const recipeId = `user-${host.replace(/[^a-z0-9.-]/gi, '_')}`;
+      const existing = current.recipes ?? [];
+      const idx = existing.findIndex((r) => r.id === recipeId);
+      const newRule = {
+        id: `rule-${Date.now()}`,
+        fingerprint: fp,
+        ...(field.fieldKey ? { fieldKey: field.fieldKey } : {}),
+        ...(answerText.trim() ? { constantValue: answerText.trim() } : {}),
+        transformPreset: 'trim' as const,
+      };
+      const baseRecipe: SiteRecipe =
+        idx >= 0
+          ? existing[idx]!
+          : {
+              id: recipeId,
+              name: host,
+              hostPattern: host,
+              enabled: true,
+              updatedAt: Date.now(),
+              rules: [],
+            };
+      const updatedRecipe: SiteRecipe = {
+        ...baseRecipe,
+        updatedAt: Date.now(),
+        rules: [...baseRecipe.rules, newRule].slice(-100),
+      };
+      const nextRecipes = idx >= 0 ? existing.map((r, i) => (i === idx ? updatedRecipe : r)) : [...existing, updatedRecipe];
+      await saveProfile({ ...current, recipes: nextRecipes });
+      setToast({ id: Date.now(), text: t('panel.recipe.recorded') });
+    },
+    [tabId, report?.url, t],
   );
 
   const saveCustomAnswer = useCallback(async (question: string, answer: string) => {
@@ -168,6 +239,33 @@ export default function App() {
       </header>
 
       <main className="raf-main">
+        {vaultLocked ? (
+          <Notice
+            tone="danger"
+            title={t('panel.vaultLockedTitle')}
+            action={<ProfileButton label={t('panel.vaultUnlockBtn')} />}
+          >
+            {t('panel.vaultLockedText')}
+          </Notice>
+        ) : null}
+        {wizard && wizard.stepCount > 0 ? (
+          <Notice
+            action={
+              <button
+                type="button"
+                className="raf-btn raf-btn-small"
+                onClick={() => {
+                  if (tabId !== null) void sendToBackground({ type: 'wizard:clear', tabId }).catch(() => undefined);
+                  setWizard(null);
+                }}
+              >
+                {t('panel.wizard.reset')}
+              </button>
+            }
+          >
+            {t('panel.wizard.banner', { step: wizard.stepCount, title: wizard.resumeTitle })}
+          </Notice>
+        ) : null}
         {profile && profile.resumes.length === 0 ? (
           <Notice action={<ProfileButton label={t('common.fillProfile')} />}>{t('panel.noResume')}</Notice>
         ) : null}
@@ -235,6 +333,7 @@ export default function App() {
                 onFocus={focus}
                 onApply={apply}
                 onSaveCustomAnswer={saveCustomAnswer}
+                onRecordRecipe={report?.url ? recordFieldRecipe : undefined}
                 onApplied={onApplied}
               />
             )}

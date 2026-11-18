@@ -33,6 +33,13 @@ export const MIGRATIONS: readonly Migration[] = [
       return { ...raw, schemaVersion: 1, activeResumeId };
     },
   },
+  {
+    // v1 → v2: upgrades schemaVersion while keeping optional variant/recipes payloads intact.
+    from: 1,
+    run(raw) {
+      return { ...raw, schemaVersion: 2 };
+    },
+  },
 ];
 
 function readVersion(raw: Json): number {

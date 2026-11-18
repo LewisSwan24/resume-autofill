@@ -5,10 +5,10 @@ import { buildExport, readImport, unlockImport } from '../../../../mobile/app/sr
 import { ApplicationRecordSchema, defaultAppState, type AppState } from '../../../../mobile/app/src/store/appStateStore';
 import { TRACKER_FORMAT, TRACKER_KEY, readTracker, withTracker } from '../../../../mobile/app/src/tracker/model/trackerTransfer';
 import { exportProfile, parseProfileJson } from '../../../../src/editor';
-import { ProfileSchema, ResumeSchema, type Profile } from '../../../../src/schema';
+import { CURRENT_SCHEMA_VERSION, ProfileSchema, ResumeSchema, type Profile } from '../../../../src/schema';
 
 const profile: Profile = ProfileSchema.parse({
-  schemaVersion: 1,
+  schemaVersion: CURRENT_SCHEMA_VERSION,
   resumes: [
     ResumeSchema.parse({
       id: 'r1',

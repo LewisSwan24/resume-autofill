@@ -2,16 +2,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AUTOSAVE_DELAY_MS, createAutosaver, validateProfile, type FieldIssue } from '../../src/editor';
 import type { Profile } from '../../src/schema';
-import { loadProfile, saveProfile, watchProfile } from '../../src/storage';
+import { VaultLockedError, loadProfile, saveProfile, watchProfile } from '../../src/storage';
 
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'invalid' | 'error';
 
 export interface ProfileEditor {
   profile: Profile | null;
   loadError: string | null;
+  vaultLocked: boolean;
   status: SaveStatus;
   saveError: string | null;
   issues: FieldIssue[];
+  /** Reload stored profile (e.g. after unlocking the Storage Vault). */
+  reload: () => void;
   /** Apply an edit. Invalid profiles are kept in the form but never saved. */
   commit: (next: Profile, options?: { immediate?: boolean }) => Promise<void>;
 }
@@ -21,6 +24,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): ProfileEditor {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [vaultLocked, setVaultLocked] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
   const [status, setStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [issues, setIssues] = useState<FieldIssue[]>([]);
@@ -53,14 +58,30 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
     let cancelled = false;
     loadProfile().then(
       (loaded) => {
-        if (!cancelled && !dirty.current) setProfile(loaded);
+        if (!cancelled && !dirty.current) {
+          setVaultLocked(false);
+          setLoadError(null);
+          setProfile(loaded);
+        }
       },
       (error) => {
-        if (!cancelled) setLoadError(messageOf(error));
+        if (!cancelled) {
+          if (error instanceof VaultLockedError) {
+            setVaultLocked(true);
+            setProfile(null);
+            setLoadError(null);
+          } else {
+            setVaultLocked(false);
+            setLoadError(messageOf(error));
+          }
+        }
       },
     );
     const unwatch = watchProfile((remote) => {
-      if (!dirty.current) setProfile(remote);
+      if (!dirty.current) {
+        setVaultLocked(false);
+        setProfile(remote);
+      }
     });
     const flush = () => void saver.flush();
     const onHide = () => {
@@ -75,7 +96,11 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
       document.removeEventListener('visibilitychange', onHide);
       flush(); // do not lose the last keystrokes when the page unmounts
     };
-  }, [saver]);
+  }, [saver, reloadTick]);
+
+  const reload = useCallback(() => {
+    setReloadTick((n) => n + 1);
+  }, []);
 
   const commit = useCallback(
     async (next: Profile, options: { immediate?: boolean } = {}) => {
@@ -97,5 +122,5 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
     [saver],
   );
 
-  return { profile, loadError, status, saveError, issues, commit };
+  return { profile, loadError, vaultLocked, status, saveError, issues, reload, commit };
 }

@@ -4,8 +4,9 @@ import { browser } from 'wxt/browser';
 import type { FrameNeeds } from '../engine/fieldDeps';
 import type { FieldReport, FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
 import type { FileData } from '../drivers/types';
-import type { Resume } from '../schema';
+import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
+import type { WizardSessionState } from '../background/wizardSession';
 
 // ------------------------------------------------------------------ messages
 
@@ -17,10 +18,11 @@ export type BgToFrame =
   | { type: 'scan:total'; total: number }
   /** Ask what the frame could fill (no resume data attached); answered with FrameNeeds. */
   | { type: 'frame:needs' }
-  | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId }
-  | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId }
+  | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[] }
+  | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[] }
   | { type: 'frame:focus'; fieldId: string }
-  | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string };
+  | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string }
+  | { type: 'frame:captureFingerprint'; fieldId: string };
 
 /** FAB / side panel / options → background */
 export type UiToBg =
@@ -34,8 +36,11 @@ export type UiToBg =
   | { type: 'fill:cancelPreview'; tabId: number }
   /** FAB → background: re-send the current scan:total (the first push can arrive before the FAB listens). */
   | { type: 'scan:query' }
+  | { type: 'wizard:query'; tabId?: number }
+  | { type: 'wizard:clear'; tabId?: number }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
   | { type: 'field:apply'; tabId: number; frameId: number; fieldId: string; text?: string; optionLabel?: string }
+  | { type: 'field:captureFingerprint'; tabId: number; frameId: number; fieldId: string }
   /** Open the profile page; with a field key (and its source path), at that field's input. */
   | { type: 'ui:openOptions'; fieldKey?: string; source?: string }
   | { type: 'ui:openSidePanel' };
@@ -43,7 +48,8 @@ export type UiToBg =
 /** background → top frame and extension pages (runtime broadcast; no response expected) */
 export type BgBroadcast =
   | { type: 'report:updated'; tabId: number; report: FillReport }
-  | { type: 'preview:updated'; tabId: number; preview: FillPreview | null };
+  | { type: 'preview:updated'; tabId: number; preview: FillPreview | null }
+  | { type: 'wizard:updated'; tabId: number; session: WizardSessionState | null };
 
 export type Message = ContentToBg | BgToFrame | UiToBg | BgBroadcast;
 export type MessageType = Message['type'];
@@ -67,6 +73,9 @@ export interface ResponseMap {
   'frame:fill': FillReport;
   'field:apply': FieldReport;
   'frame:apply': FieldReport;
+  'frame:captureFingerprint': SiteRecipeFingerprint | null;
+  'field:captureFingerprint': SiteRecipeFingerprint | null;
+  'wizard:query': WizardSessionState | null;
 }
 
 export type ResponseFor<M extends { type: string }> = M['type'] extends keyof ResponseMap
@@ -84,6 +93,9 @@ const TYPE_TABLE = {
   'fill:commitPreview': true,
   'fill:cancelPreview': true,
   'scan:query': true,
+  'wizard:query': true,
+  'wizard:clear': true,
+  'wizard:updated': true,
   'frame:needs': true,
   'frame:preview': true,
   'frame:fill': true,
@@ -93,6 +105,8 @@ const TYPE_TABLE = {
   'frame:focus': true,
   'field:apply': true,
   'frame:apply': true,
+  'field:captureFingerprint': true,
+  'frame:captureFingerprint': true,
   'ui:openOptions': true,
   'ui:openSidePanel': true,
 } as const satisfies Record<MessageType, true>;

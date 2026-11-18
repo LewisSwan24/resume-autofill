@@ -63,6 +63,8 @@ export interface RecordFillInput {
   attention: number;
   skipped: number;
   resumeId?: string;
+  variantId?: string;
+  variantTitle?: string;
   locale?: string;
   now?: number;
 }
@@ -79,6 +81,8 @@ export function recordFillApplication(input: RecordFillInput): Promise<Applicati
     const entry: FillEntry = {
       at: now,
       ...(input.resumeId ? { resumeId: input.resumeId } : {}),
+      ...(input.variantId ? { variantId: input.variantId } : {}),
+      ...(input.variantTitle ? { variantTitle: cut(input.variantTitle, 120) } : {}),
       ...(input.locale ? { locale: input.locale } : {}),
       filled: Math.max(0, Math.floor(input.filled)),
       attention: Math.max(0, Math.floor(input.attention)),
@@ -96,6 +100,8 @@ export function recordFillApplication(input: RecordFillInput): Promise<Applicati
         url: input.url,
         host,
         ...(title ? { title } : {}),
+        ...(input.variantId ? { variantId: input.variantId } : {}),
+        ...(input.variantTitle ? { variantTitle: cut(input.variantTitle, 120) } : {}),
         company: existing.companyGuessed ? guessCompany(title, host) : existing.company,
         status: existing.status === 'wish' ? 'filling' : existing.status,
         statusAt: existing.status === 'wish' ? now : existing.statusAt,
@@ -114,6 +120,8 @@ export function recordFillApplication(input: RecordFillInput): Promise<Applicati
       url: input.url,
       host,
       ...(title ? { title } : {}),
+      ...(input.variantId ? { variantId: input.variantId } : {}),
+      ...(input.variantTitle ? { variantTitle: cut(input.variantTitle, 120) } : {}),
       company: guessCompany(title, host),
       companyGuessed: true,
       position: '',

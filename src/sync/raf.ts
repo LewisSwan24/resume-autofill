@@ -7,6 +7,7 @@ import { buildZip, isZipArchive, parseZip } from './zip';
 
 export const RAF_FORMAT = 'resume-autofill-raf';
 export const RAF_VERSION = 2 as const;
+export const RAF_V3_VERSION = 3 as const;
 export const RAF_PBKDF2_ITERATIONS = 600_000;
 export const RAF_MIN_ITERATIONS = 100_000;
 export const RAF_MAX_ITERATIONS = 5_000_000;
@@ -49,9 +50,15 @@ export interface SyncAttachmentMeta {
   sourceIds: string[];
 }
 
+export interface RafDeltaMeta {
+  sinceUpdatedAt?: number;
+  skippedHashes: string[];
+  totalAttachmentCount: number;
+}
+
 export interface RafManifest {
   format: typeof RAF_FORMAT;
-  version: typeof RAF_VERSION;
+  version: typeof RAF_VERSION | typeof RAF_V3_VERSION;
   mode: SyncMode;
   createdAt: number;
   kdf: {
@@ -65,6 +72,7 @@ export interface RafManifest {
     size: number;
   };
   attachments: SyncAttachmentMeta[];
+  delta?: RafDeltaMeta;
 }
 
 const ManifestSchema = z.object({
@@ -92,6 +100,13 @@ const ManifestSchema = z.object({
       sourceIds: z.array(z.string().min(1)).min(1),
     }),
   ),
+  delta: z
+    .object({
+      sinceUpdatedAt: z.number().int().nonnegative().optional(),
+      skippedHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(500),
+      totalAttachmentCount: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 export interface UnlockedAttachment {
@@ -103,11 +118,12 @@ export interface UnlockedAttachment {
 }
 
 export interface UnlockedSyncPayload {
-  format: 'raf-v2' | 'v1-encrypted' | 'plain-json';
+  format: 'raf-v3' | 'raf-v2' | 'v1-encrypted' | 'plain-json';
   mode: SyncMode;
   profile: Profile;
   tracker: ApplicationRecord[];
   attachments: UnlockedAttachment[];
+  skippedHashes?: string[];
 }
 
 const enc = new TextEncoder();
@@ -202,18 +218,30 @@ export interface BuildRafInput {
   password: string;
   now?: number;
   iterations?: number;
+  /** Target container version: v3 supports incremental attachment skipping via `knownAttachmentHashes`. */
+  version?: 2 | 3;
+  knownAttachmentHashes?: readonly string[];
+  sinceUpdatedAt?: number;
 }
 
-/** Package profile, tracker records, and optional SHA-256 deduped attachments into an encrypted `.raf` ZIP archive. */
+/** Package profile, tracker records, and optional SHA-256 deduped (or v3 delta-skipped) attachments into `.raf`. */
 export async function buildRafArchive(input: BuildRafInput): Promise<Uint8Array<ArrayBuffer>> {
   const iterations = input.iterations ?? RAF_PBKDF2_ITERATIONS;
   const now = input.now ?? Date.now();
+  const isDelta = input.version === 3 || input.knownAttachmentHashes !== undefined || input.sinceUpdatedAt !== undefined;
+  const targetVersion = isDelta ? RAF_V3_VERSION : RAF_VERSION;
   const salt = randomBytes(16);
   const key = await deriveAesKey(input.password, salt, iterations);
+
+  const resumesForPayload =
+    isDelta && typeof input.sinceUpdatedAt === 'number'
+      ? input.profile.resumes.filter((r) => r.updatedAt > input.sinceUpdatedAt!)
+      : input.profile.resumes;
 
   const trackerRecords = [...(input.tracker ?? [])];
   const corePayload = {
     ...input.profile,
+    resumes: resumesForPayload,
     ...(trackerRecords.length > 0
       ? {
           mobileTracker: {
@@ -225,10 +253,13 @@ export async function buildRafArchive(input: BuildRafInput): Promise<Uint8Array<
       : {}),
   };
   const coreBytes = own(enc.encode(JSON.stringify(corePayload)));
-  const coreEncrypted = await encryptChunk(key, coreBytes, `${RAF_FORMAT}/${RAF_VERSION}/core.enc`);
+  const coreEncrypted = await encryptChunk(key, coreBytes, `${RAF_FORMAT}/${targetVersion}/core.enc`);
 
   const zipEntries: { name: string; data: Uint8Array }[] = [{ name: 'core.enc', data: coreEncrypted.cipher }];
   const attachmentMetas: SyncAttachmentMeta[] = [];
+  const knownSet = new Set(input.knownAttachmentHashes ?? []);
+  const skippedHashes: string[] = [];
+  let totalAttachmentCount = 0;
 
   if (input.mode === 'full' && input.attachments && input.attachments.length > 0) {
     // Deduplicate identical attachment payloads by SHA-256 and remember every referenced sourceId.
@@ -252,8 +283,13 @@ export async function buildRafArchive(input: BuildRafInput): Promise<Uint8Array<
       }
     }
 
+    totalAttachmentCount = byHash.size;
     for (const [hash, { item, sourceIds }] of byHash.entries()) {
-      const aad = `${RAF_FORMAT}/${RAF_VERSION}/attachments/${hash}`;
+      if (isDelta && knownSet.has(hash)) {
+        skippedHashes.push(hash);
+        continue;
+      }
+      const aad = `${RAF_FORMAT}/${targetVersion}/attachments/${hash}`;
       const encrypted = await encryptChunk(key, item.bytes, aad);
       zipEntries.push({ name: `attachments/${hash}.enc`, data: encrypted.cipher });
       attachmentMetas.push({
@@ -269,7 +305,7 @@ export async function buildRafArchive(input: BuildRafInput): Promise<Uint8Array<
 
   const manifest: RafManifest = {
     format: RAF_FORMAT,
-    version: RAF_VERSION,
+    version: targetVersion,
     mode: input.mode,
     createdAt: now,
     kdf: {
@@ -283,6 +319,15 @@ export async function buildRafArchive(input: BuildRafInput): Promise<Uint8Array<
       size: coreBytes.byteLength,
     },
     attachments: attachmentMetas,
+    ...(isDelta
+      ? {
+          delta: {
+            ...(typeof input.sinceUpdatedAt === 'number' ? { sinceUpdatedAt: input.sinceUpdatedAt } : {}),
+            skippedHashes,
+            totalAttachmentCount,
+          },
+        }
+      : {}),
   };
 
   return buildZip([{ name: 'manifest.json', data: own(enc.encode(JSON.stringify(manifest, null, 2))) }, ...zipEntries]);
@@ -308,7 +353,7 @@ export function extractTrackerFromParsed(raw: unknown): ApplicationRecord[] {
 
 /** Inspect an incoming sync archive without requiring a password yet. */
 export function inspectSyncArchive(bytes: Uint8Array):
-  | { kind: 'raf-v2'; manifest: RafManifest }
+  | { kind: 'raf-v2' | 'raf-v3'; manifest: RafManifest }
   | { kind: 'v1-encrypted'; envelopeText: string }
   | { kind: 'plain-json'; text: string }
   | { kind: 'invalid' } {
@@ -319,8 +364,13 @@ export function inspectSyncArchive(bytes: Uint8Array):
       if (!manifestRaw || !entries.has('core.enc')) return { kind: 'invalid' };
       const parsed = ManifestSchema.safeParse(JSON.parse(dec.decode(manifestRaw)));
       if (!parsed.success) return { kind: 'invalid' };
-      if (parsed.data.version !== RAF_VERSION) return { kind: 'invalid' };
-      return { kind: 'raf-v2', manifest: parsed.data as RafManifest };
+      if (parsed.data.version !== RAF_VERSION && parsed.data.version !== RAF_V3_VERSION) {
+        return { kind: 'invalid' };
+      }
+      return {
+        kind: parsed.data.version === RAF_V3_VERSION ? 'raf-v3' : 'raf-v2',
+        manifest: parsed.data as RafManifest,
+      };
     } catch {
       return { kind: 'invalid' };
     }
@@ -406,13 +456,14 @@ export async function unlockSyncArchive(bytes: Uint8Array, password?: string): P
   if (!password) throw new RafError('wrong_password');
   const entries = parseZip(bytes);
   const { manifest } = inspected;
+  const ver = manifest.version;
   const salt = fromBase64(manifest.kdf.salt);
   if (!salt) throw new RafError('bad_archive', 'Invalid KDF salt');
 
   const key = await deriveAesKey(password, salt, manifest.kdf.iterations);
   const coreCipher = entries.get('core.enc');
   if (!coreCipher) throw new RafError('bad_archive', 'Missing core.enc');
-  const corePlain = await decryptChunk(key, coreCipher, manifest.core.iv, `${RAF_FORMAT}/${RAF_VERSION}/core.enc`);
+  const corePlain = await decryptChunk(key, coreCipher, manifest.core.iv, `${RAF_FORMAT}/${ver}/core.enc`);
 
   let rawJson: unknown;
   let profile: Profile;
@@ -428,7 +479,7 @@ export async function unlockSyncArchive(bytes: Uint8Array, password?: string): P
   for (const meta of manifest.attachments) {
     const chunk = entries.get(`attachments/${meta.hash}.enc`);
     if (!chunk) throw new RafError('bad_archive', `Missing attachment ${meta.hash}`);
-    const plainBytes = await decryptChunk(key, chunk, meta.iv, `${RAF_FORMAT}/${RAF_VERSION}/attachments/${meta.hash}`);
+    const plainBytes = await decryptChunk(key, chunk, meta.iv, `${RAF_FORMAT}/${ver}/attachments/${meta.hash}`);
     if ((await sha256Hex(plainBytes)) !== meta.hash) {
       throw new RafError('bad_archive', `Hash verification failed for ${meta.name}`);
     }
@@ -441,5 +492,12 @@ export async function unlockSyncArchive(bytes: Uint8Array, password?: string): P
     });
   }
 
-  return { format: 'raf-v2', mode: manifest.mode, profile, tracker, attachments };
+  return {
+    format: ver === RAF_V3_VERSION ? 'raf-v3' : 'raf-v2',
+    mode: manifest.mode,
+    profile,
+    tracker,
+    attachments,
+    ...(manifest.delta ? { skippedHashes: manifest.delta.skippedHashes } : {}),
+  };
 }

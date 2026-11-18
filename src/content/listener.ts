@@ -60,6 +60,14 @@ export function createContentListener(handlers: FrameHandlers): ContentListener 
           .then(sendResponse, () => sendResponse(null));
         return true;
       }
+      case 'frame:inspectorStart': {
+        handlers.inspectorStart?.();
+        return false;
+      }
+      case 'frame:inspectorStop': {
+        handlers.inspectorStop?.();
+        return false;
+      }
       case 'frame:apply': {
         if (typeof message.fieldId !== 'string') return false;
         const request: { fieldId: string; text?: string; optionLabel?: string } = { fieldId: message.fieldId };

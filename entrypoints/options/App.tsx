@@ -18,6 +18,7 @@ import {
   type ArrayModuleName,
   type AttachmentSlot,
   type ModuleName,
+  type ProfileTarget,
 } from '../../src/editor';
 import { resolveLanguage, setLanguage, useT, type MessageKey } from '../../src/i18n';
 import type { Locale, Profile, Resume } from '../../src/schema';
@@ -37,6 +38,7 @@ import { DataPanel, SettingsPanel } from './SidePanels';
 import { TailorPanel } from './TailorPanel';
 import { TemplatesPanel } from './TemplatesPanel';
 import { TrackerPanel } from './TrackerPanel';
+import { AuditCard } from './AuditCard';
 import { VaultPanel } from './VaultPanel';
 import { useProfileEditor, type SaveStatus } from './useProfileEditor';
 import { findJumpControl, focusAndMark, useFocusRequest } from './useFocusRequest';
@@ -148,16 +150,19 @@ function Options({ autosaveDelayMs }: AppProps) {
   // A jump request from the side panel: one state change per render until the input is on screen, then focus it.
   // The resume shown is the active one, the one that filled the form.
   const { target: jumpTarget, done: jumpDone } = jump;
+  const [auditJump, setAuditJump] = useState<ProfileTarget | null>(null);
+  const activeJump = jumpTarget ?? auditJump;
   useEffect(() => {
-    if (!jumpTarget || !profile) return;
-    const wantTab: TabKey = jumpTarget.module === 'attachments' ? 'attachments' : 'editor';
+    if (!activeJump || !profile) return;
+    const wantTab: TabKey = activeJump.module === 'attachments' ? 'attachments' : 'editor';
     if (tab !== wantTab) return setTab(wantTab);
-    if (profile.activeResumeId && resume?.id !== profile.activeResumeId) return setSelectedId(profile.activeResumeId);
-    if (wantTab === 'editor' && !open.has(jumpTarget.module)) return setOpen((prev) => new Set(prev).add(jumpTarget.module));
-    jumpDone();
-    const control = findJumpControl(jumpTarget);
+    if (!auditJump && profile.activeResumeId && resume?.id !== profile.activeResumeId) return setSelectedId(profile.activeResumeId);
+    if (wantTab === 'editor' && !open.has(activeJump.module)) return setOpen((prev) => new Set(prev).add(activeJump.module));
+    if (jumpTarget) jumpDone();
+    if (auditJump) setAuditJump(null);
+    const control = findJumpControl(activeJump);
     if (control) focusAndMark(control);
-  }, [jumpTarget, jumpDone, profile, tab, resume, open]);
+  }, [activeJump, jumpTarget, auditJump, jumpDone, profile, tab, resume, open]);
 
   // ---------------------------------------------------------------- resume-level actions
 
@@ -410,6 +415,7 @@ function Options({ autosaveDelayMs }: AppProps) {
           {linkedTitle !== undefined ? <span className="raf-caption">{t('options.linkedTo', { title: linkedTitle || '—' })}</span> : null}
         </div>
       </div>
+      <AuditCard resume={resume} onJump={(target) => setAuditJump(target)} />
       <Accordion>
         {EDITOR_MODULES.map((m) => {
           const count = (ARRAY_MODULES as readonly string[]).includes(m.module) ? (resume[m.module as ArrayModuleName] as unknown[]).length : 0;

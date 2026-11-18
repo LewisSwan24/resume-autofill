@@ -330,6 +330,11 @@ function SyncSheetBody({
               files: unlocked.attachments.length,
             })}
           </p>
+          {unlocked.format === 'raf-v3' ? (
+            <Notice tone="info">
+              {t('m.sync.deltaV3Info', { n: unlocked.skippedHashes?.length ?? 0 })}
+            </Notice>
+          ) : null}
           <button type="button" className="m-button m-button--primary m-button--wide" disabled={busy} onClick={() => void handleApply('merge')}>
             {t('m.sync.mergeBtn')}
           </button>

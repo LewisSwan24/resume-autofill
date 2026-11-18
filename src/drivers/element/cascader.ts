@@ -5,6 +5,7 @@ import { findDropdownNear, visibleOptions } from '../dropdown';
 import { simulateClick } from '../events';
 import type { DriverContext, FillIntent, FillResult, OptionMatch } from '../types';
 import { waitFor } from '../wait';
+import { waitCascaderLevelReady } from '../asyncCascader';
 import { closePopper, failed, isPopperLive, popperById, scrollIntoView, squash } from './shared';
 
 // ------------------------------------------------------------------ el-cascader
@@ -74,15 +75,14 @@ export async function fillCascader(control: Control, intent: FillIntent, ctx: Dr
     const clicked: string[] = [];
     for (let level = 0; level < path.length; level++) {
       if (ctx.signal?.aborted) return abort(failed('aborted'));
-      const menu = await waitFor(
-        () => {
-          const m = popper.querySelectorAll<HTMLElement>('.el-cascader-menu')[level];
-          return m && m.querySelector(CASCADER_NODE) ? m : null;
-        },
-        { timeout: left(), root: ctx.doc, signal: ctx.signal },
+      const ready = await waitCascaderLevelReady(
+        popper,
+        level,
+        { columnSelector: '.el-cascader-menu', itemSelector: CASCADER_NODE, loadingSelector: '.el-cascader-node__postfix .is-loading' },
+        { timeoutMs: left(), ...(ctx.signal ? { signal: ctx.signal } : {}) },
       );
-      if (!menu) return abort(failed(`column ${level + 1} did not render`));
-      const options = visibleOptions(menu, CASCADER_NODE).map((o) => ({
+      if (!ready) return abort(failed(`column ${level + 1} did not render`));
+      const options = visibleOptions(ready.column, CASCADER_NODE).map((o) => ({
         el: o.el,
         info: { label: squash(o.el.querySelector('.el-cascader-node__label')?.textContent ?? o.el.textContent) },
       }));

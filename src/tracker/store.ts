@@ -63,6 +63,8 @@ export interface RecordFillInput {
   attention: number;
   skipped: number;
   resumeId?: string;
+  variantId?: string;
+  variantTitle?: string;
   locale?: string;
   now?: number;
 }
@@ -79,6 +81,8 @@ export function recordFillApplication(input: RecordFillInput): Promise<Applicati
     const entry: FillEntry = {
       at: now,
       ...(input.resumeId ? { resumeId: input.resumeId } : {}),
+      ...(input.variantId ? { variantId: input.variantId } : {}),
+      ...(input.variantTitle ? { variantTitle: cut(input.variantTitle, 120) } : {}),
       ...(input.locale ? { locale: input.locale } : {}),
       filled: Math.max(0, Math.floor(input.filled)),
       attention: Math.max(0, Math.floor(input.attention)),
@@ -96,6 +100,8 @@ export function recordFillApplication(input: RecordFillInput): Promise<Applicati
         url: input.url,
         host,
         ...(title ? { title } : {}),
+        ...(input.variantId ? { variantId: input.variantId } : {}),
+        ...(input.variantTitle ? { variantTitle: cut(input.variantTitle, 120) } : {}),
         company: existing.companyGuessed ? guessCompany(title, host) : existing.company,
         status: existing.status === 'wish' ? 'filling' : existing.status,
         statusAt: existing.status === 'wish' ? now : existing.statusAt,
@@ -114,6 +120,8 @@ export function recordFillApplication(input: RecordFillInput): Promise<Applicati
       url: input.url,
       host,
       ...(title ? { title } : {}),
+      ...(input.variantId ? { variantId: input.variantId } : {}),
+      ...(input.variantTitle ? { variantTitle: cut(input.variantTitle, 120) } : {}),
       company: guessCompany(title, host),
       companyGuessed: true,
       position: '',
@@ -173,7 +181,7 @@ export function addManualApplication(input: {
 
 export function updateApplication(
   id: string,
-  patch: Partial<Pick<ApplicationRecord, 'company' | 'position' | 'notes' | 'status' | 'deadline'>>,
+  patch: Partial<Pick<ApplicationRecord, 'company' | 'position' | 'notes' | 'status' | 'outcome' | 'deadline'>>,
   now = Date.now(),
 ): Promise<ApplicationRecord[]> {
   return exclusive(async () => {
@@ -190,6 +198,9 @@ export function updateApplication(
       if (patch.status !== undefined && patch.status !== r.status) {
         updated.status = patch.status;
         updated.statusAt = now;
+      }
+      if (patch.outcome !== undefined && patch.outcome !== r.outcome) {
+        updated.outcome = patch.outcome;
       }
       if ('deadline' in patch) {
         if (patch.deadline) updated.deadline = patch.deadline;

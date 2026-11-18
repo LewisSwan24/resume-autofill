@@ -3,7 +3,15 @@
 // confidence bar, a human-readable source, candidate buttons, the manual edit and "Locate".
 // Right-hand badge: confidence for filled rows, the outlined status badge (icon + word) for every other outcome.
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { computeLocalFieldSuggestion, generateReviewDraft, type AiDraftOutcome } from '../../src/ai';
+import {
+  computeLocalFieldSuggestion,
+  generateReviewDraft,
+  generateStarInterviewPrep,
+  retrieveHybridMatches,
+  type AiDraftOutcome,
+  type HybridMatch,
+  type StarPrepResult,
+} from '../../src/ai';
 import type { FieldReport } from '../../src/engine/types';
 import { useT } from '../../src/i18n';
 import type { Resume, Settings } from '../../src/schema';
@@ -47,6 +55,9 @@ function FieldItem({
   const [aiBusy, setAiBusy] = useState(false);
   const [aiDraft, setAiDraft] = useState<AiDraftOutcome | null>(null);
   const [aiEmpty, setAiEmpty] = useState(false);
+  const [hybridHit, setHybridHit] = useState<HybridMatch | null>(null);
+  const [starBusy, setStarBusy] = useState(false);
+  const [starPrep, setStarPrep] = useState<StarPrepResult | null>(null);
   const [saveCustom, setSaveCustom] = useState(false);
 
   // Follow the field when the page reports a new value (e.g. after a refresh), but never while the user types.
@@ -62,6 +73,21 @@ function FieldItem({
   const localSuggestion = useMemo(() => {
     if (!supportsAiDraft || !resume) return null;
     return computeLocalFieldSuggestion(field.label, resume).matches[0] ?? null;
+  }, [supportsAiDraft, resume, field.label]);
+
+  useEffect(() => {
+    setHybridHit(null);
+    if (!supportsAiDraft || !resume) return;
+    let active = true;
+    void retrieveHybridMatches(field.label, resume, {
+      limit: 1,
+      useOllamaEmbeddings: false,
+    }).then((hits) => {
+      if (active && hits[0]) setHybridHit(hits[0]);
+    });
+    return () => {
+      active = false;
+    };
   }, [supportsAiDraft, resume, field.label]);
 
   const label = field.label || field.fieldKey || field.fieldId;
@@ -186,16 +212,22 @@ function FieldItem({
 
           {supportsAiDraft ? (
             <div className="raf-ai-box">
-              {localSuggestion ? (
+              {hybridHit || localSuggestion ? (
                 <div className="raf-ai-preview">
                   <span className="raf-help">
-                    {t('panel.ai.suggestion', { source: localSuggestion.sourceLabel })}
+                    {hybridHit
+                      ? t('panel.ai.hybridHint', {
+                          source: hybridHit.sourceLabel,
+                          bm25: hybridHit.bm25Rank ?? '—',
+                          vec: hybridHit.vectorRank ?? '—',
+                        })
+                      : t('panel.ai.suggestion', { source: localSuggestion!.sourceLabel })}
                   </span>
-                  <p className="raf-ai-text">{localSuggestion.text}</p>
+                  <p className="raf-ai-text">{hybridHit?.text ?? localSuggestion!.text}</p>
                   <button
                     type="button"
                     className="raf-btn raf-btn-small"
-                    onClick={() => setDraft(localSuggestion.text)}
+                    onClick={() => setDraft(hybridHit?.text ?? localSuggestion!.text)}
                   >
                     {t('panel.ai.useDraft')}
                   </button>
@@ -228,7 +260,48 @@ function FieldItem({
                   <Icon name="info-circle" size={14} />
                   <span>{aiBusy ? t('panel.ai.generating') : t('panel.ai.generate')}</span>
                 </button>
+                {resume && (resume.work.length > 0 || resume.projects.length > 0) ? (
+                  <button
+                    type="button"
+                    className="raf-btn raf-btn-small"
+                    disabled={starBusy}
+                    onClick={async () => {
+                      setStarBusy(true);
+                      try {
+                        const res = await generateStarInterviewPrep({
+                          resume,
+                          targetRole: resume.variantMeta?.targetRole || field.label,
+                          settings,
+                        });
+                        setStarPrep(res);
+                      } finally {
+                        setStarBusy(false);
+                      }
+                    }}
+                  >
+                    <span>{t('panel.star.button')}</span>
+                  </button>
+                ) : null}
               </div>
+
+              {starPrep ? (
+                <div className="raf-star-box">
+                  <span className="raf-help">{t('panel.star.title', { title: starPrep.entryTitle })}</span>
+                  {!starPrep.factCheck.ok ? (
+                    <span className="raf-help">
+                      {t('panel.star.factWarn', { metrics: starPrep.factCheck.inventedMetrics.join(', ') })}
+                    </span>
+                  ) : null}
+                  <pre className="raf-star-pre">{starPrep.formattedText}</pre>
+                  <button
+                    type="button"
+                    className="raf-btn raf-btn-small"
+                    onClick={() => setDraft(starPrep.formattedText)}
+                  >
+                    {t('panel.ai.useDraft')}
+                  </button>
+                </div>
+              ) : null}
 
               {aiDraft ? (
                 <div className="raf-ai-preview">

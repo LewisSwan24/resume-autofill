@@ -603,3 +603,33 @@
     transition: none;
   }
 }
+
+.raf-inspector-hud {
+  position: fixed;
+  pointer-events: none;
+  z-index: var(--raf-z-index);
+  box-sizing: border-box;
+  border: 2px dashed var(--raf-color-primary);
+  border-radius: var(--raf-radius-sm);
+  background: transparent;
+  box-shadow: var(--raf-shadow-host);
+}
+
+.raf-inspector-tag {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + var(--raf-space-1));
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px var(--raf-space-2);
+  border-radius: var(--raf-radius-xs);
+  background: var(--raf-color-primary);
+  color: var(--raf-color-primary-text);
+  font-family: var(--raf-font-sans);
+  font-size: var(--raf-font-size-xs);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+  box-shadow: var(--raf-shadow-host);
+}

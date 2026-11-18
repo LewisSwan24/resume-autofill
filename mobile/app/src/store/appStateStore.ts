@@ -36,10 +36,13 @@ function isRealDate(value: string): boolean {
 }
 
 export const ApplicationStatusSchema = z.enum(['wish', 'filling', 'submitted', 'interview', 'closed']);
+export const ApplicationOutcomeSchema = z.enum(['pending', 'offer', 'rejected', 'withdrawn']);
 export const DeadlineSchema = z.object({ date: z.string().regex(YMD).refine(isRealDate), time: z.string().regex(HHMM).optional() });
 export const FillEntrySchema = z.object({
   at: z.number().int().nonnegative(),
   resumeId: z.string().min(1).max(64).optional(),
+  variantId: z.string().min(1).max(64).optional(),
+  variantTitle: z.string().min(1).max(120).optional(),
   locale: z.string().max(16).optional(),
   filled: z.number().int().min(0).max(10_000),
   attention: z.number().int().min(0).max(10_000),
@@ -55,6 +58,9 @@ export const ApplicationRecordSchema = z.object({
   companyGuessed: z.boolean().default(true),
   position: z.string().max(80).default(''),
   status: ApplicationStatusSchema.default('wish'),
+  outcome: ApplicationOutcomeSchema.optional(),
+  variantId: z.string().min(1).max(64).optional(),
+  variantTitle: z.string().min(1).max(120).optional(),
   statusAt: z.number().int().nonnegative(),
   deadline: DeadlineSchema.optional(),
   remind: z.boolean().default(false),

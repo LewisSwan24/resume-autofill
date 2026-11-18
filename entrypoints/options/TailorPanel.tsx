@@ -4,8 +4,11 @@ import { addResume } from '../../src/editor';
 import { useT } from '../../src/i18n';
 import {
   BUILTIN_SITE_RECIPES,
+  diffRecipePacks,
   exportRecipesJson,
-  parseRecipesJson,
+  exportSignedRecipePack,
+  parseAndVerifyRecipePack,
+  type RecipePackDiff,
 } from '../../src/recipes';
 import { ResumeSchema, type Profile, type Resume } from '../../src/schema';
 import {
@@ -34,6 +37,10 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
   const [draftSummary, setDraftSummary] = useState('');
   const [rewriting, setRewriting] = useState(false);
   const [recipeError, setRecipeError] = useState<string | null>(null);
+  const [pendingDiff, setPendingDiff] = useState<{
+    diff: RecipePackDiff;
+    recipes: Awaited<ReturnType<typeof parseAndVerifyRecipePack>>['recipes'];
+  } | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   const customRecipes = profile.recipes ?? [];
@@ -93,19 +100,37 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const handleExportSignedRecipes = async () => {
+    const json = await exportSignedRecipePack([...customRecipes, ...BUILTIN_SITE_RECIPES]);
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resume-autofill-recipes-signed-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleImportRecipes = async (file: File | undefined) => {
     if (!file) return;
     setRecipeError(null);
+    setPendingDiff(null);
     try {
-      const parsed = parseRecipesJson(await file.text());
-      const byId = new Map(customRecipes.map((r) => [r.id, r]));
-      for (const rec of parsed) byId.set(rec.id, rec);
-      const next = { ...profile, recipes: Array.from(byId.values()) };
-      await onCommit(next, { immediate: true });
-      toast.push({ text: t('options.recipes.importDone', { n: parsed.length }) });
+      const parsed = await parseAndVerifyRecipePack(await file.text());
+      const diff = diffRecipePacks(customRecipes, parsed.recipes, parsed.verifiedDigest);
+      setPendingDiff({ diff, recipes: parsed.recipes });
     } catch (e) {
       setRecipeError(t('options.recipes.importError', { error: e instanceof Error ? e.message : String(e) }));
     }
+  };
+
+  const handleApplyRecipeDiff = async () => {
+    if (!pendingDiff) return;
+    const byId = new Map(customRecipes.map((r) => [r.id, r]));
+    for (const rec of pendingDiff.recipes) byId.set(rec.id, rec);
+    const next = { ...profile, recipes: Array.from(byId.values()) };
+    await onCommit(next, { immediate: true });
+    toast.push({ text: t('options.recipes.importDone', { n: pendingDiff.recipes.length }) });
+    setPendingDiff(null);
   };
 
   return (
@@ -204,6 +229,7 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
         {recipeError ? <Notice tone="danger">{recipeError}</Notice> : null}
         <div className="raf-row-actions">
           <Button onClick={handleExportRecipes}>{t('options.recipes.export')}</Button>
+          <Button onClick={() => void handleExportSignedRecipes()}>{t('options.recipes.exportSigned')}</Button>
           <input
             ref={importRef}
             type="file"
@@ -217,6 +243,23 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
           />
           <Button onClick={() => importRef.current?.click()}>{t('options.recipes.import')}</Button>
         </div>
+        {pendingDiff ? (
+          <div className="raf-sync-box" role="region" aria-label={t('options.recipes.title')}>
+            <Notice tone={pendingDiff.diff.verifiedDigest ? 'info' : 'danger'}>
+              {t(pendingDiff.diff.verifiedDigest ? 'options.recipes.signedVerified' : 'options.recipes.unsignedDiff', {
+                added: pendingDiff.diff.added.length,
+                updated: pendingDiff.diff.updated.length,
+                unchanged: pendingDiff.diff.unchangedCount,
+              })}
+            </Notice>
+            <div className="raf-row">
+              <Button variant="primary" onClick={() => void handleApplyRecipeDiff()}>
+                {t('options.recipes.applyDiff')}
+              </Button>
+              <Button onClick={() => setPendingDiff(null)}>{t('options.notNow')}</Button>
+            </div>
+          </div>
+        ) : null}
         {customRecipes.length > 0 ? (
           <ul>
             {customRecipes.map((r) => (

@@ -2,18 +2,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useT, type MessageKey } from '../../src/i18n';
 import {
+  APPLICATION_OUTCOMES,
   APPLICATION_STATUSES,
   addManualApplication,
+  computeTrackerAnalytics,
   deleteApplication,
   filterApplications,
   isHttpUrl,
   loadApplications,
   updateApplication,
+  type ApplicationOutcome,
   type ApplicationRecord,
   type ApplicationStatus,
 } from '../../src/tracker';
 import { Icon } from '../../src/ui/Icon';
-import { Button, EmptyState, Field, IconButton, Input, Notice, SelectInput, Textarea } from './ui/controls';
+import { Badge, Button, EmptyState, Field, IconButton, Input, Notice, SelectInput, Textarea } from './ui/controls';
 import { useToast } from './ui/Toast';
 
 const STATUS_KEY: Record<ApplicationStatus, MessageKey> = {
@@ -23,6 +26,21 @@ const STATUS_KEY: Record<ApplicationStatus, MessageKey> = {
   interview: 'options.tracker.status.interview',
   closed: 'options.tracker.status.closed',
 };
+
+const OUTCOME_KEY: Record<ApplicationOutcome, MessageKey> = {
+  pending: 'options.tracker.outcome.pending',
+  offer: 'options.tracker.outcome.offer',
+  rejected: 'options.tracker.outcome.rejected',
+  withdrawn: 'options.tracker.outcome.withdrawn',
+};
+
+const FUNNEL_STAGE_KEY = {
+  wish: 'options.tracker.funnel.wish',
+  filling: 'options.tracker.funnel.filling',
+  submitted: 'options.tracker.funnel.submitted',
+  interview: 'options.tracker.funnel.interview',
+  offer: 'options.tracker.funnel.offer',
+} as const satisfies Record<string, MessageKey>;
 
 export function TrackerPanel() {
   const t = useT();
@@ -52,6 +70,7 @@ export function TrackerPanel() {
   }, []);
 
   const filtered = useMemo(() => filterApplications(records, filter, query), [records, filter, query]);
+  const analytics = useMemo(() => computeTrackerAnalytics(records), [records]);
 
   const handleAdd = async () => {
     const trimmed = newUrl.trim();
@@ -77,7 +96,7 @@ export function TrackerPanel() {
 
   const patch = async (
     id: string,
-    changes: Partial<Pick<ApplicationRecord, 'company' | 'position' | 'notes' | 'status' | 'deadline'>>,
+    changes: Partial<Pick<ApplicationRecord, 'company' | 'position' | 'notes' | 'status' | 'outcome' | 'deadline'>>,
   ) => {
     const next = await updateApplication(id, changes);
     setRecords(next);
@@ -92,6 +111,75 @@ export function TrackerPanel() {
   return (
     <div className="raf-form-stack">
       <Notice>{t('options.tracker.lead')}</Notice>
+
+      {records.length > 0 ? (
+        <section className="raf-analytics-card" aria-label={t('options.tracker.analyticsTitle')}>
+          <div className="raf-analytics-header">
+            <strong>{t('options.tracker.analyticsTitle')}</strong>
+            <Badge>
+              {t('options.tracker.analyticsSummary', {
+                total: analytics.total,
+                interviewRate: analytics.interviewRate,
+                offerRate: analytics.offerRate,
+              })}
+            </Badge>
+          </div>
+
+          <svg
+            className="raf-funnel-svg"
+            viewBox="0 0 420 125"
+            role="img"
+            aria-label={t('options.tracker.analyticsTitle')}
+          >
+            {analytics.funnel.map((step, i) => {
+              const y = i * 24 + 6;
+              const barWidth = Math.max(0, Math.round((step.percentOfTotal / 100) * 240));
+              return (
+                <g key={step.stage} transform={`translate(0, ${y})`}>
+                  <text className="raf-funnel-label" x={0} y={13}>
+                    {t(FUNNEL_STAGE_KEY[step.stage])}
+                  </text>
+                  <rect className="raf-funnel-track" x={76} y={2} width={240} height={14} rx={4} />
+                  {barWidth > 0 ? <rect className="raf-funnel-bar" x={76} y={2} width={barWidth} height={14} rx={4} /> : null}
+                  <text className="raf-funnel-value" x={324} y={13}>
+                    {step.count} ({step.percentOfTotal}%)
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+
+          {analytics.byVariant.length > 0 ? (
+            <div className="raf-form-stack">
+              <strong className="raf-caption">{t('options.tracker.variantTableTitle')}</strong>
+              <ul className="raf-variant-list">
+                {analytics.byVariant.map((v) => (
+                  <li key={v.variantKey} className="raf-caption">
+                    {t('options.tracker.variantRow', {
+                      label: v.label,
+                      apps: v.applications,
+                      interviewRate: v.interviewRate,
+                      offerRate: v.offerRate,
+                    })}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {analytics.staleRecords.length > 0 ? (
+            <Notice tone="info">
+              {t('options.tracker.staleAlert', {
+                n: analytics.staleRecords.length,
+                list: analytics.staleRecords
+                  .slice(0, 3)
+                  .map((r) => r.company || r.id)
+                  .join(', '),
+              })}
+            </Notice>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="raf-tracker-bar">
         <Input
@@ -186,6 +274,7 @@ export function TrackerPanel() {
                     {rec.host}
                     {rec.history.length > 0 ? ` · ${t('options.tracker.historyCount', { n: rec.history.length })}` : ''}
                   </span>
+                  {rec.variantTitle ? <Badge>{t('options.tracker.variantTag', { title: rec.variantTitle })}</Badge> : null}
                 </div>
                 <div className="raf-row">
                   <a
@@ -240,6 +329,21 @@ export function TrackerPanel() {
                       {APPLICATION_STATUSES.map((st) => (
                         <option key={st} value={st}>
                           {t(STATUS_KEY[st])}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  )}
+                </Field>
+                <Field label={t('options.tracker.outcome')}>
+                  {(ctrl) => (
+                    <SelectInput
+                      {...ctrl}
+                      value={rec.outcome ?? 'pending'}
+                      onChange={(e) => void patch(rec.id, { outcome: e.target.value as ApplicationOutcome })}
+                    >
+                      {APPLICATION_OUTCOMES.map((out) => (
+                        <option key={out} value={out}>
+                          {t(OUTCOME_KEY[out])}
                         </option>
                       ))}
                     </SelectInput>

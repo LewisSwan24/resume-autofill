@@ -43,6 +43,12 @@ export function startContentScript(doc: Document = document): () => void {
     idFor,
     discardOwnWrites: () => watcher.discardOwnWrites(),
     onIdle: () => watcher.schedule(),
+    onInspectorHover: (target) => {
+      void sendToBackground({ type: 'inspector:hover', target }).catch(() => undefined);
+    },
+    onInspectorPick: (target) => {
+      void sendToBackground({ type: 'inspector:picked', url: doc.location?.href ?? '', target }).catch(() => undefined);
+    },
   });
 
   const listener = createContentListener(handlers);

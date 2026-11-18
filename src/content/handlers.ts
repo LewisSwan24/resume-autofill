@@ -7,7 +7,6 @@ import { applyHighlights, clearHighlights, focusField } from '../fill/highlight'
 import { highlightRun, runFill, runPreview, type FillPayload, type FillRun } from '../fill/runFill';
 import { collectEvidence } from '../engine/evidence';
 import { captureFieldFingerprint } from '../recipes';
-import { sendToBackground } from '../messaging';
 import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { FrameNeeds } from '../engine/fieldDeps';
@@ -61,22 +60,10 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
   const inspector = createFieldInspector({
     doc: deps.doc,
     onHover: (target) => {
-      if (deps.onInspectorHover) {
-        deps.onInspectorHover(target);
-      } else {
-        void sendToBackground({ type: 'inspector:hover', target }).catch(() => undefined);
-      }
+      deps.onInspectorHover?.(target);
     },
     onPick: (target) => {
-      if (deps.onInspectorPick) {
-        deps.onInspectorPick(target);
-      } else {
-        void sendToBackground({
-          type: 'inspector:picked',
-          url: deps.doc.location?.href ?? '',
-          target,
-        }).catch(() => undefined);
-      }
+      deps.onInspectorPick?.(target);
     },
   });
 

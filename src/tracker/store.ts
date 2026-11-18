@@ -181,7 +181,7 @@ export function addManualApplication(input: {
 
 export function updateApplication(
   id: string,
-  patch: Partial<Pick<ApplicationRecord, 'company' | 'position' | 'notes' | 'status' | 'deadline'>>,
+  patch: Partial<Pick<ApplicationRecord, 'company' | 'position' | 'notes' | 'status' | 'outcome' | 'deadline'>>,
   now = Date.now(),
 ): Promise<ApplicationRecord[]> {
   return exclusive(async () => {
@@ -198,6 +198,9 @@ export function updateApplication(
       if (patch.status !== undefined && patch.status !== r.status) {
         updated.status = patch.status;
         updated.statusAt = now;
+      }
+      if (patch.outcome !== undefined && patch.outcome !== r.outcome) {
+        updated.outcome = patch.outcome;
       }
       if ('deadline' in patch) {
         if (patch.deadline) updated.deadline = patch.deadline;

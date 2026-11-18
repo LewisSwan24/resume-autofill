@@ -14,6 +14,7 @@ import {
   inspectSyncArchive,
   planSyncMerge,
   renderQrSvg,
+  sha256Hex,
   unlockSyncArchive,
   type SyncAttachmentInput,
   type SyncMode,
@@ -61,6 +62,8 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
   const toast = useToast();
 
   const [mode, setMode] = useState<SyncMode>('full');
+  const [deltaMode, setDeltaMode] = useState(false);
+  const [knownHashesInput, setKnownHashesInput] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -113,13 +116,27 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
     setError(null);
     const tracker = await loadApplications().catch(() => []);
     const attachments = mode === 'full' ? await readAllSyncFiles() : [];
+    const knownHashes = deltaMode
+      ? knownHashesInput
+          .split(/[\s,;]+/)
+          .map((s) => s.trim().toLowerCase())
+          .filter((s) => s.length >= 8)
+      : undefined;
     return buildRafArchive({
       profile,
       tracker,
       attachments,
       mode,
       password: passphrase,
+      ...(deltaMode ? { version: 3 as const, knownAttachmentHashes: knownHashes ?? [] } : {}),
     });
+  };
+
+  const prefillLocalAttachmentHashes = async () => {
+    const files = await readAllSyncFiles();
+    const hashes = await Promise.all(files.map((f) => sha256Hex(f.bytes)));
+    setDeltaMode(true);
+    setKnownHashesInput(hashes.join('\n'));
   };
 
   const handleExportRaf = async () => {
@@ -343,6 +360,30 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
         </Field>
       </div>
 
+      <div className="raf-form-stack">
+        <label className="raf-check">
+          <input type="checkbox" checked={deltaMode} onChange={(e) => setDeltaMode(e.target.checked)} />
+          <span>{t('options.sync.deltaToggle')}</span>
+        </label>
+        {deltaMode ? (
+          <div className="raf-form-stack">
+            <Field label={t('options.sync.knownHashesLabel')}>
+              {(ctrl) => (
+                <Textarea
+                  {...ctrl}
+                  rows={2}
+                  value={knownHashesInput}
+                  onChange={(e) => setKnownHashesInput(e.target.value)}
+                />
+              )}
+            </Field>
+            <div className="raf-row">
+              <Button onClick={() => void prefillLocalAttachmentHashes()}>{t('options.sync.fillLocalHashes')}</Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       <div className="raf-row">
         <Button icon="download" variant="primary" disabled={!profile || busy} onClick={() => void handleExportRaf()}>
           {t('options.sync.exportRaf')}
@@ -401,6 +442,11 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
               ? ` (+${mergePlan.trackerNewOrUpdated})`
               : ''}
           </p>
+          {unlocked.format === 'raf-v3' ? (
+            <Notice tone="info">
+              {t('options.sync.deltaBadge', { n: unlocked.skippedHashes?.length ?? 0 })}
+            </Notice>
+          ) : null}
           <ul className="raf-sync-diff-list">
             {mergePlan.resumes.map((item) => {
               const checked = adoptIds.has(item.resume.id);

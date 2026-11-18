@@ -661,3 +661,73 @@ body {
   border-radius: var(--raf-radius-sm);
   background: var(--raf-color-surface);
 }
+.raf-analytics-card,
+.raf-audit-card {
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  background: var(--raf-color-surface);
+  padding: var(--raf-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-3);
+}
+.raf-analytics-header,
+.raf-audit-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--raf-space-2);
+}
+.raf-funnel-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.raf-funnel-bar {
+  fill: var(--raf-color-primary);
+}
+.raf-funnel-track {
+  fill: var(--raf-color-surface-hover);
+}
+.raf-funnel-label {
+  fill: var(--raf-color-text);
+  font-size: var(--raf-font-size-xs);
+}
+.raf-funnel-value {
+  fill: var(--raf-color-text-muted);
+  font-size: var(--raf-font-size-xs);
+}
+.raf-audit-dims {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--raf-space-2);
+}
+.raf-audit-dim {
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-sm);
+  padding: var(--raf-space-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--raf-space-2);
+}
+.raf-audit-findings,
+.raf-variant-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+}
+.raf-audit-finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-2);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-color-bg);
+}

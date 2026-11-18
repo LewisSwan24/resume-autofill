@@ -1,6 +1,7 @@
 // The 简历 tab: the profile page (简历资料). Pick a resume, pick a module, edit it. Two screens, the module list and
 // one module; which module is open lives in the app's navigation state, so it survives a trip to another tab.
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { auditResume } from '../../../src/audit';
 import {
   MODULES,
   getByPath,
@@ -72,6 +73,10 @@ export function ResumeTab({
 }: ResumeTabProps) {
   const t = useMT();
   const { profile, edit } = editor;
+  const index = profile ? profile.resumes.findIndex((r) => r.id === profile.activeResumeId) : -1;
+  const resume = index >= 0 ? profile!.resumes[index] : undefined;
+  const audit = useMemo(() => (resume ? auditResume(resume) : null), [resume]);
+  const topFinding = audit?.findings.find((f) => f.target) ?? null;
 
   if (editor.loadError) {
     return (
@@ -81,10 +86,8 @@ export function ResumeTab({
     );
   }
   if (!profile) return null;
-  const index = profile.resumes.findIndex((r) => r.id === profile.activeResumeId);
-  const resume = profile.resumes[index];
 
-  if (!resume) {
+  if (!resume || !audit) {
     return (
       <ListHeader title={t('m.title')}>
         <div className="m-card m-card--padded m-start">
@@ -163,6 +166,25 @@ export function ResumeTab({
     <ListHeader title={t('m.title')}>
       <ResumeSwitcher profile={profile} edit={edit} showToast={showToast} onImportResume={onImportResume} />
       <SaveStatusLine status={editor.status} />
+      <section className="m-card m-card--padded" aria-label={t('m.audit.title')}>
+        <div className="m-row__text">
+          <span className="m-row__name">{t('m.audit.title')}</span>
+          <span className="m-row__caption">
+            {t('m.audit.score', { score: audit.overallScore, grade: audit.grade })}
+            {audit.findings.length === 0 ? ` · ${t('m.audit.clean')}` : ''}
+          </span>
+        </div>
+        {topFinding?.target ? (
+          <button
+            type="button"
+            className="m-button"
+            style={{ marginTop: 8 }}
+            onClick={() => onModule(topFinding.target!.module)}
+          >
+            <span>{t(topFinding.messageKey, topFinding.messageParams)}</span>
+          </button>
+        ) : null}
+      </section>
       <ul className="m-card m-modules" aria-label={t('m.modules')}>
         {PROFILE_MODULES.map((m) => (
           <li key={m.module}>

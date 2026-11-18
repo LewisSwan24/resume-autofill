@@ -20,9 +20,10 @@ import { usePreview } from './usePreview';
 import { useProfile } from './useProfile';
 import { useReport } from './useReport';
 import { browser } from 'wxt/browser';
-import { materializeResume, type SiteRecipe } from '../../src/schema';
+import type { InspectorTargetInfo } from '../../src/content/inspector';
+import { FIELD_KEYS, materializeResume, type SiteRecipe, type SiteRecipeFingerprint } from '../../src/schema';
 import { wizardKey, type WizardSessionState } from '../../src/background/wizardSession';
-import { sendToBackground } from '../../src/messaging';
+import { isFromExtension, isValidMessage, sendToBackground } from '../../src/messaging';
 import { isHttpUrl, recordFillApplication } from '../../src/tracker';
 import '../../src/ui/fonts.css';
 import '../../src/ui/theme.css';
@@ -49,6 +50,9 @@ export default function App() {
   const { focus, apply } = useFieldActions(tabId, patchField);
   const [selected, setSelected] = useState<ReadonlySet<StatusGroupId>>(new Set());
   const [switchFailed, setSwitchFailed] = useState(false);
+  const [inspectorActive, setInspectorActive] = useState(false);
+  const [pickedState, setPickedState] = useState<{ url: string; target: InspectorTargetInfo } | null>(null);
+  const [pickedFieldKey, setPickedFieldKey] = useState<string>(FIELD_KEYS[0]?.key ?? 'basics.familyName');
   const [previewBusy, setPreviewBusy] = useState(false);
   const [wizard, setWizard] = useState<WizardSessionState | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
@@ -119,35 +123,27 @@ export default function App() {
       .catch(() => undefined);
   }, [tabId, report?.finishedAt]);
 
-  const recordFieldRecipe = useCallback(
-    async (field: FieldReport, answerText: string) => {
-      if (tabId === null || field.frameId === undefined || !report?.url) return;
+  const persistLearnedSiteRule = useCallback(
+    async (
+      url: string,
+      opts: { fingerprint: SiteRecipeFingerprint; fieldKey?: string | null; constantValue?: string },
+    ): Promise<string | null> => {
       let host = '';
       try {
-        host = new URL(report.url).hostname;
+        host = new URL(url).hostname;
       } catch {
-        return;
+        return null;
       }
-      if (!host) return;
-      const fp = await sendToBackground({
-        type: 'field:captureFingerprint',
-        tabId,
-        frameId: field.frameId,
-        fieldId: field.fieldId,
-      }).catch(() => null);
-      if (!fp) {
-        setToast({ id: Date.now(), text: t('panel.recipe.failed') });
-        return;
-      }
+      if (!host) return null;
       const current = await loadProfile();
       const recipeId = `user-${host.replace(/[^a-z0-9.-]/gi, '_')}`;
       const existing = current.recipes ?? [];
       const idx = existing.findIndex((r) => r.id === recipeId);
       const newRule = {
         id: `rule-${Date.now()}`,
-        fingerprint: fp,
-        ...(field.fieldKey ? { fieldKey: field.fieldKey } : {}),
-        ...(answerText.trim() ? { constantValue: answerText.trim() } : {}),
+        fingerprint: opts.fingerprint,
+        ...(opts.fieldKey ? { fieldKey: opts.fieldKey } : {}),
+        ...(opts.constantValue?.trim() ? { constantValue: opts.constantValue.trim() } : {}),
         transformPreset: 'trim' as const,
       };
       const baseRecipe: SiteRecipe =
@@ -168,10 +164,78 @@ export default function App() {
       };
       const nextRecipes = idx >= 0 ? existing.map((r, i) => (i === idx ? updatedRecipe : r)) : [...existing, updatedRecipe];
       await saveProfile({ ...current, recipes: nextRecipes });
-      setToast({ id: Date.now(), text: t('panel.recipe.recorded') });
+      return host;
     },
-    [tabId, report?.url, t],
+    [],
   );
+
+  useEffect(() => {
+    setInspectorActive(false);
+    setPickedState(null);
+    if (tabId === null) return;
+    const pickKey = `inspectorPick:${tabId}`;
+    browser.storage.session
+      .get(pickKey)
+      .then((stored) => {
+        const val = stored[pickKey] as { url?: string; target?: InspectorTargetInfo } | undefined;
+        if (val?.target && typeof val.url === 'string') {
+          setPickedState({ url: val.url, target: val.target });
+          setPickedFieldKey(val.target.fieldKey ?? FIELD_KEYS[0]?.key ?? 'basics.familyName');
+        }
+      })
+      .catch(() => undefined);
+
+    const onMessage = (message: unknown, sender: { id?: string; tab?: unknown }) => {
+      if (!isFromExtension(sender) || sender.tab != null || !isValidMessage(message)) return;
+      if (message.type === 'inspector:picked' && 'tabId' in message && message.tabId === tabId) {
+        setInspectorActive(false);
+        setPickedState({ url: message.url, target: message.target });
+        setPickedFieldKey(message.target.fieldKey ?? FIELD_KEYS[0]?.key ?? 'basics.familyName');
+      }
+    };
+    browser.runtime.onMessage.addListener(onMessage);
+    return () => {
+      browser.runtime.onMessage.removeListener(onMessage);
+    };
+  }, [tabId]);
+
+  const recordFieldRecipe = useCallback(
+    async (field: FieldReport, answerText: string) => {
+      if (tabId === null || field.frameId === undefined || !report?.url) return;
+      const fp = await sendToBackground({
+        type: 'field:captureFingerprint',
+        tabId,
+        frameId: field.frameId,
+        fieldId: field.fieldId,
+      }).catch(() => null);
+      if (!fp) {
+        setToast({ id: Date.now(), text: t('panel.recipe.failed') });
+        return;
+      }
+      const savedHost = await persistLearnedSiteRule(report.url, {
+        fingerprint: fp,
+        fieldKey: field.fieldKey,
+        constantValue: answerText,
+      });
+      if (savedHost) setToast({ id: Date.now(), text: t('panel.recipe.recorded') });
+    },
+    [tabId, report?.url, persistLearnedSiteRule, t],
+  );
+
+  const savePickedInspectorRule = useCallback(async () => {
+    if (!pickedState) return;
+    const host = await persistLearnedSiteRule(pickedState.url, {
+      fingerprint: pickedState.target.fingerprint,
+      fieldKey: pickedFieldKey,
+    });
+    if (host) {
+      setToast({ id: Date.now(), text: t('panel.inspector.saved', { host, fieldKey: pickedFieldKey }) });
+      if (tabId !== null) {
+        void browser.storage.session.remove(`inspectorPick:${tabId}`).catch(() => undefined);
+      }
+      setPickedState(null);
+    }
+  }, [pickedState, pickedFieldKey, persistLearnedSiteRule, tabId, t]);
 
   const saveCustomAnswer = useCallback(async (question: string, answer: string) => {
     const q = question.trim();
@@ -195,13 +259,15 @@ export default function App() {
 
   const saveReportToTracker = useCallback(async () => {
     if (!report || !isHttpUrl(report.url)) return;
+    const activeResume = profile?.resumes.find((r) => r.id === profile.activeResumeId);
     await recordFillApplication({
       url: report.url,
       filled: counts.filled,
       attention: counts.review + counts.failed,
       skipped: Math.max(0, fields.length - counts.filled - counts.review - counts.failed),
       ...(profile?.activeResumeId ? { resumeId: profile.activeResumeId } : {}),
-      locale: profile?.resumes.find((r) => r.id === profile.activeResumeId)?.locale,
+      ...(activeResume ? { variantId: activeResume.id, variantTitle: activeResume.title } : {}),
+      locale: activeResume?.locale,
     });
     setToast({ id: Date.now(), text: t('panel.savedTracker') });
   }, [report, counts, fields.length, profile, t]);
@@ -228,6 +294,24 @@ export default function App() {
               ) : null}
               <div className="raf-toolbar-row">
                 <ProfileButton label={t('common.editProfile')} />
+                {tabId !== null ? (
+                  <button
+                    type="button"
+                    className={`raf-btn${inspectorActive ? ' raf-btn-primary' : ''}`}
+                    aria-pressed={inspectorActive}
+                    onClick={() => {
+                      const next = !inspectorActive;
+                      setInspectorActive(next);
+                      void sendToBackground({
+                        type: next ? 'inspector:start' : 'inspector:stop',
+                        tabId,
+                      }).catch(() => undefined);
+                    }}
+                  >
+                    <Icon name="search" size={14} />
+                    <span>{t(inspectorActive ? 'panel.inspector.stop' : 'panel.inspector.start')}</span>
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (
@@ -239,6 +323,32 @@ export default function App() {
       </header>
 
       <main className="raf-main">
+        {inspectorActive ? <p className="raf-help">{t('panel.inspector.activeHint')}</p> : null}
+        {pickedState ? (
+          <section className="raf-inspector-panel" aria-label={t('panel.inspector.pickedTitle', { label: pickedState.target.label })}>
+            <strong>{t('panel.inspector.pickedTitle', { label: pickedState.target.label })}</strong>
+            <div className="raf-inspector-form">
+              <select
+                className="raf-inspector-select"
+                aria-label={t('panel.inspector.fieldKeyLabel')}
+                value={pickedFieldKey}
+                onChange={(e) => setPickedFieldKey(e.target.value)}
+              >
+                {FIELD_KEYS.map((k) => (
+                  <option key={k.key} value={k.key}>
+                    {k.key}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="raf-btn raf-btn-primary raf-btn-small" onClick={() => void savePickedInspectorRule()}>
+                {t('panel.inspector.saveRule')}
+              </button>
+              <button type="button" className="raf-btn raf-btn-small" aria-label={t('common.close')} onClick={() => setPickedState(null)}>
+                <Icon name="x-lg" size={14} />
+              </button>
+            </div>
+          </section>
+        ) : null}
         {vaultLocked ? (
           <Notice
             tone="danger"

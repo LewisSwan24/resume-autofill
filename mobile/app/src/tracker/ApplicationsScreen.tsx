@@ -1,6 +1,7 @@
 // The 网申 tab: every application record, filtered by status chips, searched, sorted. Filter, query and
 // sort live in the app's nav state so they survive tab switches; the search box feeds it after 300 ms.
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { computeTrackerAnalytics } from '../../../../src/tracker/analytics';
 import { Icon } from '../Icon';
 import { useMT } from '../i18n';
 import type { AppState, ApplicationRecord } from '../store/appStateStore';
@@ -77,6 +78,7 @@ export function ApplicationsScreen({
   const records = appState.applications;
   const at = now();
   const counts = useMemo(() => countByStatus(records), [records]);
+  const analytics = useMemo(() => computeTrackerAnalytics(records, at), [records, at]);
   const shown = useMemo(() => filterRecords(records, nav, at, zone), [records, nav, at, zone]);
 
   return (
@@ -141,6 +143,22 @@ export function ApplicationsScreen({
             <p className="rt-count" aria-live="polite">
               {t('m.apps.count', { n: shown.length })}
             </p>
+            {records.length > 0 ? (
+              <div className="m-card m-card--padded">
+                <p className="m-row__caption">
+                  {t('m.apps.analyticsSummary', {
+                    total: analytics.total,
+                    interviewRate: analytics.interviewRate,
+                    offerRate: analytics.offerRate,
+                  })}
+                </p>
+                {analytics.staleRecords.length > 0 ? (
+                  <p className="m-row__caption">
+                    {t('m.apps.staleAlert', { n: analytics.staleRecords.length })}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {shown.length === 0 ? (

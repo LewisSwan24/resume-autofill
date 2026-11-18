@@ -11,6 +11,7 @@ import { createScanWatcher } from './watcher';
 
 export * from './handlers';
 export * from './ids';
+export * from './inspector';
 export * from './intent';
 export * from './listener';
 export * from './needs';

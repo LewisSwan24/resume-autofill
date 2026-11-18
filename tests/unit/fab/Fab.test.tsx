@@ -528,3 +528,27 @@ describe('Fab: fields with no data', () => {
     expect(await screen.findByRole('button', { name: '去补上' })).toBeTruthy();
   });
 });
+
+describe('Fab: inspector HUD', () => {
+  it('renders a non-blocking highlight overlay on inspector:hover and clears it on null', () => {
+    render(<Fab />);
+    deliver({
+      type: 'inspector:hover',
+      target: {
+        rect: { left: 20, top: 40, width: 180, height: 32 },
+        label: 'GitHub',
+        fieldKey: 'links.github',
+        section: 'links',
+        confidence: 0.9,
+        tag: 'input',
+        fingerprint: { tag: 'input', nameAttr: 'github', labelTokens: ['github'] },
+      },
+    });
+    const hud = screen.getByRole('status');
+    expect(hud.className).toContain('raf-inspector-hud');
+    expect(hud.textContent).toContain('GitHub -> links.github');
+
+    deliver({ type: 'inspector:hover', target: null });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});

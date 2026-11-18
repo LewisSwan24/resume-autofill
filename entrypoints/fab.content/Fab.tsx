@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { useT } from '../../src/i18n';
 import { isFromExtension, isValidMessage, sendToBackground, type Sender } from '../../src/messaging';
+import type { InspectorTargetInfo } from '../../src/content/inspector';
 import { Icon } from '../../src/ui/Icon';
 import { ResumeChip } from './ResumeChip';
 import { SummaryCard } from './SummaryCard';
@@ -39,6 +40,7 @@ const ERROR_KEYS = {
   no_resume: 'fab.error.no_resume',
   no_frames: 'fab.error.no_frames',
   busy: 'fab.error.busy',
+  vault_locked: 'fab.error.vault_locked',
 } as const;
 
 export function errorKey(code: string | undefined): (typeof ERROR_KEYS)[keyof typeof ERROR_KEYS] | null {
@@ -71,6 +73,7 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const t = useT();
   const [total, setTotal] = useState(0);
   const [boxes, setBoxes] = useState(0);
+  const [hoverTarget, setHoverTarget] = useState<InspectorTargetInfo | null>(null);
   /** Result of the last fill on this page: the FAB caption shows it instead of the detected count until the next fill starts. */
   const [result, setResult] = useState<FillSummary | null>(null);
   const [view, setViewState] = useState<View>({ kind: 'idle' });
@@ -96,6 +99,10 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
     const onMessage = (message: unknown, sender: Sender) => {
       if (!isFromExtension(sender) || sender.tab != null) return;
       if (!isValidMessage(message)) return;
+      if (message.type === 'inspector:hover') {
+        setHoverTarget(message.target ?? null);
+        return;
+      }
       if (message.type === 'scan:total') {
         if (typeof message.total === 'number' && Number.isFinite(message.total)) {
           setTotal(Math.max(0, Math.floor(message.total)));
@@ -178,6 +185,24 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
         }
       }}
     >
+      {hoverTarget && (
+        <div
+          className="raf-inspector-hud"
+          role="status"
+          aria-live="polite"
+          style={{
+            left: hoverTarget.rect.left,
+            top: hoverTarget.rect.top,
+            width: hoverTarget.rect.width,
+            height: hoverTarget.rect.height,
+          }}
+        >
+          <span className="raf-inspector-tag">
+            {hoverTarget.label}
+            {hoverTarget.fieldKey ? ` -> ${hoverTarget.fieldKey}` : ''}
+          </span>
+        </div>
+      )}
       {shown && (
         <SummaryCard
           key={cardView ? 'open' : 'leaving'}

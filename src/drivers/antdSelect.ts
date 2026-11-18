@@ -20,6 +20,8 @@ import {
 import { valuesEquivalent } from './equivalence';
 import type { Driver, DriverContext, FillIntent, FillResult, OptionMatch, OptionMatcher } from './types';
 import { waitFor } from './wait';
+import { scrollVirtualDropdown } from './virtualScroll';
+import { waitCascaderLevelReady } from './asyncCascader';
 
 const OPTION = '.ant-select-item-option';
 const SELECTED = 'ant-select-item-option-selected';
@@ -49,26 +51,15 @@ function typeInto(input: HTMLInputElement, text: string): void {
   fireInput(input, text);
 }
 
-/** Scroll the rc-virtual-list holder so every option gets rendered once; returns all labels seen. */
-async function gatherByScrolling(popup: HTMLElement): Promise<DropdownOption[]> {
-  const holder = popup.querySelector<HTMLElement>('.rc-virtual-list-holder');
-  const seen = new Map<string, DropdownOption>();
-  const collect = (): void => {
-    for (const o of popupOptions(popup)) if (!seen.has(o.info.label)) seen.set(o.info.label, o);
-  };
-  collect();
-  if (!holder || holder.scrollHeight <= holder.clientHeight + 1) return [...seen.values()];
-  holder.scrollTop = 0;
-  for (let guard = 0; guard < 200; guard++) {
-    const before = popupOptions(popup)[0]?.info.label;
-    const atEnd = holder.scrollTop + holder.clientHeight >= holder.scrollHeight - 1;
-    collect();
-    if (atEnd) break;
-    holder.scrollTop += Math.max(holder.clientHeight * 0.8, 32);
-    await waitFor(() => popupOptions(popup)[0]?.info.label !== before || null, { timeout: 300, root: popup });
-  }
-  collect();
-  return [...seen.values()];
+/** Scroll the rc-virtual-list holder with fixed-point termination; stops early once `matcher` hits. */
+async function gatherByScrolling(popup: HTMLElement, matcher: OptionMatcher, signal?: AbortSignal): Promise<DropdownOption[]> {
+  const res = await scrollVirtualDropdown(popup, matcher, {
+    scrollContainerSelector: '.rc-virtual-list-holder',
+    optionSelector: OPTION,
+    mapOption: withLabel,
+    ...(signal ? { signal } : {}),
+  });
+  return res.options;
 }
 
 type Resolved = { label: string } | { fail: FillResult };
@@ -111,7 +102,7 @@ async function resolveLabel(s: Session, query: string, match: OptionMatcher): Pr
       opts = hit ?? (now ? popupOptions(now) : []);
       m = match(infosOf(opts));
     } else if (!s.searchable) {
-      const all = await gatherByScrolling(popup);
+      const all = await gatherByScrolling(popup, match, s.ctx.signal);
       if (all.length > opts.length) {
         opts = all;
         m = match(infosOf(opts));
@@ -241,9 +232,6 @@ async function fillSelect(control: Control, intent: FillIntent, ctx: DriverConte
 
 // ------------------------------------------------------------------ cascader
 
-const menuItems = (column: Element): DropdownOption[] =>
-  visibleOptions(column, 'li.ant-cascader-menu-item').map(withLabel);
-
 async function fillCascader(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
   const root = control.el;
   if (intent.kind !== 'cascade' || intent.path.length === 0) {
@@ -259,12 +247,14 @@ async function fillCascader(control: Control, intent: FillIntent, ctx: DriverCon
       if (ctx.signal?.aborted) return failed('aborted', readSelection(root));
       // A leaf click closes the popup: a path longer than the tree (e.g. a district for a 2-level list) ends here.
       if (level > 0 && !root.classList.contains(OPEN_CLASS)) break;
-      const column = await waitFor(
-        () => popup.querySelectorAll<HTMLElement>('ul.ant-cascader-menu')[level] ?? null,
-        { timeout: Math.min(ctx.timeoutMs, 1500), root: doc, signal: ctx.signal },
+      const ready = await waitCascaderLevelReady(
+        popup,
+        level,
+        { columnSelector: 'ul.ant-cascader-menu', itemSelector: 'li.ant-cascader-menu-item' },
+        { timeoutMs: Math.min(ctx.timeoutMs, 1500), ...(ctx.signal ? { signal: ctx.signal } : {}) },
       );
-      if (!column) return failed(`menu column ${level + 1} did not appear`, readSelection(root));
-      const opts = menuItems(column);
+      if (!ready) return failed(`menu column ${level + 1} did not appear`, readSelection(root));
+      const opts = ready.options.map(withLabel);
       const m = matchOption(null, intent.path[level]!, infosOf(opts));
       const r = verdict(m, opts);
       if ('fail' in r) return { ...r.fail, observed: readSelection(root) };

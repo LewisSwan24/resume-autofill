@@ -7,11 +7,15 @@ import type { FileData } from '../drivers/types';
 import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { WizardSessionState } from '../background/wizardSession';
+import type { InspectorTargetInfo } from '../content/inspector';
 
 // ------------------------------------------------------------------ messages
 
 /** content script → background */
-export type ContentToBg = { type: 'scan:result'; count: number; url: string };
+export type ContentToBg =
+  | { type: 'scan:result'; count: number; url: string }
+  | { type: 'inspector:hover'; target: InspectorTargetInfo | null }
+  | { type: 'inspector:picked'; url: string; target: InspectorTargetInfo };
 
 /** background → a specific frame of a tab (via `tabs.sendMessage(tabId, msg, { frameId })`) */
 export type BgToFrame =
@@ -22,7 +26,9 @@ export type BgToFrame =
   | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[] }
   | { type: 'frame:focus'; fieldId: string }
   | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string }
-  | { type: 'frame:captureFingerprint'; fieldId: string };
+  | { type: 'frame:captureFingerprint'; fieldId: string }
+  | { type: 'frame:inspectorStart' }
+  | { type: 'frame:inspectorStop' };
 
 /** FAB / side panel / options → background */
 export type UiToBg =
@@ -38,6 +44,8 @@ export type UiToBg =
   | { type: 'scan:query' }
   | { type: 'wizard:query'; tabId?: number }
   | { type: 'wizard:clear'; tabId?: number }
+  | { type: 'inspector:start'; tabId: number }
+  | { type: 'inspector:stop'; tabId: number }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
   | { type: 'field:apply'; tabId: number; frameId: number; fieldId: string; text?: string; optionLabel?: string }
   | { type: 'field:captureFingerprint'; tabId: number; frameId: number; fieldId: string }
@@ -49,7 +57,9 @@ export type UiToBg =
 export type BgBroadcast =
   | { type: 'report:updated'; tabId: number; report: FillReport }
   | { type: 'preview:updated'; tabId: number; preview: FillPreview | null }
-  | { type: 'wizard:updated'; tabId: number; session: WizardSessionState | null };
+  | { type: 'wizard:updated'; tabId: number; session: WizardSessionState | null }
+  | { type: 'inspector:hover'; target: InspectorTargetInfo | null }
+  | { type: 'inspector:picked'; tabId: number; url: string; target: InspectorTargetInfo };
 
 export type Message = ContentToBg | BgToFrame | UiToBg | BgBroadcast;
 export type MessageType = Message['type'];
@@ -96,6 +106,12 @@ const TYPE_TABLE = {
   'wizard:query': true,
   'wizard:clear': true,
   'wizard:updated': true,
+  'inspector:start': true,
+  'inspector:stop': true,
+  'inspector:hover': true,
+  'inspector:picked': true,
+  'frame:inspectorStart': true,
+  'frame:inspectorStop': true,
   'frame:needs': true,
   'frame:preview': true,
   'frame:fill': true,

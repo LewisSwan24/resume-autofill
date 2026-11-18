@@ -10,6 +10,7 @@ import { targetOfField, type ProfileTarget } from '../editor/fieldTarget';
 import { openProfileAt } from '../ui/pages';
 import { cancelPreviewRequest, commitPreviewRequest, runFillRequest, type PreviewApproval } from './fill';
 import { isSectionRow } from './merge';
+import { listFrameIds } from './frames';
 import { relayApply, relayCaptureFingerprint, relayFocus, type ApplyInput } from './relay';
 import { loadScanTotal, recordScan } from './tabState';
 import { clearWizardSession, loadWizardSession } from './wizardSession';
@@ -162,6 +163,50 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
         const tabId = fromPage ? message.tabId : contentTabId;
         if (!isIndex(tabId)) return false;
         void clearWizardSession(tabId).catch(() => undefined);
+        return false;
+      }
+
+      case 'inspector:start': {
+        if (!fromPage || !isIndex(message.tabId)) return false;
+        const tabId = message.tabId;
+        void listFrameIds(tabId)
+          .then((frames) =>
+            Promise.allSettled(frames.map((fid) => sendToFrame(tabId, fid, { type: 'frame:inspectorStart' }))),
+          )
+          .catch(() => undefined);
+        return false;
+      }
+
+      case 'inspector:stop': {
+        if (!fromPage || !isIndex(message.tabId)) return false;
+        const tabId = message.tabId;
+        void Promise.allSettled([
+          sendToFrame(tabId, 0, { type: 'inspector:hover', target: null } as never),
+          listFrameIds(tabId).then((frames) =>
+            Promise.allSettled(frames.map((fid) => sendToFrame(tabId, fid, { type: 'frame:inspectorStop' }))),
+          ),
+        ]).catch(() => undefined);
+        return false;
+      }
+
+      case 'inspector:hover': {
+        if (contentTabId === undefined) return false;
+        void browser.tabs.sendMessage(contentTabId, { type: 'inspector:hover', target: message.target }, { frameId: 0 }).catch(() => undefined);
+        return false;
+      }
+
+      case 'inspector:picked': {
+        if (contentTabId === undefined) return false;
+        const tabId = contentTabId;
+        const payload = { type: 'inspector:picked', tabId, url: message.url, target: message.target } as const;
+        void Promise.allSettled([
+          browser.storage.session.set({ [`inspectorPick:${tabId}`]: { url: message.url, target: message.target, at: Date.now() } }),
+          browser.tabs.sendMessage(tabId, { type: 'inspector:hover', target: null }, { frameId: 0 }),
+          listFrameIds(tabId).then((frames) =>
+            Promise.allSettled(frames.map((fid) => sendToFrame(tabId, fid, { type: 'frame:inspectorStop' }))),
+          ),
+          browser.runtime.sendMessage(payload),
+        ]).catch(() => undefined);
         return false;
       }
 

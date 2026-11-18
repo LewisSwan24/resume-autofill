@@ -6,6 +6,7 @@ import { findDropdownNear, visibleOptions, type DropdownOption } from '../dropdo
 import { fireInput, focusElement, setNativeValue, simulateClick, typeText } from '../events';
 import type { DriverContext, FillIntent, FillResult, OptionMatcher } from '../types';
 import { waitFor } from '../wait';
+import { scrollVirtualDropdown } from '../virtualScroll';
 import { closePopper, failed, isPopperLive, pickAll, popperById, scrollIntoView, squash } from './shared';
 
 // ------------------------------------------------------------------ el-select
@@ -100,6 +101,20 @@ async function chooseOption(env: SelectEnv, matcher: OptionMatcher, query: strin
   let options = currentOptions(env);
   let picked = pickAll([matcher], options.map((o) => o.info));
   const miss = 'result' in picked && picked.result.outcome === 'no_option';
+  if (miss && !isFilterable(env.input)) {
+    const popper = livePopper(env);
+    if (popper) {
+      const scrolled = await scrollVirtualDropdown(popper, matcher, {
+        scrollContainerSelector: '.el-select-dropdown__wrap, .el-scrollbar__wrap',
+        optionSelector: SELECT_ITEM,
+        ...(env.ctx.signal ? { signal: env.ctx.signal } : {}),
+      });
+      if (scrolled.options.length > options.length) {
+        options = scrolled.options;
+        picked = pickAll([matcher], options.map((o) => o.info));
+      }
+    }
+  }
   if (miss && isFilterable(env.input) && query.trim() !== '') {
     typeQuery(env, query);
     // A remote search shows nothing for its 300 ms debounce, then "加载中" inside `.el-select-dropdown__empty`,

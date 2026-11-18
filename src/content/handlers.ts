@@ -7,9 +7,11 @@ import { applyHighlights, clearHighlights, focusField } from '../fill/highlight'
 import { highlightRun, runFill, runPreview, type FillPayload, type FillRun } from '../fill/runFill';
 import { collectEvidence } from '../engine/evidence';
 import { captureFieldFingerprint } from '../recipes';
+import { sendToBackground } from '../messaging';
 import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { FrameNeeds } from '../engine/fieldDeps';
+import { createFieldInspector, type InspectorTargetInfo } from './inspector';
 import { buildApplyIntent } from './intent';
 import { computeFrameNeeds } from './needs';
 
@@ -24,6 +26,8 @@ export interface FrameHandlerDeps {
   runFill?: (doc: Document, payload: FillPayload, opts: { idFor: (el: HTMLElement) => string }) => Promise<FillRun>;
   executeStep?: typeof executeStep;
   computeNeeds?: (doc: Document, idFor: (el: HTMLElement) => string) => FrameNeeds;
+  onInspectorHover?: (target: InspectorTargetInfo | null) => void;
+  onInspectorPick?: (target: InspectorTargetInfo) => void;
 }
 
 export interface ApplyRequest {
@@ -40,6 +44,8 @@ export interface FrameHandlers {
   focus(fieldId: string): boolean;
   apply(request: ApplyRequest): Promise<FieldReport>;
   captureFingerprint?(fieldId: string): SiteRecipeFingerprint | null;
+  inspectorStart?(): void;
+  inspectorStop?(): void;
   /** True while a fill / apply is running. */
   isBusy(): boolean;
 }
@@ -51,6 +57,28 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
   let reports = new Map<string, FieldReport>();
   let busy = 0;
   let filling: Promise<FillReport> | null = null;
+
+  const inspector = createFieldInspector({
+    doc: deps.doc,
+    onHover: (target) => {
+      if (deps.onInspectorHover) {
+        deps.onInspectorHover(target);
+      } else {
+        void sendToBackground({ type: 'inspector:hover', target }).catch(() => undefined);
+      }
+    },
+    onPick: (target) => {
+      if (deps.onInspectorPick) {
+        deps.onInspectorPick(target);
+      } else {
+        void sendToBackground({
+          type: 'inspector:picked',
+          url: deps.doc.location?.href ?? '',
+          target,
+        }).catch(() => undefined);
+      }
+    },
+  });
 
   const discard = () => deps.discardOwnWrites?.();
   const enter = () => {
@@ -152,6 +180,14 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
       const control = controls.get(fieldId);
       if (!control || !control.el.isConnected) return null;
       return captureFieldFingerprint(control, collectEvidence(control));
+    },
+
+    inspectorStart() {
+      inspector.start();
+    },
+
+    inspectorStop() {
+      inspector.stop();
     },
   };
 }

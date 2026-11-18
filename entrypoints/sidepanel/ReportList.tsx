@@ -2,7 +2,7 @@
 // (status tile, name, the value, a right-hand badge, chevron); the expanded area holds the status badge, the
 // confidence bar, a human-readable source, candidate buttons, the manual edit and "Locate".
 // Right-hand badge: confidence for filled rows, the outlined status badge (icon + word) for every other outcome.
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { computeLocalFieldSuggestion, generateReviewDraft, type AiDraftOutcome } from '../../src/ai';
 import type { FieldReport } from '../../src/engine/types';
 import { useT } from '../../src/i18n';
@@ -40,6 +40,7 @@ function FieldItem({
 }: { field: FieldReport } & Omit<ReportListProps, 'fields'>) {
   const t = useT();
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(field.value ?? field.observed ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -261,7 +262,8 @@ function FieldItem({
             className="raf-field"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!busy) void run({ text: draft });
+              const submitted = inputRef.current?.value ?? draft;
+              if (!busy) void run({ text: submitted });
             }}
           >
             <label className="raf-field-label" htmlFor={inputId}>
@@ -269,6 +271,7 @@ function FieldItem({
             </label>
             <div className="raf-edit">
               <input
+                ref={inputRef}
                 id={inputId}
                 type="text"
                 className="raf-input"

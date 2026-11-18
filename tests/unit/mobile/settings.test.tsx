@@ -15,13 +15,13 @@ import { createFakeResumeKeyboard, type KeyboardStatus } from '../../../mobile/a
 import type { KeyboardProps } from '../../../mobile/app/src/keyboard/KeyboardSetupScreen';
 import { parseProfileJson } from '../../../src/editor';
 import { setLanguage, useLanguage, type Language } from '../../../src/i18n';
-import { ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
+import { CURRENT_SCHEMA_VERSION, ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
 
 type SaveDocument = NonNullable<SettingsScreenProps['saveDocument']>;
 
 function profileOf(titles: { id: string; title: string; locale?: 'zh-CN' | 'en-AU' }[]): Profile {
   return ProfileSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     resumes: titles.map((r) => ResumeSchema.parse({ locale: 'zh-CN', ...r })),
     activeResumeId: titles[0]?.id ?? null,
     settings: { uiLanguage: 'zh' },

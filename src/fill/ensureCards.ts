@@ -83,6 +83,32 @@ function isDisabled(el: HTMLElement): boolean {
   );
 }
 
+/** How far above an add button its section's name may sit beside it. */
+const MAX_TITLE_LEVELS = 3;
+const MAX_TITLE_WORDS = 20;
+
+/**
+ * The section named right beside an add button: a collapsed section (Feishu's mobile form) is only a title row
+ * holding its name and "+ 添加", with no fields under it yet, so no heading rule that wants a group of fields can see
+ * it. Siblings of the button and of its first few wrappers are read; one counts only when it holds no control and its
+ * few words name a part of a resume.
+ */
+function titleBeside(el: HTMLElement): SectionKey | null {
+  let node: Element | null = el;
+  for (let level = 0; node && level < MAX_TITLE_LEVELS; level++, node = node.parentElement) {
+    const parent: Element | null = node.parentElement;
+    if (!parent) break;
+    for (const s of Array.from(parent.children)) {
+      if (s === node || s.querySelector(FIELD_SELECTOR) || s.matches(FIELD_SELECTOR)) continue;
+      const words = cleanEvidenceText(s.textContent ?? '');
+      if (!words || words.length > MAX_TITLE_WORDS || isAddButtonText(words) || isDeleteText(words)) continue;
+      const hit = matchSection(words);
+      if (hit && hit.confidence >= SECTION_FROM_TEXT_MIN) return hit.section;
+    }
+  }
+  return null;
+}
+
 /** Add buttons on the page with the section each one belongs to. */
 export function findAddButtons(doc: Document): AddButton[] {
   const out: AddButton[] = [];
@@ -104,8 +130,9 @@ export function findAddButtons(doc: Document): AddButton[] {
       continue;
     }
     const heading = findSection(el);
-    const inherited = heading ? matchSection(heading.title) : null;
-    out.push({ el, text, section: inherited?.section ?? null, named: false });
+    const fromHeading = heading ? matchSection(heading.title) : null;
+    const section = fromHeading?.section ?? titleBeside(el);
+    out.push({ el, text, section, named: false });
   }
   return out;
 }

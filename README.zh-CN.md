@@ -20,6 +20,8 @@
 - [隐私与安全](#隐私与安全)
 - [设计系统](#设计系统)
 
+`mobile/` 目录里是安卓应用，把同一套填写引擎搬到了手机上。网申页面在应用内置的浏览器里打开，点一下就能填好。每次投递都会记成一条网申记录，截止前有提醒。内置浏览器进不去的地方，比如微信小程序，可以用简历输入法填。详见[安卓应用](#安卓应用)。
+
 ## 核心特性
 
 ### Chrome 扩展（`entrypoints/`、`src/`）
@@ -103,6 +105,7 @@ flowchart TB
 | **M1** | 核心引擎、19 模块简历编辑器、侧边栏、悬浮按钮和设计系统；在三大合成测试站（原生 HTML、Ant Design、Element Plus）上字段 100% 填对。 | 已完成 |
 | **M2** | 真实 ATS 与国内校招平台适配（`Greenhouse`、`Lever`、`Workable`、`Workday`、`Ashby`、`Moka`、北森 `Beisen`、飞书招聘 `Feishu`）、真实页面脱敏抓包与评分脚本、本地 PDF / Word 简历导入、中英一键切换，以及 Android Capacitor 移动端（`ProfileVault`、WebView 填表、投递追踪和简历输入法）。其余站点（`SuccessFactors`、`PageUp`、`Workday` 后续多步流程等）还在陆续补充。 | 进行中（核心已落地） |
 | **M3** | 可选 AI 能力：开放式问题起草、中英简历翻译以及更多细节打磨。 | 计划中 |
+| **移动端** | 安卓应用：简历和附件、PDF 与 Word 导入、内置填写浏览器、带截止提醒的网申记录、简历输入法。iOS 版还没开始。 | 安卓已完成 |
 
 ## 支持平台与组件库
 
@@ -176,6 +179,8 @@ pnpm fixtures:preview     # 固定跑在 4173 端口
 
 `mobile/` 基于 **Capacitor 8.5.3** 把共用的简历模型、词典、填表引擎和本地解析逻辑打包进原生 Android 应用。
 
+应用名叫「网申简历填写」，包名 `app.raf.dev`，支持 Android 10（API 29）及以上。用 Capacitor 8 搭建：界面是 React 写的，要调用系统能力的部分（填写浏览器、加密存储、提醒、输入法）是原生 Java。
+
 ### 主要功能
 
 - **首页与引导：** 粘贴或直接点首页识别到的剪贴板招聘链接，查看近期投递和快要截止的提醒，随时切换当前简历。
@@ -183,6 +188,29 @@ pnpm fixtures:preview     # 固定跑在 4173 端口
 - **内置 WebView 浏览器：** 向页面各 frame 注入 `mobile/inject`，提供悬浮填表按钮、报告面板、一键撤销与附件上传；遇到跨域 frame 会弹窗确认源站后再下发数据。
 - **投递追踪与链接接管：** 支持作为系统浏览器打开 `http(s)` 链接或接收分享文本，记录公司、岗位、状态、截止日期和填写次数，并按需设置本地提醒闹钟。
 - **简历输入法（IME）：** 通过应用内引导在系统设置开启后，即可在微信内置浏览器等其他 App 里呼出简历键盘，直接点选模块和字段条目填入（完全离线，无网络权限）。
+
+### 安装 APK
+
+1. 把 `app-dev-release.apk` 拷到手机上，点开这个文件。
+2. 安卓会问是否允许从这个来源安装应用，选允许。系统会提示这个应用不是从 Google Play 下载的，自己安装的应用都会这样提示，不影响使用。
+3. 想用简历输入法，在应用的「设置 → 简历输入法」里按步骤开启。
+
+填写浏览器需要较新的 Android System WebView。手机上的 WebView 太旧时，应用会告诉你，简历输入法仍然可以用。
+
+### 从源码构建
+
+需要 Node.js 和 pnpm、JDK 21、Android SDK（platform 36）。应用会从 `src/` 引入填写引擎，所以先在仓库根目录装好依赖。
+
+```powershell
+pnpm i                      # 仓库根目录
+cd mobile
+npm ci
+npm run sync                # 构建界面和页面里用的填写引擎，再复制进安卓工程
+cd android
+.\gradlew.bat assembleDevRelease
+```
+
+签好名的 APK 在 `mobile/android/app/build/outputs/apk/dev/release/app-dev-release.apk`。`dev` 版沿用包名 `app.raf.dev`，可以直接覆盖安装手机上已有的应用；`prod` 版（`assembleProdRelease`）是另一个应用 `app.raf.app`，用于上架。release 构建会用 R8 压缩代码，版本号取自 `RAF_VERSION_CODE` 和 `RAF_VERSION_NAME`。release 构建从 `keystore.properties` 读取签名密钥，这个文件放在仓库外面，具体位置和要写的内容见 `mobile/android/app/build.gradle`。没有这个文件时，用 `.\gradlew.bat assembleDevDebug` 打调试包。
 
 ### 移动端开发与测试命令
 
@@ -200,10 +228,24 @@ npm run sync          # 构建并执行 cap sync android
 构建 Android Debug APK 并运行设备端 E2E 测试（在仓库根目录执行）：
 
 ```powershell
-# 先在 mobile/android 目录执行 ./gradlew assembleDebug（Windows 下为 gradlew.bat assembleDebug）
+# 先在 mobile/android 目录执行 ./gradlew assembleDevDebug（Windows 下为 gradlew.bat assembleDevDebug）
 $env:RAF_SERIAL="<adb-device-serial>"
 npx playwright test --config mobile/e2e/playwright.config.ts
 ```
+
+### 测试
+
+| 命令 | 作用 |
+|---|---|
+| `pnpm vitest run tests/unit/mobile` | 应用界面、数据模型和页面通信的单元测试（在仓库根目录运行） |
+| `.\gradlew.bat testDevDebugUnitTest` | 原生代码的 JUnit 测试，包括输入法不联网的检查（在 `mobile/android` 运行） |
+| `RAF_SERIAL=emulator-5554 npx playwright test --config mobile/e2e/playwright.config.ts` | 模拟器上的设备测试（在仓库根目录运行）。测试会清空应用数据、切换输入法，不要拿自己在用的手机跑 |
+
+### 已知限制
+
+- 还没有 iOS 版。
+- 只支持微信登录的网站，在应用的浏览器里登录不了。大多数校招网站也能用手机号登录；实在不行，就在微信里用简历输入法填。
+- 简历输入法没有中文输入；在网页里也分辨不出验证码输入框，所以那里同样会显示简历条目。
 
 ## 配置、权限与环境变量
 
@@ -267,7 +309,10 @@ npx playwright test --config mobile/e2e/playwright.config.ts
 | `src/schema/` | Zod v4 简历数据模型、字段键、版本迁移与中性示例数据 |
 | `src/storage/` | `chrome.storage.local` 与 IndexedDB 本地存储（简历和附件） |
 | `src/ui/` | 共用的「Lively Icons」设计令牌、主题、内置字体、Bootstrap Icons 注册表和状态映射 |
-| `mobile/` | Capacitor 8.5.3 Android 应用工作区（`app/`、`android/`、`bridge/`、`inject/`、`demo/`、`e2e/`、`scripts/`） |
+| `mobile/app/` | 安卓应用的界面（React）：首页、简历、网申记录、设置、填写浏览器的操作栏 |
+| `mobile/android/` | 安卓工程（Capacitor 8）和原生代码：加密存储、填写浏览器、提醒、桌面快捷方式、简历输入法 |
+| `mobile/inject/`、`mobile/bridge/` | 打包给填写浏览器里页面用的填写引擎，以及页面和应用之间的消息协议 |
+| `mobile/e2e/` | 设备测试和测试用的本地页面 |
 | `fixtures/` | 合成测试站（`synthetic/`）与示例简历 PDF（`resume-samples/`） |
 | `scripts/` | 图标生成（`render-icons.mjs`）、示例生成、页面抓包、准确率统计与在线校验脚本 |
 | `tests/` | `unit/`、`drivers/`、`e2e/`、`captured/`、`visual/`、`shared/` 测试套件 |
@@ -288,6 +333,13 @@ npx playwright test --config mobile/e2e/playwright.config.ts
 - **ISOLATED World 与通道隔离：** 内容脚本运行在默认的 `ISOLATED` world，已关闭 WXT 的 `window.postMessage` 广播，简历数据不走页面全局变量或 `postMessage`，只通过 `chrome.runtime` 传递。
 - **按 Frame 与按源站最小化分发：** 后台先问每个 frame 识别到了哪些字段（不含任何简历内容），再只发该 frame 用到的值；附件只发给存在文件上传框的 frame；移动端 WebView 遇到跨域 iframe 必须由用户先确认源站才下发。
 - **输入法隔离：** Android 简历输入法只读取去掉附件的精简投影，在密码、锁屏和无学习输入框里自动隐藏简历内容，不留日志和输入记录，单元测试也会检查字节码，禁止引用网络、广播、服务或 Intent API。
+
+安卓应用：
+
+- 简历、附件、应用状态和网申记录都用 AES-256-GCM 加密，密钥存在 Android Keystore 里，不进云备份，也不随换机迁移。「删除全部数据」会把数据和密钥一起删掉。
+- 应用只在加载你在内置浏览器里打开的页面时联网。你点了填写，页面才拿到简历资料；页面里嵌着的其他网站的表单，要你按网站名同意之后才拿得到。
+- 简历输入法读的是一份精简的简历副本（没有附件和身份证号），从不联网。输入法的代码只要引用任何网络相关的类，单元测试就会失败。
+- 剪贴板：只有你把应用切到前台时，应用才看一眼有没有新复制的链接。应用只记两样东西：最近一次复制的时间，以及你关掉过的链接的简短指纹。复制的文字本身不保存。
 
 ## 设计系统
 

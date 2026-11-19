@@ -50,8 +50,10 @@ function composedParent(node: Element): Element | null {
   return root.nodeType === 11 && 'host' in root ? (root as ShadowRoot).host : null;
 }
 
+/** Native boxes, plus the library widgets that have none inside (on a phone, Feishu's pickers are only a tap target). */
 function fieldCount(root: Element): number {
-  return root.querySelectorAll(FIELD_SELECTOR).length;
+  const boxless = Array.from(root.querySelectorAll(LIBRARY_ROOT_SELECTOR)).filter((w) => !w.querySelector(FIELD_SELECTOR));
+  return root.querySelectorAll(FIELD_SELECTOR).length + boxless.length;
 }
 
 /** Number of controls inside `root`, counting a library widget (or radio / checkbox group) once. */

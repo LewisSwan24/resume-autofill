@@ -32,19 +32,28 @@ type Level = Pick<Extract<FillIntent, { kind: 'choice' }>, 'query' | 'match'>;
 async function fillList(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
   if (intent.kind !== 'choice') return failed(`a ${intent.kind} answer on a single list`, readList(control));
   const current = readList(control);
+  const until = Date.now() + ctx.timeoutMs - TIDY_MS;
   const levels: Level[] = [intent, ...(intent.wider ?? [])];
+  const fallbacks: Level[] = intent.fallbacks ?? [];
   // Only the thing itself: 浙江大学城市学院 merely contains 浙江大学.
   const holds = (level: Level) => {
     const same = level.match([{ label: current! }]);
     return same.status === 'matched' && same.confidence >= THE_VERY_THING;
   };
-  if (current && levels.some(holds)) return { ok: true, observed: current };
+  if (current && [...levels, ...fallbacks].some(holds)) return { ok: true, observed: current };
   // Something else is there: only the answer itself may replace it, since a wider one would say less.
   const tried = current ? [intent] : levels;
-  // The step's time has to reach the last level, and leave a moment to tidy up.
+  // The step's time has to reach the last level, and leave a moment to tidy up. The resume's other answers get what
+  // is left after that, so a long list of them never cuts short the search for the first.
   const searchMs = Math.min(SEARCH_MS, Math.max(MIN_SEARCH_MS, (ctx.timeoutMs - TIDY_MS) / tried.length - OPENS_BY_ITSELF_MS));
   for (const level of tried) {
     const result = await pickLevel(control, level, current, searchMs, ctx);
+    if (result.outcome !== 'no_option') return result;
+  }
+  for (const level of current ? [] : fallbacks) {
+    const left = until - Date.now() - OPENS_BY_ITSELF_MS;
+    if (left < MIN_SEARCH_MS) break;
+    const result = await pickLevel(control, level, current, Math.min(searchMs, left), ctx);
     if (result.outcome !== 'no_option') return result;
   }
   return current

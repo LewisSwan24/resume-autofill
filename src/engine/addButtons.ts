@@ -22,15 +22,44 @@ function saysOnlyAdd(words: string): boolean {
 }
 const SECTION_NAMED = 0.8;
 
+/** A page made for touch (a phone's WebView, Feishu's /m/ forms) sets no cursor, so the pointer says nothing there. */
+function touchFirst(win: Window): boolean {
+  try {
+    return typeof win.matchMedia === 'function' && win.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
+}
+
+/** An icon drawn beside the words: an image, or an icon font's empty <i>. */
+const ICON = 'svg, img, i, [class*="icon" i]';
+/** Words of a class or id that say the element adds something or is a button: award-addBtn, formOperate-addMore. */
+const NAMED_ADD = new Set(['add', 'plus', 'btn', 'button']);
+/** A class or id cut into its words: at dashes, underscores and spaces, and where camelCase turns upper. */
+const nameWords = (name: string): string[] => name.split(/[-_\s]+|(?<=[a-z0-9])(?=[A-Z])/).map((w) => w.toLowerCase());
+
 /**
- * Add buttons that are not buttons: words that add an entry, on an element the pointer shows as clickable and that
- * holds nothing but those words (and an icon). The element holding the words is the one returned, once per button:
- * the pointer is inherited and does not say which wrapper listens, and a click only travels up, so it starts there.
+ * On a touch page the pointer says nothing, and the phone's fill browser runs on every site, so the words need
+ * something more that draws them as a button: a plus written before them, an icon beside them, or a class or id that
+ * names the element as an add or a button. Words alone are as likely a tip or a heading.
+ */
+function drawnAsButton(e: HTMLElement, words: string): boolean {
+  if (/^[+＋]/.test(words) || e.querySelector(ICON)) return true;
+  const named = `${typeof e.className === 'string' ? e.className : ''} ${e.id}`;
+  return nameWords(named).some((w) => NAMED_ADD.has(w));
+}
+
+/**
+ * Add buttons that are not buttons: words that add an entry, on an element the pointer shows as clickable (on a
+ * touch-first page, one drawn as a button) and that holds nothing but those words (and an icon). The element holding
+ * the words is the one returned, once per button: the pointer is inherited and does not say which wrapper listens,
+ * and a click only travels up, so it starts there.
  */
 export function plainAddButtons(root: Node): HTMLElement[] {
   const doc = root.ownerDocument ?? (root as Document);
   const win = doc.defaultView;
   if (!win) return [];
+  const touch = touchFirst(win);
   const found = new Set<HTMLElement>();
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -45,7 +74,7 @@ export function plainAddButtons(root: Node): HTMLElement[] {
     let e: HTMLElement | null = start;
     for (let i = 0; e && i < MAX_WRAPPERS && !clickable; e = e.parentElement, i++) {
       if (cleanEvidenceText(e.textContent ?? '') !== words || e.querySelector('input, select, textarea')) break;
-      clickable = win.getComputedStyle(e).cursor === 'pointer';
+      clickable = touch ? drawnAsButton(e, words) : win.getComputedStyle(e).cursor === 'pointer';
     }
     if (clickable) found.add(start);
   }

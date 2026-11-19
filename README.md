@@ -20,6 +20,8 @@ A local-first job application autofill tool, available as a Chrome extension (Ma
 - [Privacy and security](#privacy-and-security)
 - [Design system](#design-system)
 
+An Android app in `mobile/` brings the same fill engine to the phone. It opens application pages in a built-in browser and fills them with one tap, keeps a list of your applications with deadline reminders, and adds a resume keyboard for places the browser cannot reach, such as WeChat mini programs. See [Android app](#android-app).
+
 ## Features
 
 ### Chrome extension (`entrypoints/`, `src/`)
@@ -103,6 +105,7 @@ flowchart TB
 | **M1** | Core engine, 19-module resume editor, side panel, floating button and design system. 100% of fields are filled correctly on the synthetic test sites (native HTML, Ant Design, Element Plus). | Done |
 | **M2** | Real ATS and Chinese campus-recruitment support (`Greenhouse`, `Lever`, `Workable`, `Workday`, `Ashby`, `Moka`, `Beisen`, `Feishu Recruiting`), offline snapshot capture and scoring harness, local PDF/Word resume import, one-click bilingual switch, and the Android Capacitor app (`ProfileVault`, WebView browser, application tracker and Resume Keyboard IME). Further ATS pages (`SuccessFactors`, `PageUp`, multi-step `Workday` follow-ups, etc.) are still being added. | In progress (core complete) |
 | **M3** | Optional AI features: drafting answers to open-ended questions, Chinese/English resume translation, and further polish. | Planned |
+| **Mobile** | Android app: profile and attachments, PDF and Word import, the fill browser, the application tracker with reminders, and the resume keyboard. An iOS app is not started. | Android done |
 
 ## Supported platforms and UI stacks
 
@@ -176,6 +179,8 @@ Open the **Options / Profile** page from `chrome://extensions`, the side panel t
 
 The `mobile/` workspace wraps the shared schema, editor logic, bilingual dictionaries, fill engine and local resume importer into a native Android app with **Capacitor 8.5.3**.
 
+The app (`网申简历填写`, package `app.raf.dev`) runs on Android 10 (API 29) and later. It is built with Capacitor 8: the screens are React, and the parts that need the system (the fill browser, encrypted storage, reminders, the keyboard) are native Java.
+
 ### Capabilities
 
 - **Home and onboarding:** Paste or tap a recently copied job link, check recent applications and closing-soon reminders, and switch the active resume.
@@ -183,6 +188,29 @@ The `mobile/` workspace wraps the shared schema, editor logic, bilingual diction
 - **Built-in WebView browser:** Injects `mobile/inject` into frames, shows a floating fill button with report and undo, uploads attachments from `ProfileVault`, and guards cross-origin frames with an origin confirmation sheet.
 - **Application tracker and deep links:** Handles shared text or `http(s)` links, tracks status, deadlines and fill counts, and schedules local alarm notifications.
 - **Resume Keyboard IME:** Enabled in Android settings through the in-app setup flow. Provides a module strip, context-prioritized entry chips, resume/language switching and basic English typing without network access.
+
+### Install the APK
+
+1. Copy `app-dev-release.apk` to the phone and open it.
+2. Allow installing apps from the source you opened it with when Android asks. Android warns that the app is not from Google Play; that is expected for an app you install yourself.
+3. To use the resume keyboard, open it from Settings → 简历输入法 in the app, which walks you through turning it on.
+
+The fill browser needs an up-to-date Android System WebView. On a phone whose WebView is too old, the app says so and the resume keyboard still works.
+
+### Build from source
+
+Requires Node.js with pnpm, JDK 21 and the Android SDK (platform 36). The app imports the fill engine from `src/`, so install the root dependencies first.
+
+```powershell
+pnpm i                      # repository root
+cd mobile
+npm ci
+npm run sync                # builds the screens and the page engine, then copies them into the Android project
+cd android
+.\gradlew.bat assembleDevRelease
+```
+
+The signed APK lands in `mobile/android/app/build/outputs/apk/dev/release/app-dev-release.apk`. The `dev` flavor keeps the package name `app.raf.dev`, so it installs over the app already on the phone; the `prod` flavor (`assembleProdRelease`) is a separate app, `app.raf.app`, meant for store releases. Release builds are shrunk with R8, and the version comes from `RAF_VERSION_CODE` and `RAF_VERSION_NAME`. The release build reads its signing key from `keystore.properties`, which lives outside the repository (see `mobile/android/app/build.gradle` for where it is looked up and what it holds). Without that file, use `.\gradlew.bat assembleDevDebug` for a debug build.
 
 ### Mobile commands
 
@@ -200,10 +228,24 @@ npm run sync          # Build and run cap sync android
 To build the Android debug APK and run device E2E tests (from the repo root):
 
 ```powershell
-# Inside mobile/android: ./gradlew assembleDebug (or gradlew.bat assembleDebug on Windows)
+# Inside mobile/android: ./gradlew assembleDevDebug (or gradlew.bat assembleDevDebug on Windows)
 $env:RAF_SERIAL="<adb-device-serial>"
 npx playwright test --config mobile/e2e/playwright.config.ts
 ```
+
+### Tests
+
+| Command | Purpose |
+|---|---|
+| `pnpm vitest run tests/unit/mobile` | Unit tests for the app's screens, models and the page bridge (repository root) |
+| `.\gradlew.bat testDevDebugUnitTest` | JUnit tests for the native code, including the keyboard's no-network check (in `mobile/android`) |
+| `RAF_SERIAL=emulator-5554 npx playwright test --config mobile/e2e/playwright.config.ts` | Device tests on an emulator (repository root). They clear the app's data and switch the keyboard, so never point them at a phone you use |
+
+### Limitations
+
+- There is no iOS app yet.
+- Sites that only allow WeChat login cannot be logged into inside the app's browser. Most campus sites also accept a phone number; otherwise use the resume keyboard in WeChat.
+- The resume keyboard has no Chinese input method, and in web pages it cannot tell a verification-code field apart, so it shows the resume entries there too.
 
 ## Configuration, permissions and environment variables
 
@@ -267,7 +309,10 @@ This project requires no external API keys, backend servers or `.env` files.
 | `src/schema/` | Zod v4 resume model, field keys, migrations and neutral sample data |
 | `src/storage/` | `chrome.storage.local` and IndexedDB persistence for profiles and attachments |
 | `src/ui/` | Shared "Lively Icons" design tokens, themes, bundled fonts, Bootstrap Icons registry and status mapping |
-| `mobile/` | Capacitor 8.5.3 Android app (`app/`, `android/`, `bridge/`, `inject/`, `demo/`, `e2e/`, `scripts/`) |
+| `mobile/app/` | The Android app's screens (React): home, resumes, applications, settings, the fill browser's controls |
+| `mobile/android/` | The Android project (Capacitor 8) and the native code: encrypted storage, the fill browser, reminders, shortcuts, the resume keyboard |
+| `mobile/inject/`, `mobile/bridge/` | The fill engine bundled for pages in the fill browser, and the message protocol between those pages and the app |
+| `mobile/e2e/` | Device tests and their local test pages |
 | `fixtures/` | Synthetic test sites (`synthetic/`) and generated sample resume PDFs (`resume-samples/`) |
 | `scripts/` | Icon renderer (`render-icons.mjs`), sample generator, page capture, accuracy table and live check |
 | `tests/` | `unit/`, `drivers/`, `e2e/`, `captured/`, `visual/` and `shared/` test suites |
@@ -288,6 +333,13 @@ This project requires no external API keys, backend servers or `.env` files.
 - **ISOLATED world and channel isolation:** Content scripts run in the default `ISOLATED` world. Resume data never passes through `window.postMessage` (WXT's content-script-started announcement is disabled), and components communicate only over `chrome.runtime`.
 - **Per-frame and per-origin minimization:** The background queries recognized field keys first without sending resume values, then sends each frame only matching values (attachments go only to frames with file inputs). On mobile WebView, cross-origin frames require explicit user confirmation on an origin sheet first.
 - **Keyboard IME isolation:** The Android Resume Keyboard reads a stripped projection without attachments, hides resume content on password/lock-screen/no-learning fields, logs nothing, and fails unit tests if bytecode references network, broadcast, service or intent APIs.
+
+On the Android app:
+
+- Resumes, attachments, app state and the application records are encrypted with AES-256-GCM under a key kept in the Android Keystore, and are excluded from cloud backup and device transfer. Delete-all removes the data and the key.
+- The app goes online only to load the pages you open in its browser. A page receives resume data only after you tap fill, and a form from another site embedded in the page only after you agree to that site by name.
+- The resume keyboard reads a slim copy of the resume (no attachments, no ID number) and never goes online. A unit test fails if the keyboard's code refers to any network class.
+- Clipboard: the app looks at a copied link only when you bring it to the front. It keeps only the time of the last clip and short fingerprints of the links you dismissed, never the copied text.
 
 ## Design system
 

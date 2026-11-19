@@ -32,6 +32,11 @@ export type FillIntent =
       match: OptionMatcher;
       /** Wider ways to say the same answer, narrowest first: the city and province of a district. */
       wider?: { query: string; match: OptionMatcher }[];
+      /**
+       * Other answers the resume gives, in the order written, for a list that takes one and does not offer this one:
+       * the next city wanted. Never levels of this answer, so a driver walking a place down its levels leaves them be.
+       */
+      fallbacks?: { query: string; match: OptionMatcher }[];
     }
   | { kind: 'multi'; display: string; items: { query: string; match: OptionMatcher }[] }
   | ({ kind: 'date' } & DatePart)

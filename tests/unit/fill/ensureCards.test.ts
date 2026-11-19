@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureCards, findAddButtons } from '../../../src/fill/ensureCards';
 import { createSampleProfile } from '../../../src/schema';
 import { BEISEN_FORM } from '../../shared/beisenForm';
+import { mperiod, mschool, mselect } from '../../shared/feishuMobileForm';
 
 const zh = createSampleProfile().resumes.find((r) => r.id === 'sample-zh')!;
 
@@ -111,6 +112,131 @@ describe('findAddButtons', () => {
   it('leaves alone the same words where nothing shows them as clickable', () => {
     document.body.innerHTML = `<h2>项目经历</h2><div><label>项目名称<input></label><label>项目描述<textarea></textarea></label></div>${plainAdd('添加', false)}<p style="cursor:pointer">添加的内容请写在下面</p>`;
     expect(findAddButtons(document)).toEqual([]);
+  });
+
+  // Feishu's mobile form: the section title holds its name and a "+ 添加" drawn as a span, and a filled section ends
+  // in "删除 | 继续添加". Touch pages set no cursor at all, so the pointer cannot say what is clickable there.
+  const touchPage = (coarse: boolean) => {
+    window.matchMedia = ((query: string) => ({
+      matches: coarse && /\(\s*pointer\s*:\s*coarse\s*\)/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+  };
+  const mobileSection = (title: string, cls: string, cards = '') =>
+    `<div class="resumeEditForm-${cls}"><div class="createFormSection-title"><div class="createFormSection-name">${title}</div>` +
+    `<div class="createFormSection-add__wrapper"><svg class="icon"></svg><span class="createFormSection-addText">添加</span></div></div>${cards}</div>`;
+  // A card: rows of a label column and a control column, then 删除 | 继续添加.
+  const mobileRow = (label: string) =>
+    `<div class="atsx-row atsx-form-item"><div class="atsx-col atsx-form-item-label"><label>${label}</label></div>` +
+    `<div class="atsx-col atsx-form-item-control"><input class="atsx-input"></div></div>`;
+  const mobileCard = (...labels: string[]) =>
+    `<div class="resumeEditForm-item">${labels.map(mobileRow).join('')}` +
+    `<div class="formOperate"><div class="formOperate-delete"><svg></svg>删除</div><div class="formOperate-addMore"><svg></svg>继续添加</div></div></div>`;
+
+  describe('on a touch page', () => {
+    afterEach(() => {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    });
+
+    it('finds the add words of a collapsed section although nothing sets a pointer', () => {
+      touchPage(true);
+      document.body.innerHTML = mobileSection('项目经历', 'project') + mobileSection('语言能力', 'language');
+      expect(findAddButtons(document).map((b) => [b.text, b.section, b.named])).toEqual([
+        ['添加', 'projects', false],
+        ['添加', 'languages', false],
+      ]);
+    });
+
+    it('finds 继续添加 under a card and never takes 删除 beside it', () => {
+      touchPage(true);
+      document.body.innerHTML = `<h2>教育经历</h2>${mobileCard('学校名称', '专业')}`;
+      expect(findAddButtons(document).map((b) => [b.text, b.section])).toEqual([['继续添加', 'education']]);
+    });
+
+    it('ties 继续添加 to its section when most of the card is pickers with no input behind them', () => {
+      touchPage(true);
+      // As captured on the phone: the title holds only the words once a card exists, and only 专业 is a text box.
+      const pickerRow = (title: string, control: string) =>
+        `<div><div class="atsx-row atsx-form-item"><div class="atsx-form-item-control"><span class="atsx-form-item-children"><div class="atsx-col atsx-form-item-label"><label title="${title}">${title}</label></div></span></div><div class="atsx-col atsx-form-item-control-wrapper">${control}</div></div></div>`;
+      document.body.innerHTML =
+        `<div class="resumeEditForm-education createFormSection-mutiple"><div class="createFormSection-title"><p class="createFormSection-text">教育经历</p></div>` +
+        `<div class="createFormSection-formList"><div class="resumeEditForm-item resumeEditForm-RepeatModule">` +
+        pickerRow('学校名称', mschool('某某大学')) +
+        pickerRow('学历', mselect('硕士')) +
+        pickerRow('专业', '<input class="atsx-input" type="text">') +
+        pickerRow('起止时间', mperiod('2020-09', '2024-07')) +
+        `<div><div class="formOperate"><div class="formOperate-addMore formOperate-operate"><svg></svg>继续添加</div></div></div>` +
+        `</div></div></div>`;
+      expect(findAddButtons(document).map((b) => [b.text, b.section])).toEqual([['继续添加', 'education']]);
+    });
+
+    it('a picker row whose answer names another part of a resume is no heading', () => {
+      touchPage(true);
+      const pickerRow = (title: string, control: string) =>
+        `<div><div class="atsx-row atsx-form-item"><div class="atsx-col atsx-form-item-label"><label>${title}</label></div><div class="atsx-col atsx-form-item-control-wrapper">${control}</div></div></div>`;
+      document.body.innerHTML =
+        `<div class="resumeEditForm-career"><div class="createFormSection-title"><p class="createFormSection-text">工作经历</p></div>` +
+        `<div class="createFormSection-formList"><div class="resumeEditForm-item">` +
+        pickerRow('公司名称', '<input class="atsx-input" type="text">') +
+        pickerRow('职位', '<input class="atsx-input" type="text">') +
+        pickerRow('经历类型', mselect('实习经历')) +
+        `<div><div class="formOperate"><div class="formOperate-addMore"><svg></svg>继续添加</div></div></div>` +
+        `</div></div></div>`;
+      expect(findAddButtons(document).map((b) => [b.text, b.section])).toEqual([['继续添加', 'work']]);
+    });
+
+    it('still leaves alone a sentence about adding', () => {
+      touchPage(true);
+      document.body.innerHTML = `<h2>项目经历</h2><p>添加的内容请写在下面</p>`;
+      expect(findAddButtons(document)).toEqual([]);
+    });
+
+    // The phone's fill browser runs on every site, so on a touch page the words alone are not enough: something has
+    // to draw them as a button, an icon, a plus, or a name that says so.
+    it('leaves alone bare add words that nothing draws as a button', () => {
+      touchPage(true);
+      document.body.innerHTML = `<h2>项目经历</h2><div class="tips"><div>添加</div></div><h3>新增</h3><div class="addressBook">增加</div>`;
+      expect(findAddButtons(document)).toEqual([]);
+    });
+
+    it('takes add words drawn with a plus, an icon font, or a name that says add', () => {
+      touchPage(true);
+      document.body.innerHTML =
+        `<h2>项目经历</h2><div><span>+ 添加</span></div>` +
+        `<h2>语言能力</h2><div><i class="iconfont icon-plus"></i><span>添加</span></div>` +
+        `<h2>获奖情况</h2><div class="award-addBtn">添加</div>`;
+      expect(findAddButtons(document)).toHaveLength(3);
+    });
+
+    it('opens a collapsed section once per resume entry', async () => {
+      touchPage(true);
+      document.body.innerHTML = mobileSection('项目经历', 'project');
+      // As on Feishu: the title's "+ 添加" opens the first card and goes away; each card's 继续添加 opens the next.
+      const section = document.querySelector('.resumeEditForm-project')!;
+      section.addEventListener('click', (e) => {
+        const t = e.target as Element;
+        if (t.closest('.createFormSection-add__wrapper')) section.querySelector('.createFormSection-add__wrapper')!.remove();
+        else if (!t.closest('.formOperate-addMore')) return;
+        section.insertAdjacentHTML('beforeend', mobileCard('项目名称', '项目角色'));
+      });
+      const need = zh.projects.length;
+      expect(need).toBeGreaterThan(1);
+      const [growth] = await ensureCards(document, zh, { timeoutMs: 200 });
+      expect(growth).toMatchObject({ section: 'projects', need, have: need, status: 'ok' });
+    });
+  });
+
+  it('without a touch screen, plain add words still need the pointer', () => {
+    touchPage(false);
+    document.body.innerHTML = mobileSection('项目经历', 'project');
+    expect(findAddButtons(document)).toEqual([]);
+    delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
   it('ignores hidden and disabled add buttons', () => {

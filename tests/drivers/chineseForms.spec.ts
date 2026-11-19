@@ -274,6 +274,14 @@ test.describe('Feishu', () => {
     expect(words).toEqual(['武侯区', '', '成都市', '', '四川']);
   });
 
+  test('an empty box takes the next answer in the resume when the first is not on the list', async () => {
+    await mountFeishu(['北京', '杭州']);
+    const r = await execIntent(page, '学历', { kind: 'choice', display: '上海', query: '上海', fallbacks: ['深圳', '杭州'] }, { nth: 0 });
+    expect(r.outcome).toBe('filled');
+    await expect(degreeShown()).toHaveText('杭州');
+    await expect(page.locator('.ud__select__dropdown')).toHaveCount(0);
+  });
+
   test('an empty box with no level on the list stays empty', async () => {
     await mountFeishu(['辽宁']);
     const r = await execIntent(page, '学历', place('武侯区', '成都市', '四川'), { nth: 0 });

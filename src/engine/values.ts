@@ -356,7 +356,11 @@ function multiOrChoice(domain: string | null, values: string[], control: Control
       items: values.map((v) => ({ query: v, match: (options) => matchOption(domain, v, options) })),
     };
   }
-  return choice(domain, values[0]!, values[0]!);
+  // One answer only: the rest of the list, in the order written, for when the page does not offer the first.
+  const [first, ...rest] = values;
+  const one = choice(domain, first!, first!);
+  if (rest.length === 0 || one.kind !== 'choice') return one;
+  return { ...one, fallbacks: rest.map((v) => ({ query: v, match: (options: OptionInfo[]) => matchOption(domain, v, options) })) };
 }
 
 /** Region parts in the order a person writes them: zh 浙江省杭州市西湖区, en "Brisbane, QLD". */

@@ -1,8 +1,26 @@
 apply plugin: 'com.android.application'
 
+// Release signing. The key and its passwords never live in this repo: they come from a properties file elsewhere,
+// by default ~/.raf-signing/keystore.properties, or the path in the RAF_SIGNING_PROPERTIES environment variable.
+// The file holds four lines:
+//   storeFile=raf-release.jks      (relative paths are read from the properties file's folder)
+//   storePassword=...
+//   keyAlias=raf
+//   keyPassword=...
+// Without the file, assembleRelease still builds, but the APK is unsigned and Android will not install it.
+def signingPropsFile = file(System.getenv('RAF_SIGNING_PROPERTIES') ?: "${System.getProperty('user.home')}/.raf-signing/keystore.properties")
+def signingProps = new Properties()
+if (signingPropsFile.isFile()) {
+    signingPropsFile.withInputStream { signingProps.load(it) }
+    ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { k ->
+        if (!signingProps.getProperty(k)) throw new GradleException("${signingPropsFile} has no ${k}")
+    }
+} else {
+    logger.warn("Release signing: ${signingPropsFile} not found, so the release APK will be unsigned.")
+}
+
 def rafVersionCode = (System.getenv("RAF_VERSION_CODE") ?: project.findProperty("RAF_VERSION_CODE") ?: "1").toInteger()
 def rafVersionName = (System.getenv("RAF_VERSION_NAME") ?: project.findProperty("RAF_VERSION_NAME") ?: "0.1.0").toString()
-def rafKeystorePath = System.getenv("RAF_KEYSTORE_PATH") ?: project.findProperty("RAF_KEYSTORE_PATH")
 
 android {
     namespace = "app.raf.dev"
@@ -34,23 +52,21 @@ android {
     }
 
     signingConfigs {
-        release {
-            if (rafKeystorePath && file(rafKeystorePath).exists()) {
-                storeFile file(rafKeystorePath)
-                storePassword System.getenv("RAF_KEYSTORE_PASSWORD") ?: project.findProperty("RAF_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("RAF_KEY_ALIAS") ?: project.findProperty("RAF_KEY_ALIAS")
-                keyPassword System.getenv("RAF_KEY_PASSWORD") ?: project.findProperty("RAF_KEY_PASSWORD")
+        if (!signingProps.isEmpty()) {
+            release {
+                def store = new File(signingProps.getProperty('storeFile'))
+                storeFile store.isAbsolute() ? store : new File(signingPropsFile.parentFile, store.path)
+                storePassword signingProps.getProperty('storePassword')
+                keyAlias signingProps.getProperty('keyAlias')
+                keyPassword signingProps.getProperty('keyPassword')
             }
         }
     }
-
     buildTypes {
         release {
+            if (!signingProps.isEmpty()) signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
-            if (rafKeystorePath && file(rafKeystorePath).exists()) {
-                signingConfig signingConfigs.release
-            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

@@ -58,6 +58,11 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'feishu', kind: 'date', root: '.throne-biz-date-range-picker-wrapper' },
   { lib: 'feishu', kind: 'date', root: '.ud__picker' },
   { lib: 'feishu', kind: 'select', root: '.ud__select' },
+  // On a phone (/index/m/): no inputs at all, a tap opens a drawer. The phone number is plain text from the login.
+  { lib: 'feishu', kind: 'date', root: '.atsx-mperiod' },
+  { lib: 'feishu', kind: 'select', root: '.atsx-mselect' },
+  { lib: 'feishu', kind: 'select', root: '.atsx-m-input-select-warp' },
+  { lib: 'feishu', kind: 'select', root: '.atsx-mSelectTreeInput' },
 
   // ---- antd v5 ----
   {
@@ -162,6 +167,7 @@ export const LIBRARY_OVERLAY_SELECTOR = [
   '[class*="sd-Dropdown-dropdown"]',
   '.ud__select__dropdown',
   '.common-unmodeled-layer__layerContent',
+  '.atsx-drawer',
 ].join(', ');
 
 /** Selector matching every library root (widgets + unsupported), for one querySelectorAll. */
@@ -225,7 +231,7 @@ export function isAriaMultiple(el: HTMLElement): boolean {
 /** A picker that holds a start and an end in one field. */
 export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor') ||
   (el.matches('.month-range-select') && el.querySelectorAll('input').length === 4) ||
-  el.matches('.throne-biz-date-range-picker-wrapper');
+  el.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod');
 
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {
   return LIBRARY_UNSUPPORTED.find((u) => el.matches(u.root));
@@ -263,7 +269,7 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
   }
   // Year and month is all either of Moka's date widgets asks.
   if (widget.lib === 'moka') return 'month';
-  if (root.matches('.throne-biz-date-range-picker-wrapper')) return 'month';
+  if (root.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod')) return 'month';
   // Beisen's box opens a day calendar or a month panel, and only opening it tells which: ask for the day.
   if (widget.lib === 'beisen') return 'day';
   if (widget.lib === 'element') {

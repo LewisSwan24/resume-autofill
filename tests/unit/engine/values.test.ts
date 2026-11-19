@@ -457,6 +457,23 @@ describe('toIntent', () => {
     expect(intent('jobIntention.positions', ['后端开发工程师', '前端'], control('text'))).toEqual({ kind: 'text', text: '后端开发工程师' });
   });
 
+  it('list on a single select: the next city in the resume when the first is not offered', () => {
+    const single = control('select', { options: opts('北京', '杭州') });
+    const asked = intent('jobIntention.cities', ['上海', '北京', '杭州'], single);
+    if (asked?.kind !== 'choice') throw new Error('choice expected');
+    expect(asked.match(single.options!).status).toBe('none');
+    // In the order written: the first one the job offers.
+    const next = (asked.fallbacks ?? []).map((w) => w.match(single.options!)).find((m) => m.status === 'matched');
+    expect(single.options![(next as { index: number }).index]!.label).toBe('北京');
+    expect(asked.fallbacks?.map((w) => w.query)).toEqual(['北京', '杭州']);
+    // Other answers, not wider levels of this one: a driver that walks a place down its levels must not walk these.
+    expect(asked).not.toHaveProperty('wider');
+    // One city: nothing to fall back on.
+    const one = intent('jobIntention.cities', ['北京'], single);
+    expect(one).toMatchObject({ kind: 'choice', query: '北京' });
+    expect(one).not.toHaveProperty('fallbacks');
+  });
+
   it('text keys on a select use the dictionary domain when one exists', () => {
     // plain text key → matchOption without domain
     const states = control('select', { options: opts('Select', 'NSW', 'QLD') });

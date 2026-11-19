@@ -10,6 +10,7 @@ import {
   checkChromeAiAvailability,
   isValidLoopbackOllamaUrl,
   listOllamaModels,
+  resolveAiLayerMode,
 } from '../../src/ai';
 import { MAPPING_PRESETS, isValidPresetId } from '../../src/templates';
 import { extractTrackerFromParsed } from '../../src/sync';
@@ -25,16 +26,19 @@ import { useToast } from './ui/Toast';
 interface SettingsProps {
   settings: Settings;
   onChange: (settings: Settings) => void;
+  /** The vault was locked or unlocked here; the editor holds or saves edits accordingly. */
+  onVaultLocked?: () => void;
+  onVaultUnlocked?: () => void;
 }
 
-export function SettingsPanel({ settings, onChange }: SettingsProps) {
+export function SettingsPanel({ settings, onChange, onVaultLocked, onVaultUnlocked }: SettingsProps) {
   const t = useT();
   const [endpointDraft, setEndpointDraft] = useState(settings.ollamaEndpoint ?? DEFAULT_OLLAMA_ENDPOINT);
   const [endpointError, setEndpointError] = useState<string | null>(null);
   const [detectStatus, setDetectStatus] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
 
-  const aiMode = settings.aiLayerMode ?? (settings.ollamaEnabled ? 'ollama' : 'auto_local');
+  const aiMode = resolveAiLayerMode(settings);
 
   const checkCapabilities = async () => {
     setDetecting(true);
@@ -157,7 +161,7 @@ export function SettingsPanel({ settings, onChange }: SettingsProps) {
       </div>
       {detectStatus ? <Notice>{detectStatus}</Notice> : null}
       <FabPlace />
-      <VaultPanel />
+      <VaultPanel onLocked={onVaultLocked} onUnlocked={onVaultUnlocked} />
     </div>
   );
 }

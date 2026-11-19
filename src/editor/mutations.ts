@@ -1,6 +1,7 @@
 // Pure, immutable edits of resumes and profiles. Nothing here touches storage or the DOM.
 import {
   ResumeSchema,
+  promoteVariantsOf,
   type Locale,
   type Profile,
   type Resume,
@@ -151,10 +152,13 @@ export function updateResume(profile: Profile, id: string, edit: (resume: Resume
   return { ...profile, resumes: profile.resumes.map((r) => (r.id === id ? edit(r) : r)) };
 }
 
-/** Remove a resume, drop links pointing at it and move `activeResumeId` to the first remaining one. */
+/**
+ * Remove a resume, drop links pointing at it and move `activeResumeId` to the first remaining one.
+ * Variants of it become standalone resumes that keep their own overrides and what they inherited.
+ */
 export function removeResume(profile: Profile, id: string): Profile {
   if (!profile.resumes.some((r) => r.id === id)) return profile;
-  const resumes = profile.resumes
+  const resumes = promoteVariantsOf(profile.resumes, id)
     .filter((r) => r.id !== id)
     .map((r) => {
       if (r.linkedResumeId !== id) return r;

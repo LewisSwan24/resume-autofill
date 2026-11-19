@@ -18,11 +18,12 @@ export default defineConfig({
     },
   },
   manifest: {
-    // The extension's own pages only connect to self or an optional user-enabled local loopback Ollama instance
-    // (127.0.0.1 / localhost). No external domains are permitted, and content/background scripts perform zero fetches.
+    // The extension's own pages only connect to self or an optional user-enabled local Ollama on its default port
+    // (127.0.0.1:11434 / localhost:11434); the options page accepts no other endpoint. No external domains or other
+    // loopback ports are permitted, and content/background scripts perform zero fetches.
     content_security_policy: {
       extension_pages:
-        "default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'none'; frame-src 'none'",
+        "default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self' http://127.0.0.1:11434 http://localhost:11434; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'none'; frame-src 'none'",
     },
     name: '网申简历一键填写助手 / Resume Autofill',
     description: 'One-click autofill of job application forms from a locally stored resume.',

@@ -30,8 +30,8 @@ test('M4 E2E: Options creates derived Variant from JD Tailor and Storage Vault e
 
   // 2. Enable Storage Vault, lock, verify ciphertext in chrome.storage.local & unlock UI
   await page.getByRole('tab', { name: /Settings|设置/ }).click();
-  const vaultPassInput = page.getByLabel(/Master passphrase|主口令/);
-  await vaultPassInput.fill('e2e-vault-pass-2026');
+  await page.getByLabel(/^(Master passphrase|主口令（)/).fill('e2e-vault-pass-2026');
+  await page.getByLabel(/Repeat the passphrase|再输一遍主口令/).fill('e2e-vault-pass-2026');
   await page.getByRole('button', { name: /Enable encrypted vault|开启静态加密保险箱/ }).click();
 
   await expect(page.getByText(/Unlocked|已解锁/).first()).toBeVisible();

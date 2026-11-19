@@ -8,6 +8,7 @@ import {
   ResumeSchema,
   materializeResume,
   migrateProfile,
+  promoteVariantsOf,
   type Profile,
   type Resume,
   type ResumeInput,
@@ -191,16 +192,11 @@ export function deleteResume(id: string): Promise<boolean> {
   return exclusive(async () => {
     const p = await readProfile();
     if (!p.resumes.some((r) => r.id === id)) return false;
-    const resumes = p.resumes
+    // Variants of it become standalone resumes keeping their own overrides and what they inherited.
+    const resumes = promoteVariantsOf(p.resumes, id)
       .filter((r) => r.id !== id)
       .map((r) => {
         let updated = r;
-        if (updated.variantOf === id) {
-          // Promote child variant to standalone resume before unlinking parent so no inherited fields are lost.
-          const materialized = materializeResume(updated, p.resumes);
-          const { variantOf: _v, ...restVariant } = materialized;
-          updated = restVariant;
-        }
         if (updated.linkedResumeId === id) {
           const { linkedResumeId: _removed, ...rest } = updated;
           updated = rest;
@@ -269,24 +265,44 @@ export async function disableProfileVault(passphrase: string): Promise<Profile> 
 }
 
 /**
+ * The way out when the passphrase is lost: delete the vault meta and the encrypted profile on this device
+ * (they cannot be read without the passphrase) and drop the session key. Storage is then empty and
+ * unencrypted, ready for a JSON backup to be imported. Irreversible: callers must confirm first.
+ */
+export function forgetProfileVault(): Promise<void> {
+  return exclusive(async () => {
+    await browser.storage.local.remove([PROFILE_STORAGE_KEY, VAULT_META_KEY]);
+    await lockVault();
+  });
+}
+
+/**
  * Subscribe to profile changes made in any extension context. The callback receives the new
  * parsed profile (empty profile if the key was removed); unparsable values are skipped.
  * Returns an unsubscribe function.
  */
 export function watchProfile(cb: (profile: Profile) => void): () => void {
   let active = true;
+  // Events are numbered as they arrive; an encrypted one that finishes decrypting after a newer event
+  // was already delivered is dropped, so the callback never goes back to an older profile.
+  let received = 0;
+  let delivered = 0;
   const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
     if (!active || area !== 'local' || !(PROFILE_STORAGE_KEY in changes)) return;
+    const seq = ++received;
     const raw = changes[PROFILE_STORAGE_KEY]?.newValue;
     if (isEncryptedVaultBlob(raw)) {
       void decryptProfileWithVault(raw, { touchSession: false })
         .then((decrypted) => {
-          if (!active) return;
+          if (!active || seq < delivered) return;
+          let profile: Profile;
           try {
-            cb(migrateProfile(decrypted));
+            profile = migrateProfile(decrypted);
           } catch {
-            // Corrupt or unsupported version: ignore cleanly.
+            return; // Corrupt or unsupported version: ignore cleanly.
           }
+          delivered = seq;
+          cb(profile);
         })
         .catch(() => {
           // Locked vault: wait until unlocked.
@@ -300,6 +316,7 @@ export function watchProfile(cb: (profile: Profile) => void): () => void {
     } catch {
       return; // Corrupt value written by someone else: nothing sensible to report.
     }
+    delivered = seq;
     cb(profile);
   };
   browser.storage.onChanged.addListener(listener);

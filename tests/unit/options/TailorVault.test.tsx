@@ -39,4 +39,19 @@ describe('Options – JD Tailor & Variant Studio', () => {
       expect(variant?.variantMeta?.targetRole).toContain('Senior Backend Engineer');
     });
   });
+
+  it('labels a template summary as not AI output and says a fallback was used', async () => {
+    await saveProfile(createSampleProfile());
+    render(<App autosaveDelayMs={5} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'JD Tailor & Recipes' }));
+    const jdInput = await screen.findByPlaceholderText(/Paste role responsibilities/i);
+    fireEvent.change(jdInput, { target: { value: 'Senior Backend Engineer\nRequired: TypeScript, SQL' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze JD match offline' }));
+    await screen.findByText(/Offline match score:/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Draft tailored summary (Fact Guard checked)' }));
+    expect(await screen.findByText(/Not AI output/)).toBeTruthy();
+    expect(screen.getByText(/No local model answered, so this draft is a template/)).toBeTruthy();
+  });
 });

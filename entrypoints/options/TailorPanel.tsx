@@ -10,7 +10,14 @@ import {
   parseAndVerifyRecipePack,
   type RecipePackDiff,
 } from '../../src/recipes';
-import { ResumeSchema, type Profile, type Resume } from '../../src/schema';
+import {
+  ResumeSchema,
+  ensureEntryIds,
+  hiddenIndicesToIds,
+  materializeResume,
+  type Profile,
+  type Resume,
+} from '../../src/schema';
 import {
   analyzeResumeAgainstJd,
   buildVariantMetaFromJd,
@@ -44,19 +51,21 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
   const importRef = useRef<HTMLInputElement>(null);
 
   const customRecipes = profile.recipes ?? [];
+  // A variant is matched as it fills: with what it inherits from its base.
+  const view = resume ? materializeResume(resume, profile.resumes) : null;
 
   const handleAnalyze = () => {
-    if (!resume || !jdText.trim()) return;
+    if (!view || !jdText.trim()) return;
     setRewrite(null);
-    setAnalysis(analyzeResumeAgainstJd(resume, jdText));
+    setAnalysis(analyzeResumeAgainstJd(view, jdText));
   };
 
   const handleRewrite = async () => {
-    if (!resume || !analysis) return;
+    if (!view || !analysis) return;
     setRewriting(true);
     try {
       const res = await generateTailoredSummaryDraft({
-        resume,
+        resume: view,
         targetRole: analysis.targetRole,
         matchedKeywords: analysis.matchedKeywords,
         settings: profile.settings,
@@ -73,10 +82,20 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
   const handleSaveVariant = async () => {
     if (!resume || !analysis) return;
     const baseId = resume.variantOf ?? resume.id;
-    const overlay = buildVariantMetaFromJd(resume, analysis);
+    // Hidden entries are keyed by entry id, so the entries of the analysed resume and its bases get ids first.
+    const chain = new Set<string>();
+    for (let cursor: Resume | undefined = resume; cursor && !chain.has(cursor.id); ) {
+      chain.add(cursor.id);
+      const parentId: string | undefined = cursor.variantOf;
+      cursor = profile.resumes.find((r) => r.id === parentId);
+    }
+    const resumes = profile.resumes.map((r) => (chain.has(r.id) ? ensureEntryIds(r) : r));
+    const analysed = materializeResume(resumes.find((r) => r.id === resume.id) ?? resume, resumes);
+    const overlay = hiddenIndicesToIds(buildVariantMetaFromJd(analysed, analysis), analysed);
     if (draftSummary.trim()) overlay.customSummary = draftSummary.trim();
     const roleLabel = analysis.targetRole || 'JD';
     const title = `${resume.title} · ${roleLabel}`.slice(0, 80);
+    // Only identity and the overlay: every other field is empty, so the variant follows its base until edited.
     const variant = ResumeSchema.parse({
       id: crypto.randomUUID(),
       title,
@@ -84,7 +103,7 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
       variantOf: baseId,
       variantMeta: overlay,
     });
-    const next = addResume(profile, variant, { activate: true });
+    const next = addResume({ ...profile, resumes }, variant, { activate: true });
     await onCommit(next, { immediate: true });
     onSelectResume(variant.id);
     toast.push({ text: t('options.tailor.variantSaved', { title }) });
@@ -196,6 +215,18 @@ export function TailorPanel({ profile, resume, onCommit, onSelectResume }: Tailo
 
             {rewrite ? (
               <div className="raf-form-stack">
+                <p className="raf-caption">
+                  {rewrite.source === 'bm25'
+                    ? t('options.tailor.source.template')
+                    : t('options.tailor.source.ai', { source: t(`panel.ai.source.${rewrite.source}`) })}
+                </p>
+                {rewrite.fallbackUsed ? (
+                  <Notice tone="info">
+                    {rewrite.source === 'bm25'
+                      ? t('options.tailor.fallbackTemplate')
+                      : t(`panel.ai.fallbackNotice.${rewrite.source}`)}
+                  </Notice>
+                ) : null}
                 {!rewrite.factCheck.ok ? (
                   <Notice tone="danger">
                     {t('options.tailor.factWarn', { metrics: rewrite.factCheck.inventedMetrics.join(', ') })}

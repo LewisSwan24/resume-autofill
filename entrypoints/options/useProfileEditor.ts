@@ -1,10 +1,10 @@
 // Profile state for the options page: load, live updates from other contexts, validation and autosave.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AUTOSAVE_DELAY_MS, createAutosaver, validateProfile, type FieldIssue } from '../../src/editor';
-import type { Profile } from '../../src/schema';
+import { CURRENT_SCHEMA_VERSION, ProfileSchema, type Profile } from '../../src/schema';
 import { VaultLockedError, loadProfile, saveProfile, watchProfile } from '../../src/storage';
 
-export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'invalid' | 'error';
+export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'invalid' | 'error' | 'locked';
 
 export interface ProfileEditor {
   profile: Profile | null;
@@ -15,6 +15,12 @@ export interface ProfileEditor {
   issues: FieldIssue[];
   /** Reload stored profile (e.g. after unlocking the Storage Vault). */
   reload: () => void;
+  /** The vault was locked from this page ("Lock now"): edits are held until it is unlocked. */
+  markLocked: () => void;
+  /** The vault was unlocked: save the edits held while it was locked, or reload when there are none. */
+  unlocked: () => void;
+  /** The vault and its data were deleted ("restore from a backup"): start from an empty profile. */
+  vaultRemoved: () => void;
   /** Apply an edit. Invalid profiles are kept in the form but never saved. */
   commit: (next: Profile, options?: { immediate?: boolean }) => Promise<void>;
 }
@@ -33,6 +39,8 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
   const version = useRef(0);
   /** True from the first unsaved edit until its save finished: remote updates are ignored meanwhile. */
   const dirty = useRef(false);
+  /** The newest edit; when a save is refused because the vault locked, this is what gets saved after unlocking. */
+  const latest = useRef<Profile | null>(null);
 
   const saver = useMemo(
     () =>
@@ -47,6 +55,12 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
           setStatus('saved');
         } catch (error) {
           if (v !== version.current) return;
+          if (error instanceof VaultLockedError) {
+            // Keep the edit (dirty stays true, `latest` holds it) and ask for the passphrase.
+            setVaultLocked(true);
+            setStatus('locked');
+            return;
+          }
           setSaveError(messageOf(error));
           setStatus('error');
         }
@@ -106,6 +120,7 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
     async (next: Profile, options: { immediate?: boolean } = {}) => {
       version.current += 1;
       dirty.current = true;
+      latest.current = next;
       setProfile(next);
       setLoadError(null);
       const found = validateProfile(next);
@@ -122,5 +137,29 @@ export function useProfileEditor(autosaveDelayMs: number = AUTOSAVE_DELAY_MS): P
     [saver],
   );
 
-  return { profile, loadError, vaultLocked, status, saveError, issues, reload, commit };
+  const markLocked = useCallback(() => setVaultLocked(true), []);
+
+  const unlocked = useCallback(() => {
+    setVaultLocked(false);
+    const pending = latest.current;
+    if (dirty.current && pending && validateProfile(pending).length === 0) {
+      setStatus('pending');
+      saver.schedule({ profile: pending, version: version.current });
+      void saver.flush();
+    } else if (!dirty.current) {
+      setReloadTick((n) => n + 1);
+    }
+  }, [saver]);
+
+  const vaultRemoved = useCallback(() => {
+    saver.cancel();
+    dirty.current = false;
+    latest.current = null;
+    setVaultLocked(false);
+    setLoadError(null);
+    setStatus('idle');
+    setProfile(ProfileSchema.parse({ schemaVersion: CURRENT_SCHEMA_VERSION }));
+  }, [saver]);
+
+  return { profile, loadError, vaultLocked, status, saveError, issues, reload, markLocked, unlocked, vaultRemoved, commit };
 }

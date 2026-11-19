@@ -19,6 +19,7 @@ import {
   verdictSelectors,
 } from '../shared/capturedExpectations';
 import { injectHarness } from '../drivers/helpers';
+import { contextOptionsFor } from '../../scripts/capture/device';
 import { inspect, locatorsOf, unjudgedControls } from './readState';
 
 const samples = listSamples();
@@ -34,7 +35,7 @@ async function openForFill(browser: Browser, sample: CapturedSample): Promise<Pa
 }
 
 async function openStatic(browser: Browser, sample: CapturedSample): Promise<Page> {
-  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1280, height: 900 }, locale: 'en-AU' });
+  const context = await browser.newContext({ ...contextOptionsFor(sample.device, sample.locale), bypassCSP: true });
   const html = readFileSync(path.join(sample.dir, 'page.html'), 'utf8');
   // Everything but the document is refused, so this cannot reach the site.
   await context.route('**/*', (route) =>
@@ -47,10 +48,9 @@ async function openStatic(browser: Browser, sample: CapturedSample): Promise<Pag
 
 async function openReplay(browser: Browser, sample: CapturedSample): Promise<Page> {
   const context = await browser.newContext({
+    ...contextOptionsFor(sample.device, sample.locale),
     serviceWorkers: 'block',
     bypassCSP: true,
-    viewport: { width: 1280, height: 900 },
-    locale: 'en-AU',
   });
   // Anything not in the HAR is aborted, so the page cannot reach the site either.
   await context.routeFromHAR(path.join(sample.dir, 'page.har'), { notFound: 'abort' });

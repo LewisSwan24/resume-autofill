@@ -3,24 +3,23 @@
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://127.0.0.1:11434';
 export const DEFAULT_OLLAMA_MODEL = 'qwen2.5:3b';
 
-const LOOPBACK_RE = /^http:\/\/(127\.0\.0\.1|localhost)(?::(\d{1,5}))?$/;
+// The extension page CSP only lets `connect-src` reach Ollama's default port, so any other port would be blocked.
+export const OLLAMA_PORT = 11434;
 
-/** Strictly permit only local loopback `http://127.0.0.1[:port]` or `http://localhost[:port]` URLs. */
+const LOOPBACK_RE = /^http:\/\/(127\.0\.0\.1|localhost):(\d{1,5})$/;
+
+/** Strictly permit only `http://127.0.0.1:11434` or `http://localhost:11434`, the origins the CSP allows. */
 export function isValidLoopbackOllamaUrl(raw: string): boolean {
   const trimmed = raw.trim().replace(/\/+$/, '');
   const match = LOOPBACK_RE.exec(trimmed);
   if (!match) return false;
-  if (match[2]) {
-    const port = Number(match[2]);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
-  }
-  return true;
+  return Number(match[2]) === OLLAMA_PORT;
 }
 
 export function normalizeOllamaEndpoint(raw?: string): string {
   const candidate = (raw ?? '').trim().replace(/\/+$/, '') || DEFAULT_OLLAMA_ENDPOINT;
   if (!isValidLoopbackOllamaUrl(candidate)) {
-    throw new Error('Ollama endpoint must be local loopback (http://127.0.0.1 or http://localhost)');
+    throw new Error(`Ollama endpoint must be http://127.0.0.1:${OLLAMA_PORT} or http://localhost:${OLLAMA_PORT}`);
   }
   return candidate;
 }

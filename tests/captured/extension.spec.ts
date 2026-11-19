@@ -7,7 +7,9 @@ import { fillFixture } from '../e2e/helpers';
 import { listSamples, recordScore, scoreLine, scoreProblems, scoreSample } from '../shared/capturedExpectations';
 import { inspect, locatorsOf } from './readState';
 
-for (const sample of listSamples()) {
+// Phones run no extensions. The app injects the engine itself, which is what the harness replay in
+// captured.spec.ts does, on the device the sample was captured with.
+for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
   test(`extension on ${sample.ats}/${sample.name}: filling gives exactly what expected.json says`, async ({ context, serviceWorker }) => {
     test.setTimeout(180_000);
     // Only web requests: the extension's own files must keep loading. Anything not in the HAR is aborted.

@@ -22,7 +22,6 @@ describe('Incremental Delta .raf v3 container', () => {
       mode: 'full',
       version: 3,
       password: 'delta-pass-8888',
-      iterations: 100_000,
       knownAttachmentHashes: [knownCvHash],
       attachments: [
         { id: 'att-cv-1', name: 'cv.pdf', type: 'application/pdf', bytes: cvBytes },

@@ -40,7 +40,6 @@ describe('Options page – encrypted .raf sync & merge preview', () => {
       profile: incoming,
       mode: 'full',
       password: 'ext-sync-password',
-      iterations: 100_000,
       attachments: [
         {
           id: 'remote-pdf',

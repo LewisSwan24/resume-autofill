@@ -1,5 +1,5 @@
 // Local AI resume summary/bullet rewriter with strict Fact Guard (detects ungrounded invented metrics/years).
-import { generateReviewDraft, type AiSourceKind } from '../ai';
+import { generateReviewDraft, resolveAiLayerMode, type AiSourceKind } from '../ai';
 import type { Resume, Settings } from '../schema';
 
 export interface FactPreservationCheck {
@@ -58,22 +58,32 @@ export async function generateTailoredSummaryDraft(options: {
 }): Promise<TailoredRewriteDraft | null> {
   const { resume, targetRole, matchedKeywords, settings } = options;
   const originalText = resume.selfIntroduction.trim();
-  const promptQuestion = [
-    `Rewrite a factual resume summary strictly using ONLY existing resume facts for target role "${targetRole}".`,
-    matchedKeywords.length > 0 ? `Highlight existing skills matching: ${matchedKeywords.slice(0, 8).join(', ')}.` : '',
+  // The instruction is the extension's own and stays outside the fence; the role and keywords come from the JD.
+  const task = [
+    'Rewrite a factual resume summary strictly using ONLY existing resume facts for the target role given in the field below.',
+    matchedKeywords.length > 0 ? 'Highlight the existing skills listed there as matching keywords.' : '',
     'Do NOT invent numbers, percentages, employers, or years.',
   ]
     .filter(Boolean)
     .join(' ');
+  const jdText = [
+    `Target role: ${targetRole}`,
+    matchedKeywords.length > 0 ? `Matching keywords: ${matchedKeywords.slice(0, 8).join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('. ');
 
   const ai = await generateReviewDraft({
-    questionLabel: promptQuestion,
+    questionLabel: jdText,
     sectionHint: 'selfIntroduction',
+    task,
     resume,
     ...(settings ? { settings } : {}),
   });
 
-  if (!ai) {
+  // A BM25 hit is a stored answer to some other question, not a rewrite, so it is treated like no model at all
+  // and the summary falls back to the user's own self-introduction with the role in front.
+  if (!ai || ai.source === 'bm25') {
     if (!originalText) return null;
     const prefix = targetRole
       ? `${resume.locale.startsWith('zh') ? '应聘方向：' : 'Target Role: '}${targetRole}. `
@@ -83,7 +93,7 @@ export async function generateTailoredSummaryDraft(options: {
       originalText,
       rewrittenText: deterministic,
       source: 'bm25',
-      fallbackUsed: false,
+      fallbackUsed: resolveAiLayerMode(settings) !== 'bm25_only',
       factCheck: checkRewriteFactPreservation(`${targetRole} ${originalText}`, deterministic),
     };
   }

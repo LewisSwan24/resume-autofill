@@ -78,7 +78,7 @@ describe('Layer 3 Loopback Ollama validation & unidirectional fallback chain', (
   it('permits strictly http loopback URLs and rejects private LAN or remote hosts', async () => {
     expect(isValidLoopbackOllamaUrl(DEFAULT_OLLAMA_ENDPOINT)).toBe(true);
     expect(isValidLoopbackOllamaUrl('http://localhost:11434')).toBe(true);
-    expect(isValidLoopbackOllamaUrl('http://127.0.0.1:8080/')).toBe(true);
+    expect(isValidLoopbackOllamaUrl('http://127.0.0.1:8080/')).toBe(false);
 
     expect(isValidLoopbackOllamaUrl('https://127.0.0.1:11434')).toBe(false);
     expect(isValidLoopbackOllamaUrl('http://192.168.1.50:11434')).toBe(false);

@@ -2,7 +2,7 @@
 // Strictly extension-page only (never imported by background service worker or content scripts).
 import { buildResumeCorpus, tokenize, type CorpusDoc } from './bm25';
 import { normalizeOllamaEndpoint } from './ollama';
-import { sanitizeUntrustedLabel } from './promptGuard';
+import { sanitizeUntrustedLabel, scrubFreeTextPii } from './promptGuard';
 import type { Resume } from '../schema';
 
 export const HYBRID_VECTOR_DIM = 512;
@@ -202,7 +202,8 @@ async function writeIdbEmbedding(key: string, vector: number[]): Promise<void> {
 
 /**
  * Fetch an embedding from loopback Ollama `/api/embeddings` with SHA-256 cache.
- * Only redacted corpus strings (no direct PII) should ever be passed here.
+ * Only redacted corpus strings (no direct PII) should ever be passed here; emails, phones and ID numbers left
+ * in free text are still replaced with placeholders before the request.
  */
 export async function fetchRedactedOllamaEmbedding(
   redactedText: string,
@@ -214,7 +215,7 @@ export async function fetchRedactedOllamaEmbedding(
   } catch {
     return null;
   }
-  const clean = sanitizeUntrustedLabel(redactedText, 800);
+  const clean = sanitizeUntrustedLabel(scrubFreeTextPii(redactedText), 800);
   if (!clean) return null;
   const model = (opts.model ?? '').trim() || 'nomic-embed-text';
   const cacheKey = await contentCacheKey(model, clean);
@@ -322,7 +323,7 @@ export async function retrieveHybridMatches(
     if (qEmb) {
       const docEmbs = await Promise.all(
         docs.map((d) =>
-          fetchRedactedOllamaEmbedding(`${d.queryText} ${d.answerText.slice(0, 260)}`, {
+          fetchRedactedOllamaEmbedding(`${d.queryText} ${scrubFreeTextPii(d.answerText).slice(0, 260)}`, {
             endpoint: options.ollamaEndpoint,
             model: options.ollamaEmbeddingModel,
             timeoutMs: options.timeoutMs,

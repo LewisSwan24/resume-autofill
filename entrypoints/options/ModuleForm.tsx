@@ -2,6 +2,7 @@
 import { Fragment, type ReactNode } from 'react';
 import {
   addEntry,
+  enumLabel,
   getByPath,
   insertEntry,
   moveEntry,
@@ -14,7 +15,13 @@ import {
   type ModuleMeta,
 } from '../../src/editor';
 import { useLanguage, useT } from '../../src/i18n';
-import type { Resume } from '../../src/schema';
+import {
+  clearVariantOverride,
+  inheritedSection,
+  inheritedValue,
+  isVariantOverride,
+  type Resume,
+} from '../../src/schema';
 import { BoolSwitch, FieldInput, REGION_PARTS } from './fields';
 import { Button, Checkbox, Divider, EmptyState, Field, IconButton, Input } from './ui/controls';
 import { useToast } from './ui/Toast';
@@ -26,6 +33,8 @@ interface Props {
   issues: ReadonlyMap<string, string>;
   /** Apply an edit to the resume being edited; always runs against the newest saved state. */
   onEdit: (edit: (resume: Resume) => Resume) => void;
+  /** Every resume in the profile: a variant shows what it inherits from its base. */
+  allResumes?: readonly Resume[];
 }
 
 const join = (...parts: (string | number)[]) => parts.join('.');
@@ -53,12 +62,42 @@ interface FieldsProps {
   base: string;
   issues: ReadonlyMap<string, string>;
   onEdit: (edit: (resume: Resume) => Resume) => void;
+  /** Set for a variant's own (non-repeatable) fields: empty ones show the base value, marked as inherited. */
+  allResumes?: readonly Resume[] | undefined;
 }
 
-function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
+function Fields({ resume, fields, base, issues, onEdit, allResumes }: FieldsProps) {
   const t = useT();
+  const language = useLanguage();
   const pathOf = (key: string) => (base ? `${base}.${key}` : key);
   const change = (path: string, v: unknown) => onEdit((r) => setByPath(r, path, v));
+  const variant = Boolean(allResumes && resume.variantOf);
+
+  /** The base value shown for an empty variant field, as text; undefined when nothing is inherited. */
+  const inheritedText = (field: FieldMeta, path: string): string | undefined => {
+    if (!variant || !allResumes) return undefined;
+    const v = inheritedValue(resume, allResumes, path);
+    if (v === undefined) return undefined;
+    if (field.input === 'select' && typeof v === 'string') return enumLabel(field.enumDomain ?? '', v, language);
+    if (typeof v === 'boolean') return v ? t('common.yes') : t('common.no');
+    if (Array.isArray(v)) return v.join(', ');
+    if (v && typeof v === 'object') return Object.values(v).filter(Boolean).join(' / ');
+    return String(v);
+  };
+  /** "From the base resume: ..." under an inheriting field, or the way back to the base under an override. */
+  const variantHint = (field: FieldMeta, path: string, label: string): ReactNode => {
+    if (!variant) return null;
+    const shown = inheritedText(field, path);
+    if (shown !== undefined) return <p className="raf-field__help raf-variant-hint">{t('options.variant.inheritedValue', { value: shown })}</p>;
+    if (!isVariantOverride(resume, path)) return null;
+    return (
+      <div className="raf-variant-hint">
+        <Button onClick={() => onEdit((r) => clearVariantOverride(r, path))} aria-label={t('options.variant.useBaseFor', { name: label })}>
+          {t('options.variant.useBase')}
+        </Button>
+      </div>
+    );
+  };
 
   const renderControl = (field: FieldMeta): ReactNode => {
     const path = pathOf(field.key);
@@ -71,6 +110,7 @@ function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
         <div key={field.key} className="raf-field">
           <BoolSwitch label={label} value={value} onChange={(v) => change(path, v)} />
           {error ? <p className="raf-field__help raf-field__help--error">{error}</p> : null}
+          {variantHint(field, path, label)}
         </div>
       );
     }
@@ -89,6 +129,7 @@ function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
                     {...control}
                     type="text"
                     value={region[part] ?? ''}
+                    placeholder={variant ? inheritedText(field, `${path}.${part}`) : undefined}
                     aria-invalid={error ? true : undefined}
                     aria-label={`${label} – ${t(`options.region.${part}`)}`}
                     onChange={(e) => change(path, { ...region, [part]: e.target.value })}
@@ -98,6 +139,7 @@ function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
             ))}
           </div>
           {error ? <p className="raf-field__help raf-field__help--error">{error}</p> : null}
+          {variantHint(field, path, label)}
         </fieldset>
       );
     }
@@ -128,10 +170,14 @@ function Fields({ resume, fields, base, issues, onEdit }: FieldsProps) {
       );
     }
 
+    const inherited = inheritedText(field, path);
     return (
-      <Field key={field.key} label={label} error={error}>
-        {(control) => <FieldInput meta={field} value={value} control={control} onChange={(v) => change(path, v)} />}
-      </Field>
+      <Fragment key={field.key}>
+        <Field label={label} error={error}>
+          {(control) => <FieldInput meta={field} value={value} control={control} placeholder={inherited} onChange={(v) => change(path, v)} />}
+        </Field>
+        {variantHint(field, path, label)}
+      </Fragment>
     );
   };
 
@@ -170,20 +216,32 @@ function entrySummary(meta: ModuleMeta, entry: Record<string, unknown>): string 
   return '';
 }
 
-export function ModuleForm({ resume, meta, issues, onEdit }: Props) {
+export function ModuleForm({ resume, meta, issues, onEdit, allResumes }: Props) {
   const t = useT();
   const language = useLanguage();
   const toast = useToast();
 
   if (!meta.repeatable) {
     const base = meta.container === 'root' ? '' : meta.module;
-    return <Fields resume={resume} fields={meta.fields} base={base} issues={issues} onEdit={onEdit} />;
+    return <Fields resume={resume} fields={meta.fields} base={base} issues={issues} onEdit={onEdit} allResumes={allResumes} />;
   }
 
   const module = meta.module as ArrayModuleName;
   const entries = resume[module] as unknown as Record<string, unknown>[];
   const name = t(meta.labelKey);
   const lowerName = lowerFirst(name, language);
+  const variant = Boolean(allResumes && resume.variantOf);
+  const inherited = variant && allResumes ? (inheritedSection(resume, allResumes, module) as unknown as Record<string, unknown>[]) : [];
+
+  // A variant's own entries replace the base list; giving them up returns to the base (Undo puts them back).
+  const backToBase = () => {
+    const own = structuredClone(entries);
+    onEdit((r) => ({ ...r, [module]: [] }) as Resume);
+    toast.push({
+      text: t('options.variant.sectionReset', { name }),
+      action: { label: t('options.undo'), onClick: () => onEdit((r) => ({ ...r, [module]: own }) as Resume) },
+    });
+  };
 
   // Delete is immediate; the toast offers Undo, which puts the entry back where it was (everything edited since stays).
   const remove = (index: number) => {
@@ -199,7 +257,29 @@ export function ModuleForm({ resume, meta, issues, onEdit }: Props) {
 
   return (
     <div className="raf-entries">
-      {entries.length === 0 ? <EmptyState>{t('options.noEntries', { name: lowerName })}</EmptyState> : null}
+      {inherited.length > 0 ? (
+        <div className="raf-variant-inherited" data-testid={`inherited-${module}`}>
+          <p className="raf-field__help raf-variant-hint">{t('options.variant.sectionInherited')}</p>
+          <ul className="raf-list">
+            {inherited.map((entry, index) => (
+              <li key={index} className="raf-caption">
+                {entrySummary(meta, entry) || t('options.entry', { name, n: index + 1 })}
+              </li>
+            ))}
+          </ul>
+          <Button onClick={() => onEdit((r) => ({ ...r, [module]: structuredClone(inherited) }) as Resume)}>
+            {t('options.variant.copySection')}
+          </Button>
+        </div>
+      ) : entries.length === 0 ? (
+        <EmptyState>{t('options.noEntries', { name: lowerName })}</EmptyState>
+      ) : null}
+      {variant && entries.length > 0 ? (
+        <div className="raf-variant-hint">
+          <p className="raf-field__help">{t('options.variant.sectionOwn')}</p>
+          <Button onClick={backToBase}>{t('options.variant.resetSection')}</Button>
+        </div>
+      ) : null}
       {entries.map((entry, index) => {
         const legend = t('options.entry', { name, n: index + 1 });
         const summary = entrySummary(meta, entry);

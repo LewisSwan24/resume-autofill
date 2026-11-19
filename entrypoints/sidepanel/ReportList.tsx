@@ -268,9 +268,10 @@ function FieldItem({
                     onClick={async () => {
                       setStarBusy(true);
                       try {
+                        // The role comes from the resume, never from the page label: a form question is not a role.
                         const res = await generateStarInterviewPrep({
                           resume,
-                          targetRole: resume.variantMeta?.targetRole || field.label,
+                          targetRole: resume.variantMeta?.targetRole || resume.jobIntention.positions[0] || '',
                           settings,
                         });
                         setStarPrep(res);
@@ -287,6 +288,18 @@ function FieldItem({
               {starPrep ? (
                 <div className="raf-star-box">
                   <span className="raf-help">{t('panel.star.title', { title: starPrep.entryTitle })}</span>
+                  <span className="raf-help">
+                    {starPrep.source === 'bm25'
+                      ? t('panel.star.source.template')
+                      : t('panel.star.source.ai', { source: t(`panel.ai.source.${starPrep.source}`) })}
+                  </span>
+                  {starPrep.fallbackUsed && starPrep.factCheck.ok ? (
+                    <span className="raf-help">
+                      {starPrep.source === 'bm25'
+                        ? t('panel.star.fallbackNotice')
+                        : t(`panel.ai.fallbackNotice.${starPrep.source}`)}
+                    </span>
+                  ) : null}
                   {!starPrep.factCheck.ok ? (
                     <span className="raf-help">
                       {t('panel.star.factWarn', { metrics: starPrep.factCheck.inventedMetrics.join(', ') })}
@@ -310,7 +323,9 @@ function FieldItem({
                       source: t(`panel.ai.source.${aiDraft.source}`),
                     })}
                   </span>
-                  {aiDraft.fallbackUsed ? <span className="raf-help">{t('panel.ai.fallbackNotice')}</span> : null}
+                  {aiDraft.fallbackUsed ? (
+                    <span className="raf-help">{t(`panel.ai.fallbackNotice.${aiDraft.source}`)}</span>
+                  ) : null}
                   {aiDraft.injectionDetected ? (
                     <span className="raf-help raf-help-error" role="alert">
                       {t('panel.ai.injectionWarn')}

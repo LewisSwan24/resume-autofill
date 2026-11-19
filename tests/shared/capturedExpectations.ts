@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FillReport } from '../../src/engine/types';
+import { DEFAULT_LOCALE, parseDevice, type CaptureDevice } from '../../scripts/capture/device';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const CAPTURED_DIR = path.join(ROOT, 'fixtures', 'captured');
@@ -78,6 +79,9 @@ export interface CapturedSample {
   url: string;
   /** Read in place behind a login, so there is no recording to replay: it runs on its snapshot. */
   readInPlace: boolean;
+  /** Replayed on the same device and locale it was captured with. */
+  device: CaptureDevice;
+  locale: string;
   expected: CapturedExpected;
 }
 
@@ -91,8 +95,23 @@ export function listSamples(root: string = CAPTURED_DIR): CapturedSample[] {
       const dir = path.join(atsDir, name);
       const file = path.join(dir, 'expected.json');
       if (!existsSync(file)) continue;
-      const meta = JSON.parse(readFileSync(path.join(dir, 'meta.json'), 'utf8')) as { url: string; harEntries?: number };
-      out.push({ ats, name, dir, url: meta.url, readInPlace: meta.harEntries === 0, expected: JSON.parse(readFileSync(file, 'utf8')) as CapturedExpected });
+      const meta = JSON.parse(readFileSync(path.join(dir, 'meta.json'), 'utf8')) as {
+        url: string;
+        harEntries?: number;
+        device?: string;
+        locale?: string;
+      };
+      out.push({
+        ats,
+        name,
+        dir,
+        url: meta.url,
+        readInPlace: meta.harEntries === 0,
+        // Captures from before these were recorded were all desktop, in en-AU.
+        device: parseDevice(meta.device),
+        locale: meta.locale ?? DEFAULT_LOCALE,
+        expected: JSON.parse(readFileSync(file, 'utf8')) as CapturedExpected,
+      });
     }
   }
   return out;

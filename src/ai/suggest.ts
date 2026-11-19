@@ -30,6 +30,14 @@ export function computeLocalFieldSuggestion(label: string, resume: Resume): Loca
 }
 
 /**
+ * The AI layer the user picked. Older settings only carry `ollamaEnabled`; the settings panel and the drafting
+ * code both read them through this one rule so they never disagree.
+ */
+export function resolveAiLayerMode(settings?: Partial<Settings>): NonNullable<Settings['aiLayerMode']> {
+  return settings?.aiLayerMode ?? (settings?.ollamaEnabled ? 'ollama' : 'auto_local');
+}
+
+/**
  * Generate a reviewable form-field draft using the configured local AI stack:
  * Ollama (when explicitly enabled) -> Chrome Built-in AI -> Layer 1 BM25 fallback.
  * Never auto-fills the DOM.
@@ -37,14 +45,17 @@ export function computeLocalFieldSuggestion(label: string, resume: Resume): Loca
 export async function generateReviewDraft(options: {
   questionLabel: string;
   sectionHint?: string | null;
+  /** The extension's own instruction, kept outside the untrusted fence. */
+  task?: string | null;
   resume: Resume;
   settings?: Partial<Settings>;
   timeoutMs?: number;
 }): Promise<AiDraftOutcome | null> {
-  const { questionLabel, sectionHint, resume, settings, timeoutMs = 15_000 } = options;
-  const safe = wrapSafePrompt(questionLabel, resume, sectionHint);
-  const mode = settings?.aiLayerMode ?? 'auto_local';
-  const ollamaEnabled = Boolean(settings?.ollamaEnabled) && mode === 'ollama';
+  const { questionLabel, sectionHint, task, resume, settings, timeoutMs = 15_000 } = options;
+  const safe = wrapSafePrompt(questionLabel, resume, sectionHint, task);
+  const mode = resolveAiLayerMode(settings);
+  // An explicit `ollamaEnabled: false` still keeps Ollama off.
+  const ollamaEnabled = mode === 'ollama' && settings?.ollamaEnabled !== false;
   const bm25Top = retrieveBm25Matches(questionLabel, resume, 1)[0];
 
   if (mode !== 'bm25_only') {

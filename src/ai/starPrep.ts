@@ -2,7 +2,7 @@
 import type { Resume, Settings } from '../schema';
 import { checkRewriteFactPreservation, type FactPreservationCheck } from '../tailor/rewriter';
 import { retrieveHybridMatches } from './hybridRetriever';
-import { generateReviewDraft, type AiSourceKind } from './suggest';
+import { generateReviewDraft, resolveAiLayerMode, type AiSourceKind } from './suggest';
 
 export interface StarOutline {
   situation: string;
@@ -59,7 +59,10 @@ function parseStarResponse(text: string): StarOutline | null {
   };
 }
 
-/** Build a strictly grounded STAR outline directly from existing resume fields without inventing metrics. */
+/**
+ * Build a strictly grounded STAR outline directly from existing resume fields without inventing metrics.
+ * The target role is written into the outline, so it also counts as an original fact for Fact Guard.
+ */
 export function buildDeterministicStarOutline(
   resume: Resume,
   entryKind: 'work' | 'projects',
@@ -88,7 +91,7 @@ export function buildDeterministicStarOutline(
 
     return {
       entryTitle: title,
-      originalFacts: `${title} ${period} ${entry.description}`,
+      originalFacts: `${title} ${period} ${targetRole} ${entry.description}`,
       outline: { situation, task, action, result },
     };
   }
@@ -113,7 +116,7 @@ export function buildDeterministicStarOutline(
 
   return {
     entryTitle: title,
-    originalFacts: `${title} ${period} ${entry.description}`,
+    originalFacts: `${title} ${period} ${targetRole} ${entry.description}`,
     outline: { situation, task, action, result },
   };
 }
@@ -155,17 +158,20 @@ export async function generateStarInterviewPrep(options: {
   const base = buildDeterministicStarOutline(resume, kind, index, targetRole);
   if (!base) return null;
 
-  const allowAi = settings?.aiLayerMode !== 'bm25_only';
+  const allowAi = resolveAiLayerMode(settings) !== 'bm25_only';
   if (allowAi) {
-    const promptQuestion = [
+    // The instruction is the extension's own and stays outside the fence. The role may come from a JD-derived
+    // variant, so it is the only part that is fenced.
+    const task = [
       `Create a concise 4-line STAR interview answer strictly using ONLY facts from "${base.entryTitle}".`,
       'Format lines strictly as: Situation: ... / Task: ... / Action: ... / Result: ...',
       'Never invent numbers, percentages, employers, or dates.',
     ].join(' ');
 
     const draft = await generateReviewDraft({
-      questionLabel: promptQuestion,
+      questionLabel: targetRole ? `Target role: ${targetRole}` : '',
       sectionHint: kind,
+      task,
       resume,
       ...(settings ? { settings } : {}),
     });
@@ -174,7 +180,7 @@ export async function generateStarInterviewPrep(options: {
       const parsed = parseStarResponse(draft.text);
       if (parsed) {
         const formatted = formatStarOutline(parsed, isZh);
-        const factCheck = checkRewriteFactPreservation(`${targetRole} ${base.originalFacts}`, formatted);
+        const factCheck = checkRewriteFactPreservation(base.originalFacts, formatted);
         if (factCheck.ok) {
           return {
             entryKind: kind,
@@ -213,7 +219,8 @@ export async function generateStarInterviewPrep(options: {
     outline: base.outline,
     formattedText,
     source: 'bm25',
-    fallbackUsed: false,
+    // The template is a fallback whenever a model was allowed but gave nothing usable.
+    fallbackUsed: allowAi,
     factCheck: checkRewriteFactPreservation(base.originalFacts, formattedText),
   };
 }

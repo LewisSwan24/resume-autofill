@@ -6,15 +6,18 @@ import { deleteFile, listFiles, putFile } from '../../src/storage';
 import {
   RAF_MIN_PASSWORD_LENGTH,
   RafError,
+  SyncMergeError,
   applySyncMerge,
   buildRafArchive,
   createReceiverSession,
   createSenderSession,
   decodeQrImageFile,
+  deleteOrphanFiles,
   inspectSyncArchive,
+  localFingerprintText,
+  parseKnownHashes,
   planSyncMerge,
   renderQrSvg,
-  sha256Hex,
   unlockSyncArchive,
   type SyncAttachmentInput,
   type SyncMode,
@@ -113,30 +116,34 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
       setError(t('options.sync.passwordShort'));
       return null;
     }
+    // Only the receiver's own fingerprints belong here; anything that is not a SHA-256 is refused, not guessed at.
+    const known = deltaMode ? parseKnownHashes(knownHashesInput) : null;
+    if (known && known.invalid.length > 0) {
+      setError(t('options.sync.badKnownHashes', { list: known.invalid.slice(0, 3).join(', ') }));
+      return null;
+    }
     setError(null);
     const tracker = await loadApplications().catch(() => []);
     const attachments = mode === 'full' ? await readAllSyncFiles() : [];
-    const knownHashes = deltaMode
-      ? knownHashesInput
-          .split(/[\s,;]+/)
-          .map((s) => s.trim().toLowerCase())
-          .filter((s) => s.length >= 8)
-      : undefined;
     return buildRafArchive({
       profile,
       tracker,
       attachments,
       mode,
       password: passphrase,
-      ...(deltaMode ? { version: 3 as const, knownAttachmentHashes: knownHashes ?? [] } : {}),
+      ...(known ? { version: 3 as const, knownAttachmentHashes: known.hashes } : {}),
     });
   };
 
-  const prefillLocalAttachmentHashes = async () => {
-    const files = await readAllSyncFiles();
-    const hashes = await Promise.all(files.map((f) => sha256Hex(f.bytes)));
-    setDeltaMode(true);
-    setKnownHashesInput(hashes.join('\n'));
+  /** Receiver side: copy this device's file fingerprints so the sender can leave those files out of a delta. */
+  const copyMyFingerprints = async () => {
+    try {
+      const files = await readAllSyncFiles();
+      await navigator.clipboard.writeText(await localFingerprintText(files));
+      toast.push({ text: t('options.sync.fingerprintsCopied', { n: files.length }) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const handleExportRaf = async () => {
@@ -199,6 +206,10 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
     } catch (err) {
       if (err instanceof RafError && err.code === 'wrong_password') {
         setUnlockError(t('options.sync.wrongPassword'));
+      } else if (err instanceof RafError && err.code === 'tampered') {
+        setUnlockError(t('options.sync.tampered'));
+      } else if (err instanceof RafError && err.code === 'outdated_archive') {
+        setUnlockError(t('options.sync.outdatedArchive'));
       } else {
         setUnlockError(t('options.sync.badArchive'));
       }
@@ -215,9 +226,12 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
   const handleApplyMerge = async (strategy: 'merge' | 'replace') => {
     if (!unlocked || !profile) return;
     setBusy(true);
+    setError(null);
+    const storage = extensionStorageAdapter();
+    let result: Awaited<ReturnType<typeof applySyncMerge>>;
     try {
       const existingTracker = await loadApplications().catch(() => []);
-      const result = await applySyncMerge(profile, unlocked, existingTracker, extensionStorageAdapter(), {
+      result = await applySyncMerge(profile, unlocked, existingTracker, storage, {
         strategy,
         adoptIds,
         includeTracker: true,
@@ -226,8 +240,23 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
       await saveApplications(
         strategy === 'replace' ? result.tracker : mergeTrackerRecords(existingTracker, result.tracker),
       );
+    } catch (err) {
+      setError(
+        err instanceof SyncMergeError
+          ? t('options.sync.missingKnownFile')
+          : t('options.sync.applyFailed', { error: err instanceof Error ? err.message : String(err) }),
+      );
+      setBusy(false);
+      return;
+    }
+    try {
+      // Only now, with the new profile and records stored, remove files nothing points to any more.
+      await deleteOrphanFiles(storage, result.orphanFileIds);
       setUnlocked(null);
       toast.push({ text: t('options.sync.done', { n: result.adoptedResumes }) });
+    } catch (err) {
+      setUnlocked(null);
+      setError(t('options.sync.cleanupFailed', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setBusy(false);
     }
@@ -377,19 +406,20 @@ export function SyncPanel({ profile, onApplyProfile }: SyncPanelProps) {
                 />
               )}
             </Field>
-            <div className="raf-row">
-              <Button onClick={() => void prefillLocalAttachmentHashes()}>{t('options.sync.fillLocalHashes')}</Button>
-            </div>
           </div>
         ) : null}
       </div>
 
+      <p className="raf-caption">{t('options.sync.copyFingerprintsHint')}</p>
       <div className="raf-row">
         <Button icon="download" variant="primary" disabled={!profile || busy} onClick={() => void handleExportRaf()}>
           {t('options.sync.exportRaf')}
         </Button>
         <Button icon="upload" disabled={busy} onClick={() => fileInputRef.current?.click()}>
           {t('options.sync.importRaf')}
+        </Button>
+        <Button icon="copy" disabled={busy} onClick={() => void copyMyFingerprints()}>
+          {t('options.sync.copyFingerprints')}
         </Button>
         <input
           ref={fileInputRef}

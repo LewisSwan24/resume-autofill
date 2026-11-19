@@ -22,7 +22,7 @@ import {
   type SyncStorageAdapter,
 } from '../../../src/sync';
 
-const ITERATIONS = 100_000; // fast valid iteration count for unit tests
+const ITERATIONS = 600_000; // lowest iteration count a .raf manifest accepts
 
 function makeMemoryStorage(initial: Array<{ id: string; name: string; type: string; bytes: Uint8Array }> = []): SyncStorageAdapter & {
   items: Map<string, { id: string; name: string; type: string; bytes: Uint8Array }>;
@@ -212,8 +212,9 @@ describe('sync conflict planning and deduplicated merge', () => {
     expect(merged.profile.resumes[1]!.title).toBe('Updated EN Resume');
     // Reused local file id via SHA-256 deduplication instead of storing a duplicate.
     expect(merged.profile.resumes[1]!.attachments.resumeFileId).toBe('local-existing');
-    expect(merged.prunedOrphanFiles).toBe(1);
-    expect(storage.items.has('local-orphan')).toBe(false);
+    // Orphans are only listed; the caller deletes them after saving the merged profile.
+    expect(merged.orphanFileIds).toEqual(['local-orphan']);
+    expect(storage.items.has('local-orphan')).toBe(true);
   });
 });
 

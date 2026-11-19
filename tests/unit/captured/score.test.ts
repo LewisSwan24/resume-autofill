@@ -368,6 +368,17 @@ describe('listSamples and recordScore', () => {
     expect(samples[0]!.url).toBe('https://x.example/a');
   });
 
+  it('replays a sample on the device and locale it was captured with', () => {
+    write('moka/phone/meta.json', { url: 'https://x.example/m', device: 'mobile', locale: 'zh-CN' });
+    write('moka/phone/expected.json', expected());
+    write('lever/old/meta.json', { url: 'https://x.example/o' });
+    write('lever/old/expected.json', expected());
+    const byName = Object.fromEntries(listSamples(root).map((s) => [s.name, s]));
+    expect(byName.phone).toMatchObject({ device: 'mobile', locale: 'zh-CN' });
+    // Captures from before the device was recorded were all desktop, in en-AU.
+    expect(byName.old).toMatchObject({ device: 'desktop', locale: 'en-AU' });
+  });
+
   it('merges scores by sample and mode', () => {
     const file = path.join(root, 'out', 'acc.json');
     const a = scoreSample(sample(), 'harness', emptyPage, filled(), report());

@@ -4,11 +4,14 @@ import type { Profile } from '../../../../src/schema';
 import {
   RAF_MIN_PASSWORD_LENGTH,
   RafError,
+  SyncMergeError,
   applySyncMerge,
   buildRafArchive,
   createReceiverSession,
   createSenderSession,
+  deleteOrphanFiles,
   inspectSyncArchive,
+  localFingerprintText,
   planSyncMerge,
   renderQrSvg,
   unlockSyncArchive,
@@ -30,7 +33,8 @@ export interface SyncSheetProps {
   onClose: () => void;
   profile: Profile | null;
   readStoredProfile: () => Promise<Profile>;
-  onApplyProfile?: (profile: Profile) => void;
+  /** Resolve once the profile is stored; files are only deleted after that. */
+  onApplyProfile?: (profile: Profile) => void | Promise<void>;
   files: FileStore;
   appState: AppState;
   updateAppState: (change: (s: AppState) => AppState) => Promise<boolean>;
@@ -87,6 +91,7 @@ function SyncSheetBody({
   const [unlockPass, setUnlockPass] = useState('');
   const [unlockErr, setUnlockErr] = useState<string | null>(null);
   const [unlocked, setUnlocked] = useState<UnlockedSyncPayload | null>(null);
+  const [applyErr, setApplyErr] = useState<string | null>(null);
 
   const [rtcMode, setRtcMode] = useState<'idle' | 'send' | 'recv'>('idle');
   const [signalOut, setSignalOut] = useState('');
@@ -177,6 +182,8 @@ function SyncSheetBody({
       setUnlocked(payload);
     } catch (err) {
       if (err instanceof RafError && err.code === 'wrong_password') setUnlockErr(t('m.sync.wrongPass'));
+      else if (err instanceof RafError && err.code === 'tampered') setUnlockErr(t('m.sync.tampered'));
+      else if (err instanceof RafError && err.code === 'outdated_archive') setUnlockErr(t('m.sync.outdatedArchive'));
       else setUnlockErr(t('m.sync.badArchive'));
     } finally {
       setBusy(false);
@@ -186,19 +193,53 @@ function SyncSheetBody({
   const handleApply = async (strategy: 'merge' | 'replace') => {
     if (!unlocked) return;
     setBusy(true);
+    setApplyErr(null);
+    const storage = makeMobileStorageAdapter(files);
+    let result: Awaited<ReturnType<typeof applySyncMerge>>;
     try {
       const base = profile ?? emptyProfile();
-      const result = await applySyncMerge(base, unlocked, appState.applications, makeMobileStorageAdapter(files), {
+      result = await applySyncMerge(base, unlocked, appState.applications, storage, {
         strategy,
         includeTracker: true,
       });
-      onApplyProfile?.(result.profile);
-      await updateAppState((s) => ({ ...s, applications: result.tracker }));
+      await onApplyProfile?.(result.profile);
+      const saved = await updateAppState((s) => ({ ...s, applications: result.tracker }));
+      if (saved === false) throw new Error(t('m.sync.trackerNotSaved'));
+    } catch (err) {
+      setApplyErr(
+        err instanceof SyncMergeError
+          ? t('m.sync.missingKnownFile')
+          : t('m.sync.applyFailed', { error: err instanceof Error ? err.message : String(err) }),
+      );
+      setBusy(false);
+      return;
+    }
+    try {
+      // Only once the new profile and records are stored; without a profile sink nothing was replaced, so keep every file.
+      if (onApplyProfile) await deleteOrphanFiles(storage, result.orphanFileIds);
       setUnlocked(null);
       onClose();
       showToast({ text: t('m.sync.done', { n: result.adoptedResumes }) });
+    } catch (err) {
+      setUnlocked(null);
+      setApplyErr(t('m.sync.cleanupFailed', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Receiver side: copy this device's file fingerprints so a sender can leave those files out of a delta. */
+  const copyMyFingerprints = async () => {
+    try {
+      const stored: Array<{ bytes: Uint8Array }> = [];
+      for (const id of await files.list()) {
+        const entry = await files.read(id);
+        if (entry) stored.push({ bytes: entry.bytes });
+      }
+      await navigator.clipboard.writeText(await localFingerprintText(stored));
+      showToast({ text: t('m.sync.fingerprintsCopied', { n: stored.length }) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -296,6 +337,10 @@ function SyncSheetBody({
       <button type="button" className="m-button m-button--wide" disabled={busy} onClick={() => pickerRef.current?.click()}>
         {t('m.sync.importRaf')}
       </button>
+      <button type="button" className="m-button m-button--wide" disabled={busy} onClick={() => void copyMyFingerprints()}>
+        {t('m.sync.copyFingerprints')}
+      </button>
+      <p className="m-row__caption">{t('m.sync.copyFingerprintsHint')}</p>
       <input
         ref={pickerRef}
         type="file"
@@ -335,6 +380,7 @@ function SyncSheetBody({
               {t('m.sync.deltaV3Info', { n: unlocked.skippedHashes?.length ?? 0 })}
             </Notice>
           ) : null}
+          {applyErr ? <Notice tone="danger">{applyErr}</Notice> : null}
           <button type="button" className="m-button m-button--primary m-button--wide" disabled={busy} onClick={() => void handleApply('merge')}>
             {t('m.sync.mergeBtn')}
           </button>

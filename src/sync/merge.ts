@@ -3,7 +3,7 @@ import { ATTACHMENT_SLOTS, pruneMissingAttachments, referencedFileIds } from '..
 import type { Profile, Resume } from '../schema';
 import { mergeTrackerRecords, recordKey } from '../tracker';
 import type { ApplicationRecord } from '../tracker/schema';
-import { sha256Hex, type UnlockedAttachment, type UnlockedSyncPayload } from './raf';
+import { sha256Hex, type SkippedAttachmentMeta, type UnlockedAttachment, type UnlockedSyncPayload } from './raf';
 
 export type ResumeDiffKind = 'add' | 'incoming_newer' | 'local_newer_or_same';
 
@@ -84,8 +84,20 @@ export function planSyncMerge(
   };
 }
 
+export type SyncMergeErrorCode = 'missing_known_file';
+
+export class SyncMergeError extends Error {
+  readonly code: SyncMergeErrorCode;
+  constructor(code: SyncMergeErrorCode, detail?: string) {
+    super(detail ? `${code}: ${detail}` : code);
+    this.name = 'SyncMergeError';
+    this.code = code;
+  }
+}
+
 async function restoreAttachmentsWithDedup(
   attachments: readonly UnlockedAttachment[],
+  skipped: readonly SkippedAttachmentMeta[],
   storage: SyncStorageAdapter,
 ): Promise<{ idMap: Map<string, string>; knownIds: Set<string> }> {
   const existingFiles = await storage.listExistingFiles();
@@ -97,7 +109,14 @@ async function restoreAttachmentsWithDedup(
     if (!hashToExistingId.has(h)) hashToExistingId.set(h, existing.id);
   }
 
+  // A delta left these files out because this device should already hold them: refuse before saving anything if it does not.
   const idMap = new Map<string, string>();
+  for (const item of skipped) {
+    const localId = hashToExistingId.get(item.hash);
+    if (!localId) throw new SyncMergeError('missing_known_file', item.hash);
+    for (const srcId of item.sourceIds) idMap.set(srcId, localId);
+  }
+
   for (const item of attachments) {
     let targetId = hashToExistingId.get(item.hash);
     if (!targetId) {
@@ -113,7 +132,16 @@ async function restoreAttachmentsWithDedup(
   return { idMap, knownIds };
 }
 
-function remapResumeAttachments(resume: Resume, idMap: Map<string, string>, knownIds: Set<string>): Resume {
+/**
+ * Point an incoming resume's slots at local file ids. An id that is neither in the archive nor known here
+ * (light mode, or a file the sender lacked) keeps the local resume's existing slot value instead of being dropped.
+ */
+function remapResumeAttachments(
+  resume: Resume,
+  idMap: Map<string, string>,
+  knownIds: Set<string>,
+  local: Resume | undefined,
+): Resume {
   const nextAttachments = { ...resume.attachments };
   let changed = false;
   for (const slot of ATTACHMENT_SLOTS) {
@@ -124,7 +152,9 @@ function remapResumeAttachments(resume: Resume, idMap: Map<string, string>, know
       nextAttachments[slot] = mapped;
       changed = true;
     } else if (!mapped && !knownIds.has(oldId)) {
-      delete nextAttachments[slot];
+      const keep = local?.attachments[slot];
+      if (keep) nextAttachments[slot] = keep;
+      else delete nextAttachments[slot];
       changed = true;
     }
   }
@@ -155,10 +185,19 @@ export interface AppliedSyncResult {
   profile: Profile;
   tracker: ApplicationRecord[];
   adoptedResumes: number;
-  prunedOrphanFiles: number;
+  /**
+   * Local files no longer referenced after a full import. Nothing is deleted here: delete them with
+   * `deleteOrphanFiles` only after the returned profile and tracker are saved. Always empty for light imports.
+   */
+  orphanFileIds: string[];
 }
 
-/** Execute merge or replace, deduplicate attachments by SHA-256, repair links, and sweep orphaned files. */
+/** Delete files listed by `applySyncMerge`; call only after the merged profile is safely stored. */
+export async function deleteOrphanFiles(storage: Pick<SyncStorageAdapter, 'deleteFile'>, ids: readonly string[]): Promise<void> {
+  for (const id of ids) await storage.deleteFile(id);
+}
+
+/** Execute merge or replace, deduplicate attachments by SHA-256, repair links, and list orphaned files (never deletes). */
 export async function applySyncMerge(
   existingProfile: Profile,
   incoming: UnlockedSyncPayload,
@@ -166,7 +205,8 @@ export async function applySyncMerge(
   storage: SyncStorageAdapter,
   options: ApplyMergeOptions,
 ): Promise<AppliedSyncResult> {
-  const { idMap, knownIds } = await restoreAttachmentsWithDedup(incoming.attachments, storage);
+  const { idMap, knownIds } = await restoreAttachmentsWithDedup(incoming.attachments, incoming.skipped ?? [], storage);
+  const localById = new Map(existingProfile.resumes.map((r) => [r.id, r]));
   const plan = planSyncMerge(existingProfile, incoming, existingTracker);
   const defaultAdopt = new Set(plan.resumes.filter((item) => item.defaultUseIncoming).map((item) => item.resume.id));
   const adoptIds = options.adoptIds ?? defaultAdopt;
@@ -175,7 +215,7 @@ export async function applySyncMerge(
   let adoptedCount = 0;
 
   if (options.strategy === 'replace') {
-    mergedResumes = incoming.profile.resumes.map((r) => remapResumeAttachments(r, idMap, knownIds));
+    mergedResumes = incoming.profile.resumes.map((r) => remapResumeAttachments(r, idMap, knownIds, localById.get(r.id)));
     adoptedCount = mergedResumes.length;
   } else {
     const incomingById = new Map(incoming.profile.resumes.map((r) => [r.id, r]));
@@ -183,7 +223,7 @@ export async function applySyncMerge(
       const inc = incomingById.get(local.id);
       if (inc && adoptIds.has(local.id)) {
         adoptedCount++;
-        return remapResumeAttachments(inc, idMap, knownIds);
+        return remapResumeAttachments(inc, idMap, knownIds, local);
       }
       return local;
     });
@@ -192,7 +232,7 @@ export async function applySyncMerge(
       .filter((r) => !existingIdSet.has(r.id) && adoptIds.has(r.id))
       .map((r) => {
         adoptedCount++;
-        return remapResumeAttachments(r, idMap, knownIds);
+        return remapResumeAttachments(r, idMap, knownIds, undefined);
       });
     mergedResumes = [...keptLocal, ...additions];
   }
@@ -226,14 +266,8 @@ export async function applySyncMerge(
   const finalProfile = pruneMissingAttachments(baseProfile, knownIds);
   const keepRefs = referencedFileIds(finalProfile);
 
-  // Clean up any existing files left unreferenced after replace/merge.
-  let prunedOrphanFiles = 0;
-  for (const id of knownIds) {
-    if (!keepRefs.has(id)) {
-      await storage.deleteFile(id);
-      prunedOrphanFiles++;
-    }
-  }
+  // List files left unreferenced after a full replace/merge. Light means "no files sent", never "delete mine".
+  const orphanFileIds = incoming.mode === 'light' ? [] : [...knownIds].filter((id) => !keepRefs.has(id));
 
   const finalTracker =
     options.includeTracker === false
@@ -246,6 +280,6 @@ export async function applySyncMerge(
     profile: finalProfile,
     tracker: finalTracker,
     adoptedResumes: adoptedCount,
-    prunedOrphanFiles,
+    orphanFileIds,
   };
 }

@@ -1031,7 +1031,11 @@ function AppContent({
           saveDocument={saveDocument}
           appInfo={appInfo}
           onImport={importFlow.start}
-          onApplySyncedProfile={(synced) => editor.edit(() => synced, { immediate: true })}
+          onApplySyncedProfile={async (synced) => {
+            // Store first and let a failure surface: sync deletes old files only after this resolves.
+            await store.save(synced);
+            editor.edit(() => synced, { immediate: true });
+          }}
           onWipe={wipeAll}
           clearSiteData={fillBrowser ? () => fillBrowser.clearSiteData() : undefined}
           showToast={showToast}

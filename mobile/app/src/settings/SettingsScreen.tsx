@@ -43,7 +43,7 @@ export interface SettingsScreenProps {
   appInfo?: AppInfo;
   onImport: () => void;
   /** Called when a chunked `.raf` or WebRTC sync produces a new profile. */
-  onApplySyncedProfile?: (profile: Profile) => void;
+  onApplySyncedProfile?: (profile: Profile) => void | Promise<void>;
   /** App's wipeAll; false on failure. */
   onWipe: () => Promise<boolean>;
   /** Clear the fill browser's cookies, web storage and cache; absent without the plugin (browser preview). */

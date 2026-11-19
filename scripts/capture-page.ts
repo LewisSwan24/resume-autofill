@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
 import { capturePage } from './capture/capture.ts';
+import { DEFAULT_LOCALE, contextOptionsFor, parseDevice, type CaptureDevice } from './capture/device.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = path.join(homedir(), '.raf-capture');
@@ -28,7 +29,9 @@ const { values: args } = parseArgs({
     login: { type: 'boolean', default: false },
     profile: { type: 'boolean', default: false },
     force: { type: 'boolean', default: false },
-    locale: { type: 'string', default: 'en-AU' },
+    locale: { type: 'string', default: DEFAULT_LOCALE },
+    /** desktop, or mobile for a site's phone pages (narrow, touch, an Android user agent). */
+    device: { type: 'string', default: 'desktop' },
     /** Wait for this file to appear instead of Enter, for a run with no terminal of its own. */
     'ready-file': { type: 'string' },
   },
@@ -44,6 +47,13 @@ if (!args.ats || !SLUG.test(args.ats)) die('--ats must be a lowercase slug');
 if (!args.name || !SLUG.test(args.name)) die('--name must be a lowercase slug');
 if (!args.url || !/^https?:\/\//.test(args.url)) die('--url must be http(s)');
 const { ats, name, url } = { ats: args.ats, name: args.name, url: args.url };
+let device: CaptureDevice = 'desktop';
+try {
+  device = parseDevice(args.device);
+} catch (error) {
+  die((error as Error).message);
+}
+const locale = args.locale ?? DEFAULT_LOCALE;
 
 const authenticated = args.login || args.profile;
 let terms: string[] = [];
@@ -73,11 +83,7 @@ const dir = path.join(ROOT, 'fixtures', 'captured', ats, name);
 const profileDir = path.join(HOME, 'profiles', ats);
 if (authenticated) mkdirSync(profileDir, { recursive: true });
 
-const contextOptions = {
-  serviceWorkers: 'block' as const,
-  viewport: { width: 1280, height: 900 },
-  locale: args.locale,
-};
+const contextOptions = { ...contextOptionsFor(device, locale), serviceWorkers: 'block' as const };
 const browser = authenticated ? null : await chromium.launch();
 const context = authenticated
   ? await chromium.launchPersistentContext(profileDir, { ...contextOptions, headless: !args.login, channel: 'chromium' })
@@ -90,6 +96,8 @@ const result = await capturePage(context, {
   name,
   terms,
   force: args.force,
+  device,
+  locale,
   screenshots: !authenticated,
   beforeRecord: args.login ? waitForUser : undefined,
   // Recording by now, and past the login: the walk to the form is part of what a replay needs.
@@ -104,4 +112,4 @@ if (result.findings.length > 0) {
   console.error(`capture: audit found ${result.findings.length} leak(s); sample removed`);
   process.exit(1);
 }
-console.log(`captured ${ats}/${name}: ${result.entries} requests, ${result.frames.length} frame(s), ${result.screenshots.length} screenshot(s), audit clean`);
+console.log(`captured ${ats}/${name} (${device}): ${result.entries} requests, ${result.frames.length} frame(s), ${result.screenshots.length} screenshot(s), audit clean`);

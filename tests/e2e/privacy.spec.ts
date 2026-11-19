@@ -100,7 +100,7 @@ test('the parsers and local AI fetchers are not in what runs on pages, and the m
   const manifest = JSON.parse(read('manifest.json')) as { permissions: string[]; content_security_policy?: { extension_pages?: string } };
   expect(manifest.permissions.sort()).toEqual(['sidePanel', 'storage', 'unlimitedStorage', 'webNavigation']);
   const csp = manifest.content_security_policy?.extension_pages ?? '';
-  expect(csp).toContain("connect-src 'self' http://127.0.0.1:* http://localhost:*");
+  expect(csp).toContain("connect-src 'self' http://127.0.0.1:11434 http://localhost:11434;");
   expect(csp).not.toMatch(/https:/);
 });
 

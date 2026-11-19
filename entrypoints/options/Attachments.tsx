@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react';
 import { ATTACHMENT_SLOTS, type AttachmentSlot } from '../../src/editor';
 import { useLanguage, useT } from '../../src/i18n';
-import type { Resume } from '../../src/schema';
+import { inheritedValue, type Resume } from '../../src/schema';
 import { getFile } from '../../src/storage';
 import { formatSize, formatWhen } from './format';
 import { IconButton, ListItem, Progress } from './ui/controls';
@@ -69,12 +69,17 @@ interface SlotProps {
   busy: boolean;
   onUpload: (slot: AttachmentSlot, file: File) => void;
   onRemove: (slot: AttachmentSlot) => void;
+  /** A variant without its own file in this slot uses this one from its base resume. */
+  inheritedId?: string | undefined;
+  /** The resume is a variant: its own file replaces the base's, removing it goes back to the base's. */
+  variant?: boolean;
 }
 
-function Slot({ slot, fileId, error, busy, onUpload, onRemove }: SlotProps) {
+function Slot({ slot, fileId, error, busy, onUpload, onRemove, inheritedId, variant }: SlotProps) {
   const t = useT();
   const language = useLanguage();
   const info = useFileInfo(fileId);
+  const inheritedInfo = useFileInfo(fileId ? undefined : inheritedId);
   const label = t(SLOT_LABEL[slot]);
   const inputId = useId();
 
@@ -107,6 +112,14 @@ function Slot({ slot, fileId, error, busy, onUpload, onRemove }: SlotProps) {
             <IconButton icon="trash" label={`${label} – ${t('options.attach.remove')}`} danger onClick={() => onRemove(slot)} />
           </ListItem>
         ) : null}
+        {!fileId && inheritedId && inheritedInfo?.state === 'ok' ? (
+          <ListItem
+            icon="file-earmark-text"
+            title={inheritedInfo.name}
+            meta={`${t('options.variant.inheritedFile')} · ${formatSize(inheritedInfo.size)}`}
+          />
+        ) : null}
+        {variant && fileId ? <p className="raf-field__help raf-variant-hint">{t('options.variant.ownFile')}</p> : null}
       </fieldset>
     </li>
   );
@@ -118,15 +131,27 @@ interface Props {
   busy: Partial<Record<AttachmentSlot, boolean>>;
   onUpload: (slot: AttachmentSlot, file: File) => void;
   onRemove: (slot: AttachmentSlot) => void;
+  /** Every resume in the profile: a variant shows the files it inherits from its base. */
+  allResumes?: readonly Resume[];
 }
 
-export function Attachments({ resume, errors, busy, onUpload, onRemove }: Props) {
+export function Attachments({ resume, errors, busy, onUpload, onRemove, allResumes }: Props) {
   const t = useT();
   return (
     <div className="raf-attachments">
       <ul className="raf-list raf-list--loose">
         {ATTACHMENT_SLOTS.map((slot) => (
-          <Slot key={slot} slot={slot} fileId={resume.attachments[slot]} error={errors[slot] ?? null} busy={busy[slot] === true} onUpload={onUpload} onRemove={onRemove} />
+          <Slot
+            key={slot}
+            slot={slot}
+            fileId={resume.attachments[slot]}
+            error={errors[slot] ?? null}
+            busy={busy[slot] === true}
+            onUpload={onUpload}
+            onRemove={onRemove}
+            variant={Boolean(resume.variantOf && allResumes)}
+            inheritedId={allResumes ? (inheritedValue(resume, allResumes, `attachments.${slot}`) as string | undefined) : undefined}
+          />
         ))}
       </ul>
       <p className="raf-field__help">{t('options.attach.hint')}</p>

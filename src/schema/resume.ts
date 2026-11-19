@@ -15,6 +15,12 @@ const date = () => z.union([z.literal(''), dateString()]).default('');
 /** End date: `null` + `current: true` represents "至今 / present". */
 const endDate = () => z.union([z.literal(''), dateString()]).nullable().default(null);
 
+/**
+ * Stable identity of an entry in a repeatable section, so a variant can hide it by key rather than by
+ * position. Optional: assigned when something needs to refer to the entry (see `variant.ts`).
+ */
+const entryId = () => z.string().min(1).max(64).optional();
+
 const nullableBool = () => z.boolean().nullable().default(null);
 const nullableNumber = () => z.number().nonnegative().nullable().default(null);
 const nullableEnum = <const T extends readonly [string, ...string[]]>(values: T) =>
@@ -127,6 +133,7 @@ export const JobIntentionSchema = z.object({
 });
 
 export const EducationSchema = z.object({
+  id: entryId(),
   school: text(),
   schoolEn: text(),
   country: text(),
@@ -148,6 +155,7 @@ export const EducationSchema = z.object({
 });
 
 export const WorkEntrySchema = z.object({
+  id: entryId(),
   kind: z.enum(WORK_KINDS).default('full_time'),
   company: text(),
   position: text(),
@@ -160,6 +168,7 @@ export const WorkEntrySchema = z.object({
 });
 
 export const ProjectSchema = z.object({
+  id: entryId(),
   name: text(),
   role: text(),
   startDate: date(),
@@ -170,6 +179,7 @@ export const ProjectSchema = z.object({
 });
 
 export const CampusEntrySchema = z.object({
+  id: entryId(),
   organization: text(),
   role: text(),
   startDate: date(),
@@ -179,6 +189,7 @@ export const CampusEntrySchema = z.object({
 });
 
 export const AwardSchema = z.object({
+  id: entryId(),
   name: text(),
   date: date(),
   level: nullableEnum(AWARD_LEVELS),
@@ -187,6 +198,7 @@ export const AwardSchema = z.object({
 });
 
 export const LanguageEntrySchema = z.object({
+  id: entryId(),
   language: text(),
   proficiency: nullableEnum(PROFICIENCIES),
   certificate: text(),
@@ -194,6 +206,7 @@ export const LanguageEntrySchema = z.object({
 });
 
 export const CertificateSchema = z.object({
+  id: entryId(),
   name: text(),
   date: date(),
   issuer: text(),
@@ -201,11 +214,13 @@ export const CertificateSchema = z.object({
 });
 
 export const SkillSchema = z.object({
+  id: entryId(),
   name: text(),
   level: text(),
 });
 
 export const FamilyMemberSchema = z.object({
+  id: entryId(),
   name: text(),
   relationship: nullableEnum(RELATIONSHIPS),
   employer: text(),
@@ -221,6 +236,7 @@ export const EmergencyContactSchema = z.object({
 });
 
 export const RefereeSchema = z.object({
+  id: entryId(),
   name: text(),
   title: text(),
   company: text(),
@@ -281,7 +297,10 @@ export const VariantMetaSchema = z.object({
   targetRole: z.string().max(120).optional(),
   customSummary: z.string().max(4000).optional(),
   hiddenSections: z.array(VariantSectionSchema).max(16).optional(),
+  /** Legacy: positions in the base list. Converted to `hiddenIds` when a profile is read. */
   hiddenIndices: z.record(z.string(), z.array(z.number().int().nonnegative()).max(100)).optional(),
+  /** Entries of the base hidden in this variant, by entry `id`, per section. */
+  hiddenIds: z.record(z.string(), z.array(z.string().max(64)).max(100)).optional(),
   sectionOrder: z.array(VariantSectionSchema).max(16).optional(),
   highlightedSkills: z.array(z.string().max(64)).max(60).optional(),
   jdKeywords: z.array(z.string().max(64)).max(60).optional(),

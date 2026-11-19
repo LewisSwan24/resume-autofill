@@ -6,6 +6,7 @@ import {
   changeProfileVaultPassphrase,
   disableProfileVault,
   enableProfileVault,
+  forgetProfileVault,
   getVaultStatus,
   lockProfileVault,
   unlockProfileVault,
@@ -13,14 +14,29 @@ import {
   type VaultStatus,
 } from '../../src/storage';
 import { Button, Field, Input, Notice, SelectInput } from './ui/controls';
+import { Dialog } from './ui/Dialog';
 import { useToast } from './ui/Toast';
 
 interface VaultPanelProps {
   mode?: 'settings' | 'unlock';
   onUnlocked?: () => void;
+  /** After "Lock now": the editor must know so it can hold edits and offer to unlock. */
+  onLocked?: () => void;
+  /** Unlock mode only: offers "forget the vault and restore from a backup"; called once storage is cleared. */
+  onForgotten?: () => void;
+  /** Unlock mode only: there are edits waiting for the vault to be unlocked. */
+  pendingChanges?: boolean;
 }
 
-export function VaultPanel({ mode = 'settings', onUnlocked }: VaultPanelProps) {
+function PassField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <Field label={label}>
+      {(ctrl) => <Input {...ctrl} type="password" value={value} onChange={(e) => onChange(e.target.value)} />}
+    </Field>
+  );
+}
+
+export function VaultPanel({ mode = 'settings', onUnlocked, onLocked, onForgotten, pendingChanges }: VaultPanelProps) {
   const t = useT();
   const toast = useToast();
   const [status, setStatus] = useState<VaultStatus>({
@@ -30,9 +46,14 @@ export function VaultPanel({ mode = 'settings', onUnlocked }: VaultPanelProps) {
     lastActiveAt: null,
   });
   const [passphrase, setPassphrase] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [current, setCurrent] = useState('');
+  const [nextPass, setNextPass] = useState('');
+  const [nextConfirm, setNextConfirm] = useState('');
   const [idleMinutes, setIdleMinutes] = useState(15);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [forgetAsked, setForgetAsked] = useState(false);
 
   const refresh = () => {
     void getVaultStatus().then((s) => {
@@ -50,11 +71,17 @@ export function VaultPanel({ mode = 'settings', onUnlocked }: VaultPanelProps) {
       setErr(t('options.vault.wrongPass'));
       return;
     }
+    // A typo here would lock the data away for good, so the passphrase is entered twice.
+    if (passphrase !== confirm) {
+      setErr(t('options.vault.mismatch'));
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
       await enableProfileVault(passphrase, { idleTimeoutMs: idleMinutes * 60_000 });
       setPassphrase('');
+      setConfirm('');
       refresh();
       toast.push({ text: t('options.vault.stateEnabled', { state: t('options.vault.stateUnlocked') }) });
     } catch {
@@ -104,30 +131,73 @@ export function VaultPanel({ mode = 'settings', onUnlocked }: VaultPanelProps) {
   const handleLockNow = async () => {
     await lockProfileVault();
     refresh();
-    onUnlocked?.();
+    onLocked?.();
+  };
+
+  const handleChange = async () => {
+    if (nextPass.length < VAULT_MIN_PASSWORD_LENGTH) {
+      setErr(t('options.vault.wrongPass'));
+      return;
+    }
+    if (nextPass !== nextConfirm) {
+      setErr(t('options.vault.mismatch'));
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await changeProfileVaultPassphrase(current, nextPass);
+      setCurrent('');
+      setNextPass('');
+      setNextConfirm('');
+      refresh();
+      toast.push({ text: t('options.vault.changed') });
+    } catch {
+      setErr(t('options.vault.wrongPass'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleForget = async () => {
+    setForgetAsked(false);
+    setBusy(true);
+    try {
+      await forgetProfileVault();
+      onForgotten?.();
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (mode === 'unlock') {
     return (
       <section className="raf-card raf-form-stack" aria-label={t('options.vault.unlockTitle')}>
         <h2 className="raf-heading">{t('options.vault.unlockTitle')}</h2>
-        <p className="raf-caption">{t('options.vault.unlockHint')}</p>
+        <p className="raf-caption">{pendingChanges ? t('options.vault.pendingHint') : t('options.vault.unlockHint')}</p>
         {err ? <Notice tone="danger">{err}</Notice> : null}
-        <Field label={t('options.vault.passLabel')}>
-          {(ctrl) => (
-            <Input
-              {...ctrl}
-              type="password"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-            />
-          )}
-        </Field>
+        <PassField label={t('options.vault.passLabel')} value={passphrase} onChange={setPassphrase} />
         <div className="raf-row-actions">
           <Button variant="primary" disabled={busy} onClick={() => void handleUnlock()}>
             {t('options.vault.unlock')}
           </Button>
+          {onForgotten ? (
+            <Button disabled={busy} onClick={() => setForgetAsked(true)}>
+              {t('options.vault.forget')}
+            </Button>
+          ) : null}
         </div>
+        {forgetAsked ? (
+          <Dialog
+            title={t('options.vault.forgetTitle')}
+            text={t('options.vault.forgetText')}
+            cancelLabel={t('options.notNow')}
+            confirmLabel={t('options.vault.forgetConfirm')}
+            danger
+            onCancel={() => setForgetAsked(false)}
+            onConfirm={() => void handleForget()}
+          />
+        ) : null}
       </section>
     );
   }
@@ -146,16 +216,10 @@ export function VaultPanel({ mode = 'settings', onUnlocked }: VaultPanelProps) {
       {err ? <Notice tone="danger">{err}</Notice> : null}
 
       <div className="raf-row-actions">
-        <Field label={t('options.vault.passLabel')}>
-          {(ctrl) => (
-            <Input
-              {...ctrl}
-              type="password"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-            />
-          )}
-        </Field>
+        <PassField label={t('options.vault.passLabel')} value={passphrase} onChange={setPassphrase} />
+        {!status.enabled ? (
+          <PassField label={t('options.vault.confirmLabel')} value={confirm} onChange={setConfirm} />
+        ) : null}
         <Field label={t('options.vault.idleMinutes')}>
           {(ctrl) => (
             <SelectInput
@@ -192,29 +256,28 @@ export function VaultPanel({ mode = 'settings', onUnlocked }: VaultPanelProps) {
                 {t('options.vault.lockNow')}
               </Button>
             )}
-            <Button
-              disabled={busy || passphrase.length < VAULT_MIN_PASSWORD_LENGTH}
-              onClick={async () => {
-                setBusy(true);
-                setErr(null);
-                try {
-                  await changeProfileVaultPassphrase(passphrase, passphrase);
-                  setPassphrase('');
-                } catch {
-                  setErr(t('options.vault.wrongPass'));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              OK
-            </Button>
             <Button variant="danger" disabled={busy} onClick={() => void handleDisable()}>
               {t('options.vault.disable')}
             </Button>
           </>
         )}
       </div>
+
+      {status.enabled ? (
+        <>
+          <h4 className="raf-subheading">{t('options.vault.changeTitle')}</h4>
+          <div className="raf-row-actions">
+            <PassField label={t('options.vault.currentLabel')} value={current} onChange={setCurrent} />
+            <PassField label={t('options.vault.newLabel')} value={nextPass} onChange={setNextPass} />
+            <PassField label={t('options.vault.newConfirmLabel')} value={nextConfirm} onChange={setNextConfirm} />
+          </div>
+          <div className="raf-row-actions">
+            <Button disabled={busy || !current || !nextPass} onClick={() => void handleChange()}>
+              {t('options.vault.change')}
+            </Button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

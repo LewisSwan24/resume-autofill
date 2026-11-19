@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import path from 'node:path';
 import type { BrowserContext, Page } from '@playwright/test';
 import { Scrubber, auditHar, auditHtml, sanitizeHar, sanitizeStaticHtml, type Finding, type HarFile, type SidecarIo } from './sanitize.ts';
+import { DEFAULT_LOCALE, type CaptureDevice } from './device.ts';
 
 /** Long edge limit: larger images get rejected in multi-image model requests. */
 export const SHOT_SEGMENT = 1800;
@@ -25,6 +26,9 @@ export interface CaptureOptions {
   /** Runs once recording, for walking to a page that takes clicks to reach. The sample is of wherever that ends up. */
   beforeSnapshot?: ((page: Page) => Promise<void>) | undefined;
   settleMs?: number | undefined;
+  /** Written to meta.json, so the replay uses the same browser. */
+  device?: CaptureDevice | undefined;
+  locale?: string | undefined;
 }
 
 export interface CaptureResult {
@@ -196,6 +200,8 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
         name: opts.name,
         url: scrub.text(sampleUrl),
         capturedAt: new Date().toISOString(),
+        device: opts.device ?? 'desktop',
+        locale: opts.locale ?? DEFAULT_LOCALE,
         frames,
         screenshots,
         harEntries: har.log.entries.length,

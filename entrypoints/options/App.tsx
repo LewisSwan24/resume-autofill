@@ -21,7 +21,7 @@ import {
   type ProfileTarget,
 } from '../../src/editor';
 import { resolveLanguage, setLanguage, useT, type MessageKey } from '../../src/i18n';
-import type { Locale, Profile, Resume } from '../../src/schema';
+import { inheritedSection, materializeResume, type Locale, type Profile, type Resume } from '../../src/schema';
 import { draftToResume, refusedPaths } from '../../src/import/draft';
 import { applyDiffMergeDecisions } from '../../src/import/diffMerge';
 import type { ExtractFailure, TextLine } from '../../src/import/extract/types';
@@ -78,10 +78,12 @@ function SaveStatusLine({ status }: { status: SaveStatus }) {
         ? { text: t('options.saving'), icon: null }
         : status === 'invalid'
           ? { text: t('options.needsLook'), icon: 'exclamation-triangle' as const }
+          : status === 'locked'
+            ? { text: t('options.lockedUnsaved'), icon: 'exclamation-triangle' as const }
           : status === 'error'
             ? { text: t('options.saveFailed'), icon: 'exclamation-triangle' as const }
             : null;
-  const bad = status === 'invalid' || status === 'error';
+  const bad = status === 'invalid' || status === 'error' || status === 'locked';
   return (
     <span className={`raf-status${bad ? ' is-bad' : ''}`} role="status" data-status={status}>
       {view?.icon ? <Icon name={view.icon} size={16} /> : null}
@@ -106,7 +108,8 @@ const IMPORT_FAILURES: Record<ExtractFailure, MessageKey> = {
 function Options({ autosaveDelayMs }: AppProps) {
   const t = useT();
   const toast = useToast();
-  const { profile, loadError, vaultLocked, status, saveError, issues, reload, commit } = useProfileEditor(autosaveDelayMs);
+  const { profile, loadError, vaultLocked, status, saveError, issues, markLocked, unlocked, vaultRemoved, commit } =
+    useProfileEditor(autosaveDelayMs);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('editor');
   const [open, setOpen] = useState<ReadonlySet<ModuleName>>(() => new Set(OPEN_BY_DEFAULT));
@@ -116,6 +119,8 @@ function Options({ autosaveDelayMs }: AppProps) {
   const [linkTarget, setLinkTarget] = useState<Resume | null>(null);
   const [linkChoice, setLinkChoice] = useState('');
   const [imported, setImported] = useState<ImportState | null>(null);
+  /** The vault was deleted after a lost passphrase: point at the backup import until one is imported. */
+  const [restoring, setRestoring] = useState(false);
   const importTurn = useRef(0);
 
   const jump = useFocusRequest();
@@ -326,6 +331,7 @@ function Options({ autosaveDelayMs }: AppProps) {
     }
     await commit(pruneMissingAttachments(imported, existing), { immediate: true });
     setSelectedId(null);
+    setRestoring(false);
   };
 
   // ---------------------------------------------------------------- render
@@ -350,13 +356,24 @@ function Options({ autosaveDelayMs }: AppProps) {
     </header>
   );
 
-  if (!profile) {
+  // A locked vault takes the resume off the screen. Unsaved edits stay in the
+  // editor hook and are saved once the vault is unlocked.
+  if (!profile || vaultLocked) {
     return (
       <div className="raf-app">
         {header}
         {vaultLocked ? (
           <div className="raf-single raf-form-stack">
-            <VaultPanel mode="unlock" onUnlocked={reload} />
+            <VaultPanel
+              mode="unlock"
+              onUnlocked={unlocked}
+              pendingChanges={status === 'locked'}
+              onForgotten={() => {
+                vaultRemoved();
+                setRestoring(true);
+                setTab('data');
+              }}
+            />
           </div>
         ) : loadError ? (
           <div className="raf-single raf-form-stack">
@@ -399,7 +416,14 @@ function Options({ autosaveDelayMs }: AppProps) {
     <EmptyState>{t('options.empty')}</EmptyState>
   ) : tab === 'attachments' ? (
     <section className="raf-card" aria-label={t('options.module.attachments')}>
-      <Attachments resume={resume} errors={attachErrors} busy={attachBusy} onUpload={(s, f) => void uploadAttachment(s, f)} onRemove={(s) => void removeAttachment(s)} />
+      <Attachments
+        resume={resume}
+        allResumes={profile.resumes}
+        errors={attachErrors}
+        busy={attachBusy}
+        onUpload={(s, f) => void uploadAttachment(s, f)}
+        onRemove={(s) => void removeAttachment(s)}
+      />
     </section>
   ) : (
     <>
@@ -414,14 +438,19 @@ function Options({ autosaveDelayMs }: AppProps) {
           ) : null}
           {linkedTitle !== undefined ? <span className="raf-caption">{t('options.linkedTo', { title: linkedTitle || '—' })}</span> : null}
         </div>
+        {baseVariantTitle !== undefined ? <p className="raf-caption">{t('options.variant.editHint')}</p> : null}
       </div>
-      <AuditCard resume={resume} onJump={(target) => setAuditJump(target)} />
+      {/* A variant is audited as it fills: with what it inherits. */}
+      <AuditCard resume={resume.variantOf ? materializeResume(resume, profile.resumes) : resume} onJump={(target) => setAuditJump(target)} />
       <Accordion>
         {EDITOR_MODULES.map((m) => {
-          const count = (ARRAY_MODULES as readonly string[]).includes(m.module) ? (resume[m.module as ArrayModuleName] as unknown[]).length : 0;
+          const isList = (ARRAY_MODULES as readonly string[]).includes(m.module);
+          const own = isList ? (resume[m.module as ArrayModuleName] as unknown[]).length : 0;
+          // A variant without entries of its own shows (and fills) the base's.
+          const count = !isList || own > 0 || !resume.variantOf ? own : (inheritedSection(resume, profile.resumes, m.module as ArrayModuleName) as unknown[]).length;
           return (
             <AccordionItem key={m.module} title={t(m.labelKey)} count={count} open={open.has(m.module)} onToggle={(v) => toggle(m.module, v)}>
-              <ModuleForm resume={resume} meta={m} issues={resumeIssues} onEdit={(edit) => editResumeById(resume.id, edit)} />
+              <ModuleForm resume={resume} meta={m} issues={resumeIssues} allResumes={profile.resumes} onEdit={(edit) => editResumeById(resume.id, edit)} />
             </AccordionItem>
           );
         })}
@@ -432,6 +461,12 @@ function Options({ autosaveDelayMs }: AppProps) {
   return (
     <div className="raf-app">
       {header}
+
+      {restoring && tab === 'data' ? (
+        <div className="raf-notices">
+          {restoring && tab === 'data' ? <Notice tone="info">{t('options.vault.restoreNotice')}</Notice> : null}
+        </div>
+      ) : null}
 
       {status === 'error' || status === 'invalid' ? (
         <div className="raf-notices">
@@ -508,7 +543,12 @@ function Options({ autosaveDelayMs }: AppProps) {
         ) : tab === 'settings' ? (
           <section className="raf-card" aria-label={t('options.settings.title')}>
             <h2 className="raf-heading">{t('options.settings.title')}</h2>
-            <SettingsPanel settings={profile.settings} onChange={(settings) => void commit({ ...profile, settings })} />
+            <SettingsPanel
+              settings={profile.settings}
+              onChange={(settings) => void commit({ ...profile, settings })}
+              onVaultLocked={markLocked}
+              onVaultUnlocked={unlocked}
+            />
           </section>
         ) : tab === 'tracker' ? (
           <section className="raf-card" aria-label={t('options.tracker.title')}>

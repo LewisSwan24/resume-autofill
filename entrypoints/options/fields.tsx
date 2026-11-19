@@ -16,6 +16,8 @@ export interface FieldInputProps {
   control?: Partial<ControlProps>;
   /** Overrides the accessible name (region parts keep "Native place – City" even though only "City" is visible). */
   ariaLabel?: string;
+  /** Shown while empty; a variant shows the base resume's value here. */
+  placeholder?: string;
 }
 
 export const REGION_PARTS = ['province', 'city', 'district'] as const;
@@ -38,10 +40,10 @@ export function BoolSwitch({ label, value, onChange }: { label: string; value: u
   );
 }
 
-export function FieldInput({ meta, value, onChange, disabled, control, ariaLabel }: FieldInputProps) {
+export function FieldInput({ meta, value, onChange, disabled, control, ariaLabel, placeholder }: FieldInputProps) {
   const t = useT();
   const language = useLanguage();
-  const common = { ...control, disabled, 'aria-label': ariaLabel };
+  const common = { ...control, disabled, 'aria-label': ariaLabel, placeholder };
 
   switch (meta.input) {
     case 'textarea':
@@ -71,7 +73,7 @@ export function FieldInput({ meta, value, onChange, disabled, control, ariaLabel
     case 'select': {
       const options = enumOptions(meta.enumDomain ?? '', language);
       return (
-        <SelectInput value={typeof value === 'string' ? value : ''} {...common} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
+        <SelectInput value={typeof value === 'string' ? value : ''} {...control} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
           <option value="">{t('common.unset')}</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>
@@ -89,7 +91,7 @@ export function FieldInput({ meta, value, onChange, disabled, control, ariaLabel
           aria-describedby={control?.['aria-describedby']}
           aria-label={ariaLabel}
           value={Array.isArray(value) ? (value as string[]) : []}
-          placeholder={t('options.listHint')}
+          placeholder={placeholder ?? t('options.listHint')}
           disabled={disabled}
           onChange={onChange}
         />

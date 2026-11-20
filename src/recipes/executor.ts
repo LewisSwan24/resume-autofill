@@ -115,6 +115,7 @@ export function resolveRecipeForControl(
     const resolved = resolveValue(fk, resume, entryIndex, section, {
       hasInternshipSection: opts.hasInternshipSection ?? false,
       ...(opts.now ? { now: opts.now } : {}),
+      ...(opts.askedAs ? { askedAs: opts.askedAs } : {}),
     });
     if (!resolved) {
       return { hit: null, noDataFieldKey: fk, ruleSource: `recipe:${recipe.id}` };

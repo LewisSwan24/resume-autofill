@@ -194,6 +194,176 @@ describe('cardDemand', () => {
   });
 });
 
+// Chinese forms ask for English by test: a level (CET-4/6, TEM-4/8) with or without a score, or a score per test.
+// Each test someone sat is one language entry: English, the test as its certificate, and the score.
+describe('a question about English or about one test', () => {
+  const LEVELS = ['未参加', '未通过', 'CET-4', 'CET-6', 'TEM-4', 'TEM-8', '雅思', '托福', '托业', '其他'];
+  const select = (label: string, id: string, options = LEVELS) =>
+    row(label, `<select id="${id}"><option value="">请选择</option>${options.map((o) => `<option>${o}</option>`).join('')}</select>`, id);
+  const withLanguages = (languages: object[]) => ResumeSchema.parse({ ...zh, languages });
+  const japaneseFirst = withLanguages([
+    { language: '日语', proficiency: 'native', certificate: 'JLPT N1', score: '170' },
+    { language: '英语', proficiency: 'intermediate', certificate: '大学英语四级', score: '501' },
+    { language: '英语', proficiency: 'proficient', certificate: 'CET-6', score: '502' },
+  ]);
+  const shown = (p: ReturnType<typeof plan>, label: string) => {
+    const intent = stepOf(p, label)?.intent as { text?: string; display?: string } | undefined;
+    return intent?.text ?? intent?.display ?? null;
+  };
+
+  it('answers an English level and its score from the same, highest test, whatever language comes first', () => {
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a')}${text('英语成绩', 'b')}`, japaneseFirst);
+    expect(stepOf(p, '英语等级')).toMatchObject({ fieldKey: 'languages.certificate', source: 'languages[2].certificate' });
+    expect(shown(p, '英语等级')).toBe('CET-6');
+    expect(stepOf(p, '英语成绩')).toMatchObject({ fieldKey: 'languages.score', source: 'languages[2].score' });
+    expect(shown(p, '英语成绩')).toBe('502');
+  });
+
+  it('gives the score of the test a question names, and nothing when that test was not sat', () => {
+    const p = plan(`<h3>个人信息</h3>${text('四级成绩', 'a')}${text('六级成绩', 'b')}${text('专八成绩', 'c')}`, japaneseFirst);
+    expect(stepOf(p, '四级成绩')).toMatchObject({ fieldKey: 'languages.score', source: 'languages[1].score' });
+    expect(stepOf(p, '六级成绩')).toMatchObject({ fieldKey: 'languages.score', source: 'languages[2].score' });
+    expect(stepOf(p, '专八成绩')).toBeUndefined();
+    expect(reportOf(p, '专八成绩')).toMatchObject({ fieldKey: 'languages.score', outcome: 'no_data' });
+  });
+
+  it('gives a score asked for another language that language, and nothing to one the resume lacks', () => {
+    const englishFirst = withLanguages([
+      { language: '英语', certificate: 'CET-6', score: '502' },
+      { language: '日语', certificate: 'JLPT N1', score: '170' },
+    ]);
+    const p = plan(`<h3>语言能力</h3>${text('英语成绩', 'a')}${text('日语成绩', 'b')}${text('韩语成绩', 'c')}`, englishFirst);
+    expect(stepOf(p, '英语成绩')).toMatchObject({ source: 'languages[0].score' });
+    expect(stepOf(p, '日语成绩')).toMatchObject({ source: 'languages[1].score' });
+    expect(stepOf(p, '韩语成绩')).toBeUndefined();
+  });
+
+  it('keeps English out of a question about the other languages, as Beisen asks beside 英语水平', () => {
+    const englishFirst = withLanguages([{ language: '英语', certificate: 'CET-6' }, { language: '日语', certificate: 'JLPT N1' }]);
+    const p = plan(`<h3>语言能力</h3>${select('英语水平', 'a', ['一般', '良好', '熟练', '精通'])}${text('其他外语', 'b')}`, englishFirst);
+    expect(stepOf(p, '其他外语')).toMatchObject({ fieldKey: 'languages.language', source: 'languages[1].language' });
+  });
+
+  it('reads 四六级 as English, not as one of the two tests', () => {
+    const p = plan(`<h3>个人信息</h3>${text('四六级成绩', 'a')}`, japaneseFirst);
+    expect(stepOf(p, '四六级成绩')).toMatchObject({ source: 'languages[2].score' });
+  });
+
+  it('takes the higher of two tests a question names, and tells 专业四级 from 四级', () => {
+    const p = plan(`<h3>语言能力</h3>${text('四级/六级成绩', 'a')}${text('英语专业四级成绩', 'b')}`, japaneseFirst);
+    expect(stepOf(p, '四级/六级成绩')).toMatchObject({ source: 'languages[2].score' });
+    expect(stepOf(p, '英语专业四级成绩')).toBeUndefined();
+  });
+
+  it('gives nothing when none of the tests a question names was sat', () => {
+    const p = plan(`<h3>语言能力</h3>${text('雅思/托福成绩', 'a')}`, japaneseFirst);
+    expect(stepOf(p, '雅思/托福成绩')).toBeUndefined();
+  });
+
+  it('leaves an English question empty when the resume has no English', () => {
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a')}${text('英语成绩', 'b')}`, withLanguages([{ language: '日语', certificate: 'JLPT N1', score: '170' }]));
+    expect(stepOf(p, '英语等级')).toBeUndefined();
+    expect(stepOf(p, '英语成绩')).toBeUndefined();
+  });
+
+  it('answers how good the English is from the English entry, in a section of its own', () => {
+    const p = plan(`<h3>语言能力</h3>${select('英语水平', 'a', ['一般', '良好', '熟练', '精通'])}`, japaneseFirst);
+    expect(stepOf(p, '英语水平')).toMatchObject({ source: 'languages[2].proficiency' });
+  });
+
+  it('still takes language cards in order when a question names no language', () => {
+    const p = plan(`<h3>语言能力</h3>${text('语种', 'a')}${text('成绩', 'b')}`, japaneseFirst);
+    expect(stepOf(p, '语种')).toMatchObject({ source: 'languages[0].language' });
+    expect(stepOf(p, '成绩')).toMatchObject({ source: 'languages[0].score' });
+  });
+
+  it('gives the overall score to 总分 only, never to the boxes for each skill beside it', () => {
+    const ielts = withLanguages([{ language: '英语', certificate: '雅思', score: '7.5' }]);
+    const skills = ['听力成绩', '阅读成绩', '写作成绩', '口语成绩'];
+    const p = plan(`<h3>语言能力</h3>${text('语种', 'a')}${text('证书', 'b')}${text('总分', 'c')}${skills.map((l, i) => text(l, `s${i}`)).join('')}`, ielts);
+    expect(stepOf(p, '总分')).toMatchObject({ fieldKey: 'languages.score', source: 'languages[0].score' });
+    for (const label of skills) expect(stepOf(p, label)).toBeUndefined();
+  });
+
+  it('keeps an English form\'s skill scores empty too', () => {
+    const ielts = withLanguages([{ language: 'English', certificate: 'IELTS', score: '7.5' }]);
+    const skills = ['Listening score', 'Reading score', 'Writing score', 'Speaking score'];
+    const p = plan(`<h3>Languages</h3>${text('Overall score', 'c')}${skills.map((l, i) => text(l, `s${i}`)).join('')}`, ielts);
+    expect(stepOf(p, 'Overall score')).toMatchObject({ fieldKey: 'languages.score', source: 'languages[0].score' });
+    for (const label of skills) expect(stepOf(p, label)).toBeUndefined();
+  });
+
+  it('lets two score boxes that ask for the same thing share nothing', () => {
+    const two = withLanguages([{ language: '英语', certificate: 'CET-6', score: '502' }]);
+    const p = plan(`<h3>语言能力</h3>${text('成绩', 'a')}${text('分数', 'b')}`, two);
+    expect(p.plan.steps.filter((s) => s.fieldKey === 'languages.score')).toHaveLength(1);
+  });
+
+  it('does not put a test off the CET/TEM ladder below one on it: the resume order decides', () => {
+    const ieltsFirst = withLanguages([
+      { language: '英语', certificate: 'IELTS', score: '8.0' },
+      { language: '英语', certificate: 'CET-4', score: '430' },
+    ]);
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a')}${text('英语成绩', 'b')}`, ieltsFirst);
+    expect(stepOf(p, '英语等级')).toMatchObject({ source: 'languages[0].certificate' });
+    expect(shown(p, '英语等级')).toBe('IELTS');
+    expect(stepOf(p, '英语成绩')).toMatchObject({ source: 'languages[0].score' });
+
+    const toeicFirst = withLanguages([
+      { language: '英语', certificate: 'TOEIC', score: '900' },
+      { language: '英语', certificate: 'CET-4', score: '500' },
+    ]);
+    expect(stepOf(plan(`<h3>个人信息</h3>${text('英语成绩', 'b')}`, toeicFirst), '英语成绩')).toMatchObject({ source: 'languages[0].score' });
+  });
+
+  it('gives a test the form names only that test, TOEIC included', () => {
+    const p = plan(`<h3>语言能力</h3>${text('托业成绩', 'a')}`, japaneseFirst);
+    expect(stepOf(p, '托业成绩')).toBeUndefined();
+  });
+
+  it('knows a language by any of its names, on the form and on the resume', () => {
+    const written = withLanguages([{ language: '日文', certificate: 'JLPT N1', score: '170' }]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('日语成绩', 'a')}`, written), '日语成绩')).toMatchObject({ source: 'languages[0].score' });
+    const korean = withLanguages([
+      { language: '英语', certificate: 'CET-6', score: '502' },
+      { language: '朝鲜语', certificate: 'TOPIK 5', score: '210' },
+    ]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('韩语成绩', 'a')}`, korean), '韩语成绩')).toMatchObject({ source: 'languages[1].score' });
+    const inEnglish = withLanguages([
+      { language: 'English', certificate: 'CET-6', score: '502' },
+      { language: 'Japanese', certificate: 'JLPT N2', score: '120' },
+    ]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('日语成绩', 'a')}`, inEnglish), '日语成绩')).toMatchObject({ source: 'languages[1].score' });
+  });
+
+  it('finds the test in a certificate written with more words than its name', () => {
+    const wordy = withLanguages([
+      { language: '英语', certificate: '大学英语六级（CET-6）', score: '560' },
+      { language: '英语', certificate: 'CET4', score: '600' },
+    ]);
+    const p = plan(`<h3>语言能力</h3>${text('六级成绩', 'a')}${text('四级成绩', 'b')}`, wordy);
+    expect(stepOf(p, '六级成绩')).toMatchObject({ source: 'languages[0].score' });
+    expect(stepOf(p, '四级成绩')).toMatchObject({ source: 'languages[1].score' });
+    const withScore = withLanguages([{ language: '英语', certificate: 'CET-6 560分', score: '560' }]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('六级成绩', 'a')}`, withScore), '六级成绩')).toMatchObject({ source: 'languages[0].score' });
+  });
+
+  it('does not read an English test into another language\'s certificate', () => {
+    const oldJapanese = withLanguages([
+      { language: '日语', certificate: '日语四级', score: '300' },
+      { language: '英语', certificate: 'CET-6', score: '502' },
+    ]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('四级成绩', 'a')}`, oldJapanese), '四级成绩')).toBeUndefined();
+    const bare = withLanguages([{ language: '日语', certificate: '四级', score: '300' }]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('四级成绩', 'a')}`, bare), '四级成绩')).toBeUndefined();
+  });
+
+  it('reads no one test from a certificate that names two', () => {
+    const both = withLanguages([{ language: '英语', certificate: 'CET-4、CET-6', score: '560' }]);
+    expect(stepOf(plan(`<h3>语言能力</h3>${text('四级成绩', 'a')}`, both), '四级成绩')).toBeUndefined();
+  });
+});
+
 describe('fieldKeyLabel', () => {
   it('uses the first synonym of the resume language', () => {
     expect(fieldKeyLabel('education.school', 'zh-CN')).toBe('学校');

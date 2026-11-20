@@ -133,10 +133,12 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
 
 /**
  * Leaves of an array module that card alignment needs whenever any entry of the module is sent:
- * `work.kind` splits internship from work entries (sectionEntries in values.ts).
+ * `work.kind` splits internship from work entries (sectionEntries in values.ts); a language's name and test say which
+ * entry a question means (mother tongue left out, languageRow in values.ts).
  */
 export const ENTRY_ALIGNMENT_FIELDS: Readonly<Partial<Record<ArrayModuleName, readonly string[]>>> = {
   work: ['kind'],
+  languages: ['language', 'certificate'],
 };
 
 /** The keys plus everything their values are computed from. */

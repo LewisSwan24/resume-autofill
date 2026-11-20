@@ -143,6 +143,7 @@ export function planFill(
         ? inNamedCountry(ctx, resume)
         : resolveValue(cls.fieldKey, resume, entryIndex, cls.section, {
             hasInternshipSection,
+            askedAs: report.label,
             ...(opts.now ? { now: opts.now } : {}),
           });
     if (!resolved) {

@@ -1,6 +1,7 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
 import { formatByPattern, isDatePattern } from './dateFormat';
 import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOption, namesOtherState, namesPlace, placeOptions, placeSpellings } from '../dictionary';
+import { asksBesidesEnglish, asksPartScore, bestEnglish, languageNamed, languageOf, testOf, testsNamed } from './languageAsked';
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
 import type { GenderAnswer, Locale, Region, Resume } from '../schema';
 import { getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
@@ -22,6 +23,8 @@ export interface ResolveOptions {
   hasInternshipSection?: boolean;
   /** Clock for derived values (basics.age). */
   now?: Date;
+  /** The question as the page words it: one about English, or about one test, picks its language entry. */
+  askedAs?: string;
 }
 
 /** Enum domains for text-typed keys that nevertheless have a dictionary (used when the control offers options). */
@@ -134,6 +137,25 @@ function highestSchooling<T extends { entry: unknown }>(rows: T[]): T | undefine
   );
   // A later row with no level written down may be the higher one, and nothing here can say.
   return best && rows.some((r) => rank(r) === 0 && endOfSchooling(r) > endOfSchooling(best)) ? undefined : best;
+}
+
+// ---- Language entries -----------------------------------------------------------------------------------
+
+/**
+ * The language entry a question means. One that names tests takes the best of those sat (bestEnglish); one about
+ * English takes the best English entry, so a level and its score come from the same entry; one that names another
+ * language takes that language, by any of its names. When the resume has none of these, nothing: the field stays
+ * empty rather than taking another language's answer. A question about the languages besides English takes those in
+ * order, and any other question takes the cards in order.
+ */
+function languageRow<T extends { entry: unknown }>(rows: T[], entryIndex: number, askedAs = ''): T | undefined {
+  if (asksBesidesEnglish(askedAs)) return rows.filter((r) => languageOf(r.entry) !== 'en')[entryIndex];
+  const tests = testsNamed(askedAs);
+  if (tests.length > 0) return bestEnglish(rows.filter((r) => tests.includes(testOf(r.entry) ?? '')));
+  const language = languageNamed(askedAs);
+  if (language === 'en') return bestEnglish(rows.filter((r) => languageOf(r.entry) === 'en'));
+  if (language) return rows.find((r) => languageOf(r.entry) === language);
+  return rows[entryIndex];
 }
 
 const lastSchooling = <T extends { entry: unknown }>(rows: T[]): T | undefined =>
@@ -266,10 +288,17 @@ export function resolveValue(
     const prop = ADDRESS_FIELDS[field]!;
     return wrap(resume.contact.address[prop], `contact.address.${prop}`);
   }
+  // The resume holds one score per test; a box for one skill's part of it (听力成绩) has no answer there.
+  if (fieldKey === 'languages.score' && asksPartScore(opts.askedAs ?? '')) return null;
   if (ARRAY_MODULES.has(module)) {
     const rows = sectionEntries(resume, module as ArrayModule, section, opts.hasInternshipSection);
     // Away from the cards, as on 最高学历 next to the name, a question about schooling means the highest.
-    const row = module === 'education' && section && section !== 'education' && entryIndex === 0 ? highestSchooling(rows) : rows[entryIndex];
+    const row =
+      module === 'education' && section && section !== 'education' && entryIndex === 0
+        ? highestSchooling(rows)
+        : module === 'languages'
+          ? languageRow(rows, entryIndex, opts.askedAs)
+          : rows[entryIndex];
     if (!row) return null;
     const entry = row.entry as Record<string, unknown>;
     const source = `${module}[${row.index}].${field}`;

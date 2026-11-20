@@ -300,6 +300,25 @@ describe('buildResumeSubset: repeated modules', () => {
     }
   });
 
+  it('a language score goes with every entry\'s language and test, which say whose score a question wants', () => {
+    const r = ResumeSchema.parse({
+      ...zh,
+      languages: [
+        { language: '中文', proficiency: 'native' },
+        { language: '日语', certificate: 'JLPT N1', score: '170' },
+        { language: '英语', certificate: 'CET-4', score: '501' },
+        { language: '英语', certificate: 'CET-6', score: '502' },
+      ],
+    });
+    const s = buildResumeSubset(r, needs({ fieldKeys: ['languages.score'] }));
+    expect(s.languages.every((l) => l.proficiency === null)).toBe(true);
+    for (const askedAs of ['英语成绩', '四级成绩', '六级成绩', '日语成绩', '成绩']) {
+      for (const section of ['basics', 'languages'] as const) {
+        expect(resolveValue('languages.score', s, 0, section, { askedAs })).toEqual(resolveValue('languages.score', r, 0, section, { askedAs }));
+      }
+    }
+  });
+
   it('card alignment sees the same entry counts as with the full resume', () => {
     for (const r of RESUMES) {
       for (const section of REPEAT_SECTIONS) {

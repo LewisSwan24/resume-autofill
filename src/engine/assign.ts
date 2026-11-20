@@ -1,6 +1,7 @@
 // Global assignment: within one scope (repeated card, or section for ungrouped fields) a field key goes
 // to at most one control. Greedy by descending confidence; losers fall back to their next candidate.
 import type { FieldScores, ScoredCandidate } from './classify';
+import { asksPartScore, scoreSubject } from './languageAsked';
 import type { Classification, FieldContext, FieldKey, SectionKey } from './types';
 
 /**
@@ -8,6 +9,13 @@ import type { Classification, FieldContext, FieldKey, SectionKey } from './types
  * contact.email (confirm-email field) and education.degree (forms ask for both 学历 and 学位).
  */
 export const ALLOW_DUPLICATE_KEYS: ReadonlySet<FieldKey> = new Set(['contact.email', 'education.degree']);
+
+/**
+ * A score per test or language (四级成绩 beside 六级成绩): repeated in one scope only when each control names a
+ * different one, and the question then picks the entry (languageRow in values.ts). A box for one skill's part of a
+ * test (听力成绩) never takes it.
+ */
+const SCORE_KEY: FieldKey = 'languages.score';
 
 /** Confidence ceiling of a fallback assignment (the best key went to another control). */
 const FALLBACK_CAP = 0.7;
@@ -60,11 +68,20 @@ export function assign(
 
   const assigned = new Set<number>();
   const taken = new Map<string, Set<FieldKey>>();
+  const scoreSubjects = new Map<string, Set<string>>();
   for (const { index, cand, scope } of claims) {
     if (assigned.has(index)) continue;
     let keys = taken.get(scope);
     if (!keys) taken.set(scope, (keys = new Set()));
-    if (keys.has(cand.fieldKey) && !ALLOW_DUPLICATE_KEYS.has(cand.fieldKey)) continue;
+    if (cand.fieldKey === SCORE_KEY) {
+      const label = contexts[index]!.evidence[0]?.text ?? '';
+      if (asksPartScore(label)) continue;
+      let subjects = scoreSubjects.get(scope);
+      if (!subjects) scoreSubjects.set(scope, (subjects = new Set()));
+      const subject = scoreSubject(label);
+      if (subjects.has(subject)) continue;
+      subjects.add(subject);
+    } else if (keys.has(cand.fieldKey) && !ALLOW_DUPLICATE_KEYS.has(cand.fieldKey)) continue;
     keys.add(cand.fieldKey);
     assigned.add(index);
     out[index]!.fieldKey = cand.fieldKey;

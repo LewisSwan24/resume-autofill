@@ -53,3 +53,56 @@ export const MOKA_FORM =
     `<div class="apply-field-Q2iJ7AtQGX confirm_info-iqEC7RvBDg"><div class="ctrl-CICMG4Fr4_"><label class="sd-Checkbox-container-3IoOq"><span class="sd-Checkbox-box-1tF62"><input type="checkbox" class="sd-Checkbox-input-1uFHv"></span><span class="sd-Checkbox-label-187mu"><div class="sd-Checkbox-label-text-3hBVW"><span>同步更新在线简历</span></div></span></label></div></div>`,
   ) +
   `</div>`;
+
+/** Every Moka page carries this hidden version tag, on a company's own domain too. */
+export const MOKA_MARKER =
+  '<input style="display: none" id="moka-version" data-gray-released="0" data-version="20260101-0000-00000-release">';
+
+/** The desktop form's only button at the bottom: it opens a preview that sends the application. */
+export const MOKA_SUBMIT =
+  '<div class="submitApply-s_IljbB0Og"><div class="sd-Tooltip-container-2B2OE"><button class="sd_global_focus_controller_class sd-Button-container-1cq0K sd-Button-primary-Riulm sd-Button-lg-3bz1y btn-bg-color no-adaptive-tooltip" type="button"><span class="sd-Button-content-1Zgzx"><span>预览并提交</span></span></button></div></div>';
+
+/**
+ * The resume box. While the page uploads a resume and reads it, its button spins (desktop: the button itself; on a
+ * phone a spinner takes the place of the plus sign), and only then does the page write what it read into the form.
+ */
+export const mokaResumeUpload = (reading: boolean) =>
+  `<div class="file_upload"><button class="sd-Button-container-1cq0K file_upload-btn" type="button">${
+    reading ? '<span class="sd-Loading-loading-3G2L9 sd-Loading-sm-circle-2HzYR"></span>' : ''
+  }<span class="sd-Button-content-1Zgzx"><span>${reading ? '上传中...' : '上传简历'}</span></span></button><input id="resumeKey" type="file" name="resumeKey"></div>`;
+
+const mobileText = (title: string) =>
+  `<div class="applyField-Uxo0YVBxOp  "><div class="title-info-Bb7QUC5Eao"><span class="title-VjPF9BH7ee"><span>${title}</span></span></div><div class="string_info"><input class="" autocomplete="new_password" placeholder="请输入"></div><div class="describe-Px7yQoZJQ_"></div></div>`;
+
+const mobileFooter = (label: string) =>
+  `<div class="mobile-layout__footer footer-Hwo1ezSUI3"><div class="button-group-wsKLhNnVUI"><button class="sd-Button-container-1fiHu sd-Button-primary-3qcnn sd-Button-lg-3bAh3 button-mtbjAb6F8U"><span class="sd-Button-content-3zdjd"><span>${label}</span></span></button></div></div>`;
+
+/**
+ * The phone form (/m/...): one block per step, all of them on the page, only the current one shown. Each says
+ * "Step: n/N" above its title. The footer button says 下一步 until the last step, where the page writes its own word
+ * for sending (`send`).
+ */
+export function mokaMobileSteps(steps: Array<{ title: string; fields: string[] }>, send = '提交') {
+  const blocks = steps
+    .map(
+      (s, i) =>
+        `<div style="display: ${i === 0 ? 'block' : 'none'};"><div class="block-VHJa37wvFc"><div class="count-Kc4gBJyqZe">Step: ${i + 1}/${steps.length}</div><div class="title-VjPF9BH7ee fix-title-NF8409QjM4"><span>${s.title}</span></div><div class="progress-QCxGVE0NRE" style="width: ${Math.round(((i + 1) / steps.length) * 100)}%;"></div><div class="field-block-JlfnJpR0gc"><div class="applyFields-bZxf8hWvHr">${s.fields.map(mobileText).join('')}</div></div></div></div>`,
+    )
+    .join('');
+  return {
+    html: `<div class="mobile">${MOKA_MARKER}<div class="mobile-layout__content content-oRUAsaIAd8 has-header"><div class="mobile-layout__padding"></div>${blocks}</div>${mobileFooter(steps.length > 1 ? '下一步' : send)}</div>`,
+    /** A stand-in for the page: the footer button shows the next block, and on the last one it sends (`onSend`). */
+    wire(doc: Document, onSend: () => void) {
+      const blocksOf = () => Array.from(doc.querySelectorAll<HTMLElement>('.mobile-layout__content > div[style]'));
+      const label = () => doc.querySelector('.mobile-layout__footer button span span')!;
+      doc.querySelector('.mobile-layout__footer button')!.addEventListener('click', () => {
+        const all = blocksOf();
+        const at = all.findIndex((b) => b.style.display === 'block');
+        if (at === all.length - 1) return onSend();
+        all[at]!.style.display = 'none';
+        all[at + 1]!.style.display = 'block';
+        if (at + 1 === all.length - 1) label().textContent = send;
+      });
+    },
+  };
+}

@@ -248,7 +248,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Language certificate|Language test|English test|English test type|Test type|Language qualification|Language exam|English proficiency test|Test taken',
   ),
   'languages.score': s(
-    '成绩|分数|考试成绩|语言成绩|得分|总分|英语成绩|四六级成绩|雅思成绩|托福成绩|证书成绩',
+    '成绩|分数|考试成绩|语言成绩|得分|总分|英语成绩|英语分数|四六级成绩|四六级分数|四级成绩|四级分数|六级成绩|六级分数|英语四级成绩|英语六级成绩|专四成绩|专四分数|专八成绩|专八分数|雅思成绩|雅思分数|托福成绩|托福分数|证书成绩',
     'Score|Test score|Overall score|Language score|Result|Band score|IELTS score|TOEFL score|Overall band',
   ),
 

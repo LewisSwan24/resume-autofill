@@ -1,6 +1,6 @@
 // Adapters for sites the general engine cannot fully read.
 import { ashby } from './ashby';
-import { bytedanceCampus, nowcoderCampus, tencentCareers } from './cnPortals';
+import { beisen, bytedanceCampus, feishu, moka, nowcoderCampus, tencentCareers } from './cnPortals';
 import { greenhouse } from './greenhouse';
 import { lever } from './lever';
 import { pageup } from './pageup';
@@ -21,6 +21,10 @@ export const ADAPTERS: readonly AtsAdapter[] = [
   ashby,
   smartrecruiters,
   rippling,
+  moka,
+  beisen,
+  // Before ByteDance: on a domain of its own, a form of this system is Feishu's.
+  feishu,
   bytedanceCampus,
   nowcoderCampus,
   tencentCareers,

@@ -5,6 +5,9 @@ import path from 'node:path';
 import { test, expect } from '../e2e/fixtures';
 import { fillFixture } from '../e2e/helpers';
 import { listSamples, recordScore, scoreLine, scoreProblems, scoreSample } from '../shared/capturedExpectations';
+import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
+import { answerSearches } from '../shared/searchAnswers';
+import { replayFromHar, sameDocument } from '../shared/harReplay';
 import { inspect, locatorsOf } from './readState';
 
 // Phones run no extensions. The app injects the engine itself, which is what the harness replay in
@@ -12,14 +15,18 @@ import { inspect, locatorsOf } from './readState';
 for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
   test(`extension on ${sample.ats}/${sample.name}: filling gives exactly what expected.json says`, async ({ context, serviceWorker }) => {
     test.setTimeout(180_000);
-    // Only web requests: the extension's own files must keep loading. Anything not in the HAR is aborted.
+    // Only web requests: the extension's own files must keep loading. Anything not in the HAR is aborted, but
+    // uploads get stub answers.
+    let uploads: UploadStubs = { settled: async () => {} };
     if (!sample.readInPlace) {
-      await context.routeFromHAR(path.join(sample.dir, 'page.har'), { notFound: 'abort', url: /^https?:\/\// });
+      await replayFromHar(context, path.join(sample.dir, 'page.har'), /^https?:\/\//);
+      uploads = await answerUploads(context);
+      await answerSearches(context);
     } else {
       // A step read in place has no recording: its snapshot, and nothing else.
       const body = readFileSync(path.join(sample.dir, 'page.html'), 'utf8');
       await context.route(/^https?:\/\//, (route) =>
-        route.request().url() === sample.url ? route.fulfill({ contentType: 'text/html; charset=utf-8', body }) : route.abort(),
+        sameDocument(route.request().url(), sample.url) ? route.fulfill({ contentType: 'text/html; charset=utf-8', body }) : route.abort(),
       );
     }
     // `serviceWorkers: 'block'` would stop the extension too, so only the page's registrations are refused.
@@ -42,7 +49,12 @@ for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
         return inspect(page, locators);
       },
     });
+    await uploads.settled();
     const after = await inspect(run.page, locators);
+    if (process.env.CAPTURED_DEBUG) {
+      for (const f of run.report.fields) console.log(`  · ${f.outcome} ${f.fieldKey ?? '-'} (${f.confidence}) "${f.label}" -> ${f.observed ?? f.value ?? ''}`);
+      console.log(JSON.stringify(after.readings));
+    }
     const score = scoreSample(sample, 'extension', run.before!, after, run.report);
     recordScore(score);
     console.log(scoreLine(score));

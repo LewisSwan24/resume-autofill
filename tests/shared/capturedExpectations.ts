@@ -22,7 +22,10 @@ export interface CapturedField {
    * input and show progress instead, so `selector` names any element, not a control, and must match one.
    */
   exists?: true;
-  /** With `exists`: the control this field is about, which `selector` does not name. */
+  /**
+   * The control this field is about, when `selector` reads something else: with `exists`, or where the page
+   * keeps what it took outside the box, as an upload widget that swaps its file box for an empty one.
+   */
   control?: string;
   /** Checked on the static snapshot: the classification this control must get. */
   fieldKey?: string;
@@ -145,6 +148,10 @@ export interface WrongField {
 export interface SampleScore {
   sample: string;
   mode: string;
+  /** Rows written before this was recorded are desktop. */
+  device: CaptureDevice;
+  /** The page the sample was captured from: a phone and a desktop capture of one page are compared. */
+  url?: string;
   /** From the click to the last field, as the fill itself reports it. */
   fillMs: number;
   fields: number;
@@ -222,7 +229,7 @@ export function changedControls(before: Inspection['snapshot'], after: Inspectio
 }
 
 export function scoreSample(
-  sample: { ats: string; name: string; expected: CapturedExpected },
+  sample: { ats: string; name: string; expected: CapturedExpected; device?: CaptureDevice; url?: string },
   mode: string,
   before: Inspection,
   after: Inspection,
@@ -322,6 +329,8 @@ export function scoreSample(
     fillMs: report.finishedAt - report.startedAt,
     sample: `${sample.ats}/${sample.name}`,
     mode,
+    device: sample.device ?? 'desktop',
+    ...(sample.url ? { url: sample.url } : {}),
     fields: Object.keys(checked).length + entryTexts,
     liveFields: liveFields.length,
     correct,
@@ -385,15 +394,112 @@ export function recordScore(score: SampleScore, file: string = ACCURACY_FILE): v
 const wrongCount = (r: SampleScore): number => r.wrong.length + r.extras.length;
 const falseReports = (r: SampleScore): number => r.falselyFilled.length + r.falselyFailed.length;
 
-/** The per-ATS table for the local acceptance report. */
+/** The phone fill rate a page needs, as a share of the desktop fill rate of the same page. */
+export const PHONE_FLOOR = 0.9;
+
+const deviceOf = (r: SampleScore): CaptureDevice => r.device ?? 'desktop';
+const totalOf = (r: SampleScore): number => r.fields + r.gaps.length;
+const percent = (x: number): string => `${Math.round(1000 * x) / 10}%`;
+
+/** Host and path: a phone capture of a page often lands on it with another query or fragment. */
+function pageUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return url;
+  }
+}
+
+/** One page in one run mode. */
+const pageOf = (r: SampleScore): string => `${r.sample.split('/')[0]} ${r.url ? pageUrl(r.url) : r.sample} ${r.mode}`;
+
+type NoPartner = 'no_desktop' | 'several_desktops';
+type Partner = { desktop: SampleScore } | { why: NoPartner };
+
+/** The desktop capture each phone capture is held against, or why there is none to hold it against. */
+function partners(rows: SampleScore[]): Map<SampleScore, Partner> {
+  const desktops = new Map<string, SampleScore[]>();
+  for (const r of rows) {
+    if (deviceOf(r) === 'desktop') desktops.set(pageOf(r), [...(desktops.get(pageOf(r)) ?? []), r]);
+  }
+  const out = new Map<SampleScore, Partner>();
+  for (const r of rows) {
+    if (deviceOf(r) !== 'mobile') continue;
+    const found = desktops.get(pageOf(r)) ?? [];
+    out.set(r, found.length === 1 ? { desktop: found[0]! } : { why: found.length ? 'several_desktops' : 'no_desktop' });
+  }
+  return out;
+}
+
+/** phone rate ÷ desktop rate; undefined when the desktop filled nothing. */
+function phoneRatio(desktop: SampleScore, phone: SampleScore): number | undefined {
+  if (desktop.correct === 0 || totalOf(phone) === 0) return undefined;
+  return (phone.correct * totalOf(desktop)) / (totalOf(phone) * desktop.correct);
+}
+
+export interface PhoneShortfall {
+  phone: string;
+  desktop: string | null;
+  mode: string;
+  phoneRate: number;
+  desktopRate: number | null;
+  ratio: number | null;
+  /** `below`: under PHONE_FLOOR. Otherwise there is no single desktop capture of the page to hold it against. */
+  why: 'below' | NoPartner;
+}
+
+/**
+ * Phone captures that fill less than PHONE_FLOOR of the desktop capture of the same page and run mode, and phone
+ * captures the rule cannot be checked on because that desktop capture is missing or not the only one.
+ */
+export function phoneShortfalls(rows: SampleScore[]): PhoneShortfall[] {
+  return [...partners(rows)].flatMap(([phone, p]): PhoneShortfall[] => {
+    const own = { phone: phone.sample, mode: phone.mode, phoneRate: accuracyOf(phone) };
+    if (!('desktop' in p)) return [{ ...own, desktop: null, desktopRate: null, ratio: null, why: p.why }];
+    const ratio = phoneRatio(p.desktop, phone) ?? 1;
+    if (ratio >= PHONE_FLOOR) return [];
+    return [{ ...own, desktop: p.desktop.sample, desktopRate: accuracyOf(p.desktop), ratio, why: 'below' }];
+  });
+}
+
+const NO_RATIO: Record<NoPartner, string> = { no_desktop: '无电脑版', several_desktops: '电脑版不止一个' };
+
+/**
+ * The per-ATS table for the local acceptance report: one row per capture and run mode, each phone capture right
+ * under the desktop capture of its page. The last two columns hold a phone fill rate and its share of the desktop
+ * rate: on a desktop row, its worst phone's.
+ */
 export function renderAccuracyTable(rows: SampleScore[]): string {
-  const sorted = [...rows].sort((a, b) => `${a.sample} ${a.mode}`.localeCompare(`${b.sample} ${b.mode}`));
+  const paired = partners(rows);
+  const phonesOf = new Map<SampleScore, SampleScore[]>();
+  for (const [phone, p] of paired) if ('desktop' in p) phonesOf.set(p.desktop, [...(phonesOf.get(p.desktop) ?? []), phone]);
+  const ratioCell = (x: number | undefined): string => (x === undefined ? '—' : percent(x));
+  const line = (r: SampleScore, phoneRate: string, ratio: string): string =>
+    `| ${r.sample} | ${deviceOf(r) === 'mobile' ? '手机' : '电脑'} | ${r.mode} | ${totalOf(r)} | ${r.correct} | ${accuracyOf(r)}% | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${(r.fillMs / 1000).toFixed(1)} | ${phoneRate} | ${ratio} |`;
+
+  const body = rows.map((r) => {
+    if (deviceOf(r) === 'mobile') {
+      const p = paired.get(r)!;
+      const anchor = 'desktop' in p ? p.desktop : r;
+      const ratio = 'desktop' in p ? ratioCell(phoneRatio(p.desktop, r)) : NO_RATIO[p.why];
+      return { key: [anchor.sample, anchor.mode, '1', r.sample], line: line(r, `${accuracyOf(r)}%`, ratio) };
+    }
+    const worst = [...(phonesOf.get(r) ?? [])].sort((a, b) => accuracyOf(a) - accuracyOf(b))[0];
+    const cells = worst ? line(r, `${accuracyOf(worst)}%`, ratioCell(phoneRatio(r, worst))) : line(r, '—', '—');
+    return { key: [r.sample, r.mode, '0', r.sample], line: cells };
+  });
+  body.sort((a, b) => {
+    for (let i = 0; i < a.key.length; i++) {
+      const c = a.key[i]! < b.key[i]! ? -1 : a.key[i]! > b.key[i]! ? 1 : 0;
+      if (c) return c;
+    }
+    return 0;
+  });
   const lines = [
-    '| 样本 | 运行方式 | 应填 | 填对 | 填对率 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 耗时（秒） |',
-    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
-    ...sorted.map((r) =>
-      `| ${r.sample} | ${r.mode} | ${r.fields + r.gaps.length} | ${r.correct} | ${accuracyOf(r)}% | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${(r.fillMs / 1000).toFixed(1)} |`,
-    ),
+    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
+    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    ...body.map((b) => b.line),
   ];
   return `${lines.join('\n')}\n`;
 }

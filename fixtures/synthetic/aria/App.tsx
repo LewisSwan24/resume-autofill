@@ -33,6 +33,8 @@ const LOCATIONS = ['Canberra ACT, Australia', 'Melbourne VIC, Australia', 'Sydne
 const PLACES = ['Canberra, ACT, Australia', 'Canberra, ACT 2600, Australia', 'Sydney Olympic Park, NSW, Australia'];
 
 const later = <T,>(value: T, ms = 120): Promise<T> => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+// `?searchMs=2000` slows the City search down, like a service whose script loads on the first key press.
+const CITY_SEARCH_MS = Number(new URLSearchParams(window.location.search).get('searchMs')) || 120;
 const search = (list: string[], query: string): string[] => {
   const q = query.trim().toLowerCase();
   return q ? list.filter((item) => item.toLowerCase().includes(q)) : [];
@@ -329,7 +331,7 @@ export function App() {
 
       <div style={row}>
         <label htmlFor="city" style={labelStyle}>City</label>
-        <InputCombobox id="city" load={(q) => later(search(LOCATIONS, q))} onPick={set('city')} />
+        <InputCombobox id="city" load={(q) => later(search(LOCATIONS, q), CITY_SEARCH_MS)} onPick={set('city')} />
       </div>
 
       <div style={row}>

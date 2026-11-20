@@ -718,15 +718,22 @@ describe('Side panel – auto-advance', () => {
     expect(messages()).toEqual([{ type: 'wizard:stopAdvance', tabId: TAB_ID }]);
   });
 
-  it('follows the run live and says why it stopped', async () => {
+  it('follows the run live and says why it stopped, even when the report lands after the news', async () => {
     await storeSession(session({ running: true, steps: 1 }));
-    await renderPanel();
+    // No report yet: it arrives after the run's update, the order that made this test fail under load. A new
+    // report has the panel read the session again, so the session is stored first, as the background does.
+    await renderPanel({ report: null });
     await screen.findByText('Advancing on its own: 1 steps so far', undefined, WAIT);
+    const stopped = session({ running: false, steps: 3, stopReason: 'needs_you' });
+    await storeSession(stopped);
     act(() => {
       (fakeBrowser.runtime.onMessage as unknown as { trigger: (...a: unknown[]) => unknown }).trigger(
-        { type: 'wizard:updated', tabId: TAB_ID, session: session({ running: false, steps: 3, stopReason: 'needs_you' }) },
+        { type: 'wizard:updated', tabId: TAB_ID, session: stopped },
         { id: browser.runtime.id },
       );
+    });
+    await act(async () => {
+      await storeReport(makeReport(FIELDS));
     });
     expect(await screen.findByText('This page needs you: a required field is empty or the page shows an error.', undefined, WAIT)).toBeTruthy();
   });

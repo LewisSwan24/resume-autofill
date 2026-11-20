@@ -29,6 +29,7 @@ export default defineConfig({
         wizard3: page('./wizard/step-3.html'),
         wizardSpa: page('./wizard/spa.html'),
         wizardSpaQuestions: page('./wizard/spa-questions.html'),
+        uploadRead: page('./upload-read/index.html'),
       },
     },
   },

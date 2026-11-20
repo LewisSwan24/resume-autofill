@@ -121,6 +121,37 @@ test('input combobox: options that only load after typing', async () => {
   expect((await fixtureState(page)).city).toBe('Melbourne VIC, Australia');
 });
 
+// A place box that loads its search script on the first key press answers about two seconds later.
+test('input combobox: a search whose first answer is slow is still waited for', async () => {
+  await page.goto('/aria/?searchMs=2200');
+  await page.getByLabel('First Name', { exact: true }).waitFor();
+  await injectHarness(page);
+  const r = await execIntent(page, 'City', choice('Canberra', 'Canberra ACT, Australia'));
+  expect(r.outcome).toBe('filled');
+  expect((await fixtureState(page)).city).toBe('Canberra ACT, Australia');
+});
+
+test('input combobox: a slow search with no match still ends as no match', async () => {
+  await page.goto('/aria/?searchMs=2200');
+  await page.getByLabel('First Name', { exact: true }).waitFor();
+  await injectHarness(page);
+  const r = await execIntent(page, 'City', choice('Melbourne', 'Melbourne, Victoria'));
+  expect(r.outcome).toBe('no_option');
+  expect((await fixtureState(page)).city).toBe('');
+  await expect(page.locator('#city')).toHaveValue('');
+});
+
+// The longer wait for a first answer may not run past the time the step has left: a search that never answers
+// has to end as no match, not as a step that ran out of time and was tried again.
+test('input combobox: the wait for a first answer stays inside what is left of the step', async () => {
+  await page.goto('/aria/?searchMs=2200');
+  await page.getByLabel('First Name', { exact: true }).waitFor();
+  await injectHarness(page);
+  const r = await execIntent(page, 'City', choice('Atlantis'), { timeoutMs: 2600 });
+  expect(r.outcome).toBe('no_option');
+  await expect(page.locator('#city')).toHaveValue('');
+});
+
 test('input combobox: no match clears what was typed', async () => {
   const r = await execIntent(page, 'City', choice('Atlantis'));
   expect(r.outcome).toBe('no_option');

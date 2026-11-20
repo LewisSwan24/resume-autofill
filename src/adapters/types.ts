@@ -89,6 +89,8 @@ export interface AtsAdapter {
   skip?: string[];
   /** Showing while the page reads an upload. It may write over fields when it finishes. */
   uploadBusy?: string;
+  /** How long after our upload `uploadBusy` may take to show, for a page that stores the file before it reads it. */
+  uploadSignMs?: number;
   /** For a page that sends no new file under the name of one it already holds, whatever is in it. */
   heldFile?: HeldFile;
   /** Returns a stable signature of the current wizard step (for SPA multi-step ATS forms). */

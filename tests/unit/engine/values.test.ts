@@ -219,6 +219,19 @@ describe('toIntent', () => {
     expect(pick('Sydney NSW, Australia')).toBe('none');
   });
 
+  it('region on a search box: rows a search service wrote in Chinese, for a browser set to Chinese', () => {
+    const region = { country: 'Australia', province: 'ACT', city: 'Canberra' };
+    const pick = (...labels: string[]) => picked(intent('basics.currentLocation', region, control('select'), 'en-AU'), opts(...labels));
+    // Google Places in Traditional Chinese: the place as typed, then state and country with no comma.
+    expect(pick('Canberra 澳大利亞首都特區澳洲')).toBe('Canberra 澳大利亞首都特區澳洲');
+    expect(pick('Canberra 澳大利亚首都领地澳大利亚')).toBe('Canberra 澳大利亚首都领地澳大利亚');
+    // A longer name is another place; another country or state is not this one.
+    expect(pick('Canberra Hospital 澳大利亞首都特區澳洲')).toBe('none');
+    expect(pick('Canberra 美國')).toBe('none');
+    expect(pick('Canberra 新南威爾斯州澳洲')).toBe('none');
+    expect(pick('Canberra 新南威爾斯州澳洲', 'Canberra 澳大利亞首都特區澳洲')).toBe('Canberra 澳大利亞首都特區澳洲');
+  });
+
   it('region on a list without the place: "Other" when no level of the address is on it either', () => {
     const region = { country: 'Australia', province: 'ACT', city: 'Canberra' };
     const pick = (...labels: string[]) => picked(intent('basics.currentLocation', region, control('select'), 'en-AU'), opts(...labels));

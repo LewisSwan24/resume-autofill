@@ -198,7 +198,7 @@ describe('scoreSample', () => {
 
   it('renders the accuracy table, with unexpected changes counted as wrong', () => {
     const score = scoreSample(sample(), 'extension', emptyPage, filled({ snapshot: { 'text#other': 'x' } }), report());
-    expect(renderAccuracyTable([score])).toContain('| ats/s | extension | 3 | 3 | 100% | 1 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 |');
+    expect(renderAccuracyTable([score])).toContain('| ats/s | 电脑 | extension | 3 | 3 | 100% | 1 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 |');
   });
 
   it('prints a table line that counts unexpected changes as wrong', () => {

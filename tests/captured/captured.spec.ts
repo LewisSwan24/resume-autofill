@@ -18,6 +18,9 @@ import {
   type SampleScore,
   verdictSelectors,
 } from '../shared/capturedExpectations';
+import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
+import { answerSearches } from '../shared/searchAnswers';
+import { replayFromHar, sameDocument } from '../shared/harReplay';
 import { injectHarness } from '../drivers/helpers';
 import { contextOptionsFor } from '../../scripts/capture/device';
 import { inspect, locatorsOf, unjudgedControls } from './readState';
@@ -30,36 +33,41 @@ test('there are captured samples to test', () => {
 });
 
 // A step behind a login is read in place, with no recording to replay. It runs on its snapshot instead.
-async function openForFill(browser: Browser, sample: CapturedSample): Promise<Page> {
-  return sample.readInPlace ? openStatic(browser, sample) : openReplay(browser, sample);
+async function openForFill(browser: Browser, sample: CapturedSample): Promise<{ page: Page; uploads: UploadStubs }> {
+  if (sample.readInPlace) return { page: await openStatic(browser, sample), uploads: { settled: async () => {} } };
+  return openReplay(browser, sample);
 }
 
 async function openStatic(browser: Browser, sample: CapturedSample): Promise<Page> {
   const context = await browser.newContext({ ...contextOptionsFor(sample.device, sample.locale), bypassCSP: true });
   const html = readFileSync(path.join(sample.dir, 'page.html'), 'utf8');
-  // Everything but the document is refused, so this cannot reach the site.
+  // Everything but the document is refused, so this cannot reach the site. The request never carries the
+  // #/route a hash-routed app keeps in its address, so that part is left out of the comparison.
   await context.route('**/*', (route) =>
-    route.request().url() === sample.url ? route.fulfill({ contentType: 'text/html; charset=utf-8', body: html }) : route.abort(),
+    sameDocument(route.request().url(), sample.url) ? route.fulfill({ contentType: 'text/html; charset=utf-8', body: html }) : route.abort(),
   );
   const page = await context.newPage();
   await page.goto(sample.url);
   return page;
 }
 
-async function openReplay(browser: Browser, sample: CapturedSample): Promise<Page> {
+async function openReplay(browser: Browser, sample: CapturedSample): Promise<{ page: Page; uploads: UploadStubs }> {
   const context = await browser.newContext({
     ...contextOptionsFor(sample.device, sample.locale),
     serviceWorkers: 'block',
     bypassCSP: true,
   });
-  // Anything not in the HAR is aborted, so the page cannot reach the site either.
-  await context.routeFromHAR(path.join(sample.dir, 'page.har'), { notFound: 'abort' });
+  // Anything not in the HAR is aborted, so the page cannot reach the site either. Uploads get stub answers,
+  // and a place search the HAR never saw gets the service's own answer from the live page, if one was saved.
+  await replayFromHar(context, path.join(sample.dir, 'page.har'));
+  const uploads = await answerUploads(context);
+  await answerSearches(context);
   const page = await context.newPage();
   await page.goto(sample.url, { waitUntil: 'load' });
   const firstField = Object.values(sample.expected.fields)[0]!.selector;
   await page.locator(firstField).first().waitFor({ state: 'attached', timeout: 20_000 });
   await page.waitForTimeout(800);
-  return page;
+  return { page, uploads };
 }
 
 for (const sample of samples) {
@@ -98,7 +106,7 @@ for (const sample of samples) {
 
     test(`${sample.readInPlace ? 'snapshot' : 'replay'}: filling gives exactly what expected.json says`, async ({ browser }) => {
       test.setTimeout(180_000);
-      const page = await openForFill(browser, sample);
+      const { page, uploads } = await openForFill(browser, sample);
       let score: SampleScore;
       try {
         const locators = locatorsOf(sample.expected);
@@ -110,6 +118,7 @@ for (const sample of samples) {
           if (!resume) throw new Error(`no sample resume for ${locale}`);
           return (await raf.runFill(document, { resume, files: raf.sampleFiles })).report;
         }, sample.expected.__resume);
+        await uploads.settled();
         const after = await inspect(page, locators);
         score = scoreSample(sample, 'harness', before, after, report);
         if (process.env.CAPTURED_DEBUG) {

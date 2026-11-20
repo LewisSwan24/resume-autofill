@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { contextOptionsFor, parseDevice } from '../../../scripts/capture/device';
+import { contextOptionsFor, liveContextOptions, parseDevice } from '../../../scripts/capture/device';
+
+describe('live check browser', () => {
+  // Left to the machine, the browser speaks its owner's language, and a place search answers in it.
+  it('speaks the sample language, not the machine language, on the capture desktop', () => {
+    const options = liveContextOptions('en-AU', '/ext');
+    expect(options.locale).toBe('en-AU');
+    expect(options.viewport).toEqual(contextOptionsFor('desktop').viewport);
+    expect(options.headless).toBe(true);
+    expect(options.args).toEqual(['--disable-extensions-except=/ext', '--load-extension=/ext']);
+  });
+});
 
 describe('capture device', () => {
   it('desktop keeps the viewport every existing sample was captured at', () => {

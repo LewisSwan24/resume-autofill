@@ -19,6 +19,10 @@ const MULTI_VALUE = '[class*="multi-value__label"], [class*="multiValue"] > :fir
 const OPEN_ON_FOCUS_MS = 80;
 const OPEN_MS = 300;
 const LOAD_MS = 1500;
+/** A search showing no rows at all is given this long, from the typing, to answer. */
+const FIRST_ANSWER_MS = 3000;
+/** Kept back from that wait for what comes after it: clearing the typing and leaving the field. */
+const AFTER_ANSWER_MS = 600;
 const SETTLE_MS = 800;
 const AFTER_LEAVING_MS = 60;
 
@@ -158,6 +162,7 @@ class Session {
   readonly shownBefore: string[];
   /** What we typed last: an input still holding it has not necessarily taken a choice. */
   typed: string | null = null;
+  private readonly startedAt = performance.now();
 
   constructor(
     public el: HTMLElement,
@@ -190,6 +195,11 @@ class Session {
   options(): DropdownOption[] {
     const list = this.list();
     return list ? visibleOptions(list, OPTION).filter((o) => !isLink(o.el)) : [];
+  }
+
+  /** What is left of this attempt's time. */
+  left(): number {
+    return this.ctx.timeoutMs - (performance.now() - this.startedAt);
   }
 
   wait<T>(check: () => T | null, timeout: number): Promise<T | null> {
@@ -271,10 +281,18 @@ async function resolve(s: Session, query: string, match: OptionMatcher): Promise
   let m = look(opts);
   if (m.status !== 'none' || !s.canType() || !squash(query)) return verdict(m, opts, null);
   s.type(query);
-  const hit = await s.wait(() => {
+  const fits = (): DropdownOption[] | null => {
     const now = s.options();
     return look(now).status !== 'none' ? now : null;
-  }, LOAD_MS);
+  };
+  let hit = await s.wait(fits, LOAD_MS);
+  // Rows that do not fit are an answer. No rows at all may only mean the search is still on its way: a place
+  // box can load its whole search script on the first key press. The wait never eats the time the step still
+  // needs, so a search that never answers ends as no match rather than as a step that ran out of time.
+  const extra = Math.min(FIRST_ANSWER_MS - LOAD_MS, s.left() - AFTER_ANSWER_MS);
+  if (!hit && extra > 0 && s.options().length === 0) {
+    hit = await s.wait(() => fits() ?? (s.options().length > 0 ? s.options() : null), extra);
+  }
   opts = hit ?? s.options();
   m = look(opts);
   return verdict(m, opts, query);

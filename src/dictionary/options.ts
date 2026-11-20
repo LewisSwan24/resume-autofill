@@ -136,8 +136,11 @@ function matchSynonymGroup(domain: string, code: string, cands: Cand[]): OptionM
   return result(hits, CONF_SYNONYM_CONTAINMENT);
 }
 
-/** What follows a place name: a comma, or a region code ending the label or followed by a comma. */
-const REGION_AFTER_PLACE = /^(?:\s*,|\s+[A-Z]{2,4}(?:\s*,|\s*$))/;
+/**
+ * What follows a place name: a comma, a region code ending the label or followed by a comma, or the region
+ * written in Chinese, which a search service puts straight after the name ("Canberra 澳大利亞首都特區澳洲").
+ */
+const REGION_AFTER_PLACE = /^(?:\s*,|\s+[A-Z]{2,4}(?:\s*,|\s*$)|\s*\p{Script=Han})/u;
 
 /** Options that are the named place followed by its region: "Brisbane" ↔ "Brisbane QLD, Australia". */
 export function placeOptions(name: string, options: OptionInfo[]): number[] {

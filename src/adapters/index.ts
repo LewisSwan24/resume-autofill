@@ -4,6 +4,7 @@ import { bytedanceCampus, nowcoderCampus, tencentCareers } from './cnPortals';
 import { greenhouse } from './greenhouse';
 import { lever } from './lever';
 import { pageup } from './pageup';
+import { rippling } from './rippling';
 import { smartrecruiters } from './smartrecruiters';
 import { successfactors } from './successfactors';
 import type { AtsAdapter } from './types';
@@ -19,6 +20,7 @@ export const ADAPTERS: readonly AtsAdapter[] = [
   pageup,
   ashby,
   smartrecruiters,
+  rippling,
   bytedanceCampus,
   nowcoderCampus,
   tencentCareers,

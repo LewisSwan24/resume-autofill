@@ -1,13 +1,12 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
 import { formatByPattern, isDatePattern } from './dateFormat';
-import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOption, namesOtherState, placeOptions, placeSpellings } from '../dictionary';
+import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOption, namesOtherState, namesPlace, placeOptions, placeSpellings } from '../dictionary';
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
 import type { GenderAnswer, Locale, Region, Resume } from '../schema';
 import { getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
 import { formatWithPreset, type InterpolationContext, type MappingPresetId } from '../templates/presets';
 import type { Control, FieldKey, OptionInfo, SectionKey } from './types';
 
-const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** What resolveValue hands to toIntent: scalars, string lists, regions, or a file id (attachments). */
 export type RawValue = string | number | boolean | string[] | Region;
@@ -463,9 +462,7 @@ function matchPlace(name: string, region: Region, options: OptionInfo[]): Option
   });
   const parts = [country, province].filter(Boolean);
   const names = (i: number, part: string): boolean =>
-    placeSpellings(part, country).some((spelling) =>
-      new RegExp(`(?:^|[^\\p{L}])${escapeRegExp(spelling)}(?:$|[^\\p{L}])`, 'iu').test(options[i]!.label),
-    );
+    placeSpellings(part, country).some((spelling) => namesPlace(options[i]!.label, spelling));
   // Nothing to check a result against: it could be any place of that name.
   if (parts.length === 0) return hits.length > 0 ? { status: 'ambiguous', candidates: hits } : { status: 'none' };
   let left = hits.filter((i) => parts.some((part) => names(i, part)));

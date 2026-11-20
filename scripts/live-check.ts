@@ -13,6 +13,7 @@ import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
 import { locatorsOf } from '../tests/captured/readState.ts';
 import { listSamples, scoreLine, scoreProblems, scoreSample } from '../tests/shared/capturedExpectations.ts';
+import { liveContextOptions } from './capture/device.ts';
 import { advanceLive, guardWrites, runLiveCheck } from './live/liveCheck.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,13 +40,9 @@ if (args.sample && !sample) {
   process.exit(2);
 }
 
-// An empty user data dir: a throwaway profile that has none of the user's logins.
-const context = await chromium.launchPersistentContext('', {
-  channel: 'chromium',
-  headless: true,
-  viewport: { width: 1280, height: 900 },
-  args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
-});
+// An empty user data dir: a throwaway profile that has none of the user's logins. It speaks the language the
+// sample was captured in, or the resume's.
+const context = await chromium.launchPersistentContext('', liveContextOptions(sample?.locale ?? args.locale!, EXT));
 
 let failed = false;
 try {

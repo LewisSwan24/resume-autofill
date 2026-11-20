@@ -15,15 +15,17 @@ const COUNTRIES: readonly (readonly string[])[] = [
   ['India', 'IND', '印度'],
 ];
 
+// Chinese names in simplified characters: text is simplified before it is compared. Both the mainland and the
+// Taiwan spellings, since a search service writes in the browser's language.
 const STATES: readonly (readonly string[])[] = [
-  ['QLD', 'Queensland'],
-  ['NSW', 'New South Wales'],
-  ['VIC', 'Victoria'],
-  ['TAS', 'Tasmania'],
-  ['SA', 'South Australia'],
-  ['WA', 'Western Australia'],
-  ['NT', 'Northern Territory'],
-  ['ACT', 'Australian Capital Territory'],
+  ['QLD', 'Queensland', '昆士兰州'],
+  ['NSW', 'New South Wales', '新南威尔士州', '新南威尔斯州'],
+  ['VIC', 'Victoria', '维多利亚州'],
+  ['TAS', 'Tasmania', '塔斯马尼亚州', '塔斯曼尼亚州'],
+  ['SA', 'South Australia', '南澳大利亚州', '南澳州'],
+  ['WA', 'Western Australia', '西澳大利亚州', '西澳州'],
+  ['NT', 'Northern Territory', '北领地', '北部地方'],
+  ['ACT', 'Australian Capital Territory', '澳大利亚首都特区', '澳大利亚首都领地', '首都领地'],
 ];
 
 const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -59,8 +61,21 @@ export function placeSpellings(name: string, homeCountry = ''): string[] {
   return [name, ...group.filter((n) => !same(n, name))];
 }
 
+const HAN = /\p{Script=Han}/u;
+
+/**
+ * Whether `text` names a place spelled `spelling`, as a word of its own. Chinese runs its words together
+ * ("澳大利亞首都特區澳洲"), so a Chinese spelling only has to be in the text, in either script.
+ */
+export function namesPlace(text: string, spelling: string): boolean {
+  if (HAN.test(spelling)) return toSimplified(text).includes(toSimplified(spelling));
+  const escaped = spelling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^\\p{L}])${escaped}(?:$|[^\\p{L}])`, 'iu').test(text);
+}
+
 /** Short forms count in capitals only, so a word that happens to spell one does not. */
 function saysState(text: string, state: string): boolean {
+  if (HAN.test(state)) return namesPlace(text, state);
   const flags = state === state.toUpperCase() ? 'u' : 'iu';
   return new RegExp(`(?:^|[^\\p{L}])${state}(?:$|[^\\p{L}])`, flags).test(text);
 }

@@ -63,6 +63,14 @@ describe('resolveAdapter', () => {
   it('gives every adapter a real address', () => {
     for (const a of ADAPTERS) expect(a.match.urls.length, a.id).toBeGreaterThan(0);
   });
+
+  it('waits on a board that stores an upload before it reads it, and gives the sign time to show', () => {
+    const doc = document.implementation.createHTMLDocument('x');
+    const adapter = resolveAdapter(doc, ADAPTERS, 'https://ats.rippling.com/en-AU/some-board/jobs/1/apply');
+    expect(adapter?.id).toBe('rippling');
+    expect(adapter?.uploadBusy).toBeTruthy();
+    expect(adapter?.uploadSignMs ?? 0).toBeGreaterThan(1000);
+  });
 });
 
 // The shape of one hosted form, with made-up questions.

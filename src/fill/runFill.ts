@@ -57,13 +57,12 @@ const UPLOAD_SIGN_MS = 300;
  * Let a page finish reading an upload, since it may write over fields when it does. Gives up after a
  * while. Just after an upload of ours, the sign that it is reading may still be on its way.
  */
-async function waitForUploadRead(doc: Document, busy: string, justUploaded: boolean): Promise<void> {
-  const showing = (): boolean => {
-    const el = doc.querySelector(busy);
-    return !!el && isVisible(el);
-  };
-  if (justUploaded) await waitFor(() => (showing() ? true : null), { timeout: UPLOAD_SIGN_MS, root: doc });
-  await waitFor(() => (showing() ? null : true), { timeout: UPLOAD_READ_MS, root: doc });
+async function waitForUploadRead(doc: Document, busy: string, justUploaded: boolean, signMs = UPLOAD_SIGN_MS): Promise<void> {
+  const showing = (): boolean => Array.from(doc.querySelectorAll(busy)).some((el) => isVisible(el));
+  // One budget for both waits, so a sign that is slow to show cannot stretch the whole wait past the frame's.
+  const until = performance.now() + UPLOAD_READ_MS;
+  if (justUploaded) await waitFor(() => (showing() ? true : null), { timeout: signMs, root: doc });
+  await waitFor(() => (showing() ? null : true), { timeout: Math.max(0, until - performance.now()), root: doc });
 }
 
 /** Looks in the largest box around this input that holds no other file input, so another slot's file does not count. */
@@ -154,6 +153,8 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const steps = [...plannedSteps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
   const uploadBusy = adapter?.uploadBusy;
   let uploaded = false;
+  // Only a resume the page took can start a read, so only then is the adapter's longer sign window worth waiting.
+  let resumeTaken = false;
   let read = false;
   for (const step of steps) {
     const box = controls.get(step.fieldId)?.el;
@@ -163,10 +164,12 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     }
     if (uploadBusy && !read && step.intent.kind !== 'file') {
       read = true;
-      await waitForUploadRead(doc, uploadBusy, uploaded);
+      await waitForUploadRead(doc, uploadBusy, uploaded, resumeTaken ? adapter?.uploadSignMs : undefined);
     }
     if (step.intent.kind === 'file') uploaded = true;
-    results.push(await runStep(step, controls, doc));
+    const result = await runStep(step, controls, doc);
+    if (step.intent.kind === 'file' && step.fieldKey === 'attachments.resume' && result.outcome === 'filled') resumeTaken = true;
+    results.push(result);
   }
 
   // After the rest of the page: on a page with `uploadBusy`, the upload has been read by now, and it may list entries.

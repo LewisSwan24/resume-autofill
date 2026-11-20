@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <title>Application that reads the uploaded resume (upload-read fixture)</title>
+  </head>
+  <body>
+    <!--
+      The shape of one hosted form: the resume box sits first, the page stores the file before it reads it, and
+      while it reads it locks every field, then writes what it found over them. Timings come from the query
+      string: ?store=<ms before the read starts>&read=<ms the read takes>.
+    -->
+    <form id="apply">
+      <h1>Application: Test Role</h1>
+      <div data-testid="field">
+        <div><span id="field-resume-label">Résumé</span><span>*</span></div>
+        <div role="group">
+          <label data-testid="resume" aria-labelledby="field-resume-label">
+            <input data-testid="input-resume" type="file" accept=".doc,.docx,.pdf" />
+            <div data-testid="chips"></div>
+          </label>
+        </div>
+      </div>
+      <div data-testid="notice-slot"></div>
+      <div data-testid="field">
+        <div><span id="field-first-label">First name</span></div>
+        <input data-input="first_name" data-testid="input-first_name" aria-labelledby="field-first-label" autocomplete="off" />
+      </div>
+      <div data-testid="field">
+        <div><span id="field-last-label">Last name</span></div>
+        <input data-input="last_name" data-testid="input-last_name" aria-labelledby="field-last-label" autocomplete="off" />
+      </div>
+      <div data-testid="field">
+        <div><span id="field-email-label">Email</span></div>
+        <input data-input="email" data-testid="input-email" aria-labelledby="field-email-label" autocomplete="off" />
+      </div>
+    </form>
+    <script type="module">
+      import { readsUpload } from './upload-read.ts';
+      readsUpload(document.getElementById('apply'));
+    </script>
+  </body>
+</html>

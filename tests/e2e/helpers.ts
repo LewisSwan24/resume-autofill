@@ -239,4 +239,31 @@ export function recordAccuracy(row: AccuracyRow): AccuracyRow[] {
 
 export const rowsOf = (report: FillReport, re: RegExp): FieldReport[] => report.fields.filter((f) => re.test(f.label));
 
-
+/** Centre of an element in the FAB's closed shadow root, found by data-testid through the DevTools protocol. */
+export async function fabPoint(page: Page, testId: string): Promise<{ x: number; y: number } | null> {
+  interface Node {
+    nodeId: number;
+    attributes?: string[];
+    children?: Node[];
+    shadowRoots?: Node[];
+  }
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { root } = (await cdp.send('DOM.getDocument', { depth: -1, pierce: true })) as { root: Node };
+    const stack: Node[] = [root];
+    while (stack.length) {
+      const n = stack.pop()!;
+      const a = n.attributes ?? [];
+      const i = a.indexOf('data-testid');
+      if (i >= 0 && a[i + 1] === testId) {
+        const { model } = (await cdp.send('DOM.getBoxModel', { nodeId: n.nodeId })) as { model: { border: number[] } };
+        const [x1, y1, , , x3, y3] = model.border;
+        return { x: (x1! + x3!) / 2, y: (y1! + y3!) / 2 };
+      }
+      stack.push(...(n.children ?? []), ...(n.shadowRoots ?? []));
+    }
+    return null;
+  } finally {
+    await cdp.detach();
+  }
+}

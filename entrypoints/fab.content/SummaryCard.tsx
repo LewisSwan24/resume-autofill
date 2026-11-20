@@ -8,6 +8,20 @@ import { Icon } from '../../src/ui/Icon';
 import { OUTCOME_STATUS, STATUS_GROUPS, TONE_COLOR_VAR, type StatusGroupId } from '../../src/ui/status';
 import { Badge, Button, IconButton } from './parts';
 import type { FillSummary, SummaryItem } from './summarize';
+import type { AdvanceStop } from '../../src/background/wizardSession';
+
+/** Auto-advance through a multi-step application: offer it, show the run, or say why it stopped. */
+export interface AdvanceView {
+  /** This step has a Next button and the run has not started. */
+  offer: boolean;
+  /** Steps moved on so far while a run is going; null when none is. */
+  running: number | null;
+  stopReason: AdvanceStop | null;
+  /** The run moved on to this step and found nothing on it to fill: the last numbers were another step's. */
+  emptyStep?: boolean;
+  onStart: () => void;
+  onStop: () => void;
+}
 
 export interface SummaryCardProps {
   /** Present after a fill; `null` when showing an error or preview prompt. */
@@ -26,6 +40,7 @@ export interface SummaryCardProps {
   onOpenOptions: () => void;
   /** "Add them to your profile": the profile page, at the first field with no data. */
   onFillMissing: () => void;
+  advance?: AdvanceView;
 }
 
 /** Longer than `--raf-motion-settle` (160ms): fallback in case `animationend` never fires. */
@@ -61,6 +76,7 @@ export function SummaryCard({
   onOpenSidePanel,
   onOpenOptions,
   onFillMissing,
+  advance,
 }: SummaryCardProps) {
   const t = useT();
 
@@ -102,6 +118,21 @@ export function SummaryCard({
       </header>
 
       <div className="raf-card__content">
+        {advance && advance.running !== null && (
+          <div className="raf-notice" role="status" data-testid="raf-advance-running">
+            <span className="raf-spinner" role="presentation" />
+            <p className="raf-notice__text">{t('common.advance.running', { n: advance.running })}</p>
+            <div className="raf-notice__actions">
+              <Button onClick={advance.onStop}>{t('common.advance.stop')}</Button>
+            </div>
+          </div>
+        )}
+        {advance && advance.running === null && advance.stopReason && (
+          <div className="raf-notice" role="status" data-testid="raf-advance-stopped">
+            <Icon name="info-circle" />
+            <p className="raf-notice__text">{t(`common.advance.stop.${advance.stopReason}`)}</p>
+          </div>
+        )}
         {summary && (
           <>
             <div className="raf-card__stats" data-testid="raf-stats">
@@ -147,6 +178,13 @@ export function SummaryCard({
           </div>
         )}
 
+        {!summary && advance?.emptyStep && (
+          <div className="raf-notice" role="status" data-testid="raf-advance-empty">
+            <Icon name="info-circle" />
+            <p className="raf-notice__text">{t('common.advance.emptyStep')}</p>
+          </div>
+        )}
+
         {summary && summary.items.length === 0 && summary.noData === 0 && (
           <div className="raf-notice" role="status" data-testid="raf-alldone">
             <span className="raf-notice__icon" style={{ color: TONE_COLOR_VAR.success }}>
@@ -165,6 +203,15 @@ export function SummaryCard({
               ))}
             </ul>
           </>
+        )}
+
+        {advance && advance.offer && advance.running === null && (
+          <div className="raf-card__advance" data-testid="raf-advance-offer">
+            <p className="raf-card__note">{t('common.advance.hint')}</p>
+            <Button block data-testid="raf-advance-start" onClick={advance.onStart}>
+              {t('common.advance.start')}
+            </Button>
+          </div>
         )}
 
         {summary && (

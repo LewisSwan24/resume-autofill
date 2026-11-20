@@ -15,6 +15,8 @@ describe('FIELD_DEPS', () => {
   it('lists the sources of every derived key (mirror of derived() in engine/values.ts)', () => {
     expect(FIELD_DEPS['basics.fullName']).toEqual(['basics.familyName', 'basics.givenName']);
     expect(FIELD_DEPS['basics.age']).toEqual(['basics.birthDate']);
+    expect(FIELD_DEPS['basics.isAdult']).toEqual(['basics.birthDate']);
+    expect(FIELD_DEPS['workRights.citizenOrResident']).toEqual(['workRights.status', 'basics.nationality']);
     expect(FIELD_DEPS['contact.phoneFull']).toEqual(['contact.phone', 'contact.phoneCountryCode']);
     expect([...FIELD_DEPS['contact.addressFull']!].sort()).toEqual(
       ['contact.addressCity', 'contact.addressCountry', 'contact.addressDistrict', 'contact.addressProvince',

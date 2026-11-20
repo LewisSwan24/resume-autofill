@@ -121,6 +121,15 @@ describe('matchOption: canonical codes via synonym groups', () => {
     expect(pick('workRightsStatus', 'citizen', o)).toBe('Australian citizen');
     expect(pick('workRightsStatus', 'permanent_resident', o)).toBe('Permanent resident');
   });
+  it('workRightsStatus on a list of visa kinds named briefly (Breezy)', () => {
+    const o = opts('Student', 'Temporary Graduate', 'Work and Holiday', 'Skilled', 'Covid', 'Other');
+    expect(pick('workRightsStatus', 'graduate_visa', o)).toBe('Temporary Graduate');
+    expect(pick('workRightsStatus', 'student_visa', o)).toBe('Student');
+    expect(pick('workRightsStatus', 'working_holiday', o)).toBe('Work and Holiday');
+    // Another temporary visa could be skilled, a pandemic visa or something else again.
+    expect(pick('workRightsStatus', 'other_temporary', o)).not.toBe('Skilled');
+    expect(pick('workRightsStatus', 'other_temporary', o)).not.toBe('Covid');
+  });
   it('workRightsStatus other_temporary does not steal the "with full work rights" option', () => {
     const o = opts('Temporary visa with full work rights', 'Citizen');
     expect(pick('workRightsStatus', 'other_temporary', o)).toBe('none');

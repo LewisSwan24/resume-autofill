@@ -1,6 +1,7 @@
 // Classify: score every control against the field-key dictionary, then assign keys globally (assign.ts).
 import {
   FIELD_SYNONYMS,
+  askedFor,
   isExactOnlySynonym,
   isExcluded,
   countryAskedAbout,
@@ -88,6 +89,14 @@ interface SimHit {
   distinct: boolean;
 }
 
+/** A question that asks for X counts as the label X, a little below X said plainly. */
+const ASKED_FACTOR = 0.95;
+/**
+ * "Your phone number" is the applicant's. Outside a section about someone else, a family member's or a referee's key
+ * drops this far behind, so it no longer ties with the applicant's own.
+ */
+const YOURS_FACTOR = 0.9;
+
 const simCache = new Map<string, SimHit[]>();
 const MAX_SIM_CACHE = 4000;
 
@@ -95,7 +104,11 @@ const MAX_SIM_CACHE = 4000;
 function similarityHits(text: string): SimHit[] {
   const norm = normalizeLabel(text);
   if (!norm) return [];
-  const cached = simCache.get(norm);
+  const asked = askedFor(text);
+  const askedNorm = asked ? normalizeLabel(asked) : '';
+  const viaAsk = askedNorm !== '' && askedNorm !== norm;
+  const cacheKey = viaAsk ? JSON.stringify([norm, askedNorm]) : norm;
+  const cached = simCache.get(cacheKey);
   if (cached) return cached;
   const hits: SimHit[] = [];
   for (const { def, synonyms } of entries()) {
@@ -105,6 +118,10 @@ function similarityHits(text: string): SimHit[] {
       let sim: number;
       if (s.exactOnly) sim = s.norm === norm ? 1 : 0;
       else sim = normalizedSimilarity(norm, s.norm);
+      if (viaAsk) {
+        const askedSim = ASKED_FACTOR * (s.exactOnly ? (s.norm === askedNorm ? 1 : 0) : normalizedSimilarity(askedNorm, s.norm));
+        if (askedSim > sim) sim = askedSim;
+      }
       if (sim > best) {
         best = sim;
         distinct = sim === 1 && s.norm.includes(' ');
@@ -115,7 +132,7 @@ function similarityHits(text: string): SimHit[] {
     hits.push({ key: def.key, sim: best, distinct });
   }
   if (simCache.size >= MAX_SIM_CACHE) simCache.clear();
-  simCache.set(norm, hits);
+  simCache.set(cacheKey, hits);
   return hits;
 }
 
@@ -223,11 +240,16 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
   // A legend / nearby heading that merely repeats the section title says nothing about the field itself
   // (unless it is all we have).
   const title = ctx.sectionTitle ? normalizeLabel(ctx.sectionTitle) : null;
+  // A "title" that is a question ("Are you over 18 years?", "What's your email?") is the field's own question,
+  // which a section never is.
+  const titleAsks = ctx.sectionTitle !== undefined && ctx.sectionTitle !== null && (/[?？]\s*$/.test(ctx.sectionTitle) || askedFor(ctx.sectionTitle) !== null);
   const repeatsTitle = (e: FieldContext['evidence'][number]) =>
-    title !== null && (e.source === 'legend' || e.source === 'nearby-text') && normalizeLabel(e.text) === title;
+    title !== null && !titleAsks && (e.source === 'legend' || e.source === 'nearby-text') && normalizeLabel(e.text) === title;
   const usable = ctx.evidence.filter((e) => !repeatsTitle(e));
   const evidence = usable.length > 0 ? usable : ctx.evidence;
 
+  // Asked of the applicant ("What's your email?", "请填写你的邮箱"), outside a section about someone else.
+  const askedOfYou = (!section || !ABOUT_SOMEONE_ELSE.has(section)) && evidence.some((e) => askedFor(e.text) !== null);
   const parts = new Map<FieldKey, { miss: number; weight: number }>();
   for (const e of evidence) {
     for (const hit of similarityHits(e.text)) {
@@ -247,7 +269,8 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
     const def = getFieldKeyDef(fieldKey)!;
     // Under a project or an award the bare word is where that was, and the resume has no such place.
     if (fieldKey === 'basics.currentLocation' && section && !def.sections.includes(section) && evidence.some((e) => BARE_PLACE.test(normalizeLabel(e.text)))) continue;
-    const score = round3(sectionAdjust(def, Math.min(1, 1 - miss), section));
+    const someoneElses = def.sections.length > 0 && def.sections.every((s) => ABOUT_SOMEONE_ELSE.has(s));
+    const score = round3(sectionAdjust(def, Math.min(1, 1 - miss), section) * (askedOfYou && someoneElses ? YOURS_FACTOR : 1));
     if (score >= MIN_CANDIDATE) candidates.push({ fieldKey, confidence: Math.min(1, score), weight, score });
   }
   candidates.sort((a, b) => b.score - a.score || b.weight - a.weight);
@@ -349,6 +372,10 @@ function takesDialCode(el: HTMLElement): boolean {
   return (el.getAttribute('placeholder') ?? '').trim().startsWith('+') || /country code/i.test(el.getAttribute('aria-label') ?? '');
 }
 
+/** A list to pick from: a select, a radio group or a group of boxes. */
+const listsChoices = (c: Control): boolean =>
+  c.kind === 'select' || c.kind === 'radio' || (c.kind === 'checkbox' && (c.options?.length ?? 0) > 1);
+
 /** Classification of every control: sections, scores, then one global assignment (see assign.ts). */
 export function classifyAll(contexts: FieldContext[]): Classification[] {
   const sections = contexts.map(classifySection);
@@ -362,9 +389,13 @@ export function classifyAll(contexts: FieldContext[]): Classification[] {
   );
   // Given a bare number, such a widget guesses the country. With a code box beside it, the code goes there.
   const hasCodeBox = assigned.some((cls) => cls.fieldKey === 'contact.phoneCountryCode');
-  return assigned.map((cls, i) =>
-    cls.fieldKey === 'contact.phone' && !hasCodeBox && takesDialCode(contexts[i]!.control.el)
-      ? { ...cls, fieldKey: 'contact.phoneFull' as const }
-      : cls,
-  );
+  // "Visa type" over a list of kinds of visa (Student, Temporary Graduate…) is answered by the work-rights status,
+  // unless another question on the page asks for that.
+  const statusAsked = assigned.some((cls) => cls.fieldKey === 'workRights.status');
+  return assigned.map((cls, i) => {
+    const control = contexts[i]!.control;
+    if (cls.fieldKey === 'contact.phone' && !hasCodeBox && takesDialCode(control.el)) return { ...cls, fieldKey: 'contact.phoneFull' as const };
+    if (cls.fieldKey === 'workRights.visaType' && !statusAsked && listsChoices(control)) return { ...cls, fieldKey: 'workRights.status' as const };
+    return cls;
+  });
 }

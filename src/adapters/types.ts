@@ -93,4 +93,6 @@ export interface AtsAdapter {
   heldFile?: HeldFile;
   /** Returns a stable signature of the current wizard step (for SPA multi-step ATS forms). */
   stepSignature?: (doc: Document) => string | null;
+  /** The page's own button to the next step. Its label is still checked: one that sends is never pressed. */
+  nextButton?: string;
 }

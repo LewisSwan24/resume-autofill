@@ -373,6 +373,15 @@
   flex: 1 1 12em;
   margin: 0;
 }
+/* Auto-advance offer: one line of what it will (not) press, then the button. */
+.raf-card__advance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+}
+.raf-card__advance > .raf-card__note {
+  margin: 0;
+}
 .raf-card__note,
 .raf-card__list-title {
   font-size: var(--raf-font-size-sm);

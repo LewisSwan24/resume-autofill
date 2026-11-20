@@ -105,6 +105,9 @@ describe('FIELD_KEYS', () => {
       expect(getFieldKeyDef(key)?.derived, key).toBe(true);
     }
     expect(getFieldKeyDef('basics.age')?.type).toBe('number');
+    for (const key of ['basics.isAdult', 'workRights.citizenOrResident']) {
+      expect(getFieldKeyDef(key)).toMatchObject({ type: 'bool', enumDomain: 'yesNo', derived: true });
+    }
     expect(getFieldKeyDef('basics.familyName')?.derived).toBeFalsy();
   });
 

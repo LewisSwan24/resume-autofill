@@ -37,6 +37,23 @@ export interface FillDeps {
   forceFill?: boolean;
   /** User exclusions / overrides from preview confirmation. */
   approval?: PreviewApproval;
+  /**
+   * Fill only while the tab is on this origin (auto-advance, where no one watches each step). Checked before any
+   * frame is asked anything, and again before each frame gets resume data; a mismatch answers `origin_changed`.
+   */
+  expectOrigin?: string;
+}
+
+class OriginChangedError extends Error {}
+
+async function tabOrigin(tabId: number): Promise<string | null> {
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  try {
+    const o = typeof tab?.url === 'string' ? new URL(tab.url).origin : 'null';
+    return o === 'null' ? null : o;
+  } catch {
+    return null;
+  }
 }
 
 export interface FramePayload {
@@ -135,7 +152,7 @@ export async function broadcastWizard(tabId: number, session: WizardSessionState
 }
 
 /** Keep the service worker alive while a long fill runs (any extension API call resets the idle timer). */
-function keepAlive(): () => void {
+export function keepAlive(): () => void {
   const timer = setInterval(() => {
     browser.storage.session.get('keepalive').catch(() => undefined);
   }, 20_000);
@@ -179,6 +196,7 @@ async function runPreviewInternal(
         ...(presetId ? { presetId } : {}),
         ...(recipes && recipes.length > 0 ? { recipes } : {}),
       };
+      if (deps.expectOrigin !== undefined && (await tabOrigin(tabId)) !== deps.expectOrigin) throw new OriginChangedError();
       return sendPreview(tabId, frameId, payload);
     },
     isFramePreview,
@@ -192,6 +210,7 @@ async function runPreviewInternal(
       },
     },
   );
+  if (deps.expectOrigin !== undefined && (await tabOrigin(tabId)) !== deps.expectOrigin) return { ok: false, error: 'origin_changed' };
   if (parts.length === 0) return { ok: false, error: 'no_frames' };
 
   const preview = mergeFramePreviews(
@@ -228,6 +247,12 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
 
     const tabInfo = await browser.tabs.get(tabId).catch(() => null);
     const tabUrl = typeof tabInfo?.url === 'string' ? tabInfo.url : '';
+    const expected = deps.expectOrigin;
+    if (expected !== undefined && (await tabOrigin(tabId)) !== expected) return { ok: false, error: 'origin_changed' };
+    /** Throws before a frame gets resume data if the tab has moved to another site meanwhile. */
+    const stillOnSite = async () => {
+      if (expected !== undefined && (await tabOrigin(tabId)) !== expected) throw new OriginChangedError();
+    };
     const allRecipes = [...(profile.recipes ?? []), ...BUILTIN_SITE_RECIPES];
     const pageRecipes = tabUrl ? matchRecipesForPage(allRecipes, tabUrl) : undefined;
 
@@ -243,6 +268,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
       frameIds,
       // Each frame gets the minimum it asked for: a resume subset and only the files its upload controls take.
       async (frameId, needs) => {
+        await stillOnSite();
         const filter = frameFilter(deps.approval, frameId);
         const payload: FramePayload = {
           runId,
@@ -265,6 +291,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
         },
       },
     );
+    if (expected !== undefined && (await tabOrigin(tabId)) !== expected) return { ok: false, error: 'origin_changed' };
     if (parts.length === 0) return { ok: false, error: 'no_frames' };
 
     const report = mergeFrameReports(parts);

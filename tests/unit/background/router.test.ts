@@ -247,3 +247,37 @@ describe('defaultRouterDeps.openOptions', () => {
     expect(await fakeBrowser.storage.session.get('profile:focus')).toEqual({});
   });
 });
+
+describe('wizard auto-advance', () => {
+  it('starts from the FAB (its own tab) or the side panel (a named tab) and answers right away', async () => {
+    const start = vi.fn().mockResolvedValue({ ok: true });
+    route = createRouter({ ...(deps as unknown as RouterDeps), autoAdvance: start });
+    expect(route({ type: 'wizard:autoAdvance' }, contentSender(11, 0), respond)).toBe(true);
+    await flush();
+    expect(start).toHaveBeenCalledWith(11);
+    expect(respond).toHaveBeenCalledWith({ ok: true });
+
+    expect(route({ type: 'wizard:autoAdvance', tabId: 5 }, pageSender(), respond)).toBe(true);
+    await flush();
+    expect(start).toHaveBeenLastCalledWith(5);
+  });
+
+  it('only takes a start from the top frame of a page', () => {
+    const start = vi.fn().mockResolvedValue({ ok: true });
+    route = createRouter({ ...(deps as unknown as RouterDeps), autoAdvance: start });
+    expect(route({ type: 'wizard:autoAdvance' }, contentSender(11, 3), respond)).toBe(false);
+    expect(route({ type: 'wizard:autoAdvance', tabId: 'x' }, pageSender(), respond)).toBe(false);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('stops a run, and resetting the wizard stops it too', () => {
+    const stop = vi.fn();
+    route = createRouter({ ...(deps as unknown as RouterDeps), stopAdvance: stop });
+    expect(route({ type: 'wizard:stopAdvance' }, contentSender(11, 0), respond)).toBe(false);
+    expect(stop).toHaveBeenCalledWith(11);
+    route({ type: 'wizard:stopAdvance', tabId: 6 }, pageSender(), respond);
+    expect(stop).toHaveBeenLastCalledWith(6);
+    route({ type: 'wizard:clear', tabId: 8 }, pageSender(), respond);
+    expect(stop).toHaveBeenLastCalledWith(8);
+  });
+});

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <title>Application, step 1 of 3 (wizard fixture)</title>
+  </head>
+  <body>
+    <h1>Graduate application</h1>
+    <ol class="steps"><li aria-current="step">Personal details</li><li>Contact</li><li>Review</li></ol>
+    <form id="f">
+      <div class="row"><label for="first-name">First name</label> <input id="first-name" name="first_name" required autocomplete="off" /></div>
+      <div class="row"><label for="last-name">Last name</label> <input id="last-name" name="last_name" required autocomplete="off" /></div>
+      <button type="submit">Next</button>
+    </form>
+    <script type="module">
+      import { goesTo } from './wizard.ts';
+      goesTo(document.getElementById('f'), 'step-2.html', ['first_name', 'last_name']);
+    </script>
+  </body>
+</html>

@@ -109,6 +109,37 @@ describe('runFillRequest', () => {
   });
 });
 
+describe('runFillRequest with an expected origin (auto-advance)', () => {
+  it('fills when the tab is still on the expected site', async () => {
+    await seedSamplesIfEmpty();
+    vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 4, url: 'https://jobs.example.test/apply/2' } as never);
+    vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined as never);
+    const sendFill = vi.fn(async () => report('https://jobs.example.test/apply/2', [row('c1', 'filled')]));
+    const res = await runFillRequest(4, { sendNeeds, sendFill, listFrameIds: async () => [0], expectOrigin: 'https://jobs.example.test' });
+    expect(res).toEqual({ ok: true });
+    expect(sendFill).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['another site', 'https://elsewhere.example.test/form'],
+    ['an unknown address', undefined],
+  ])('sends no resume data when the tab is on %s', async (_what, url) => {
+    await seedSamplesIfEmpty();
+    vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 4, url } as never);
+    const sendNeedsSpy = vi.fn(sendNeeds);
+    const sendFill = vi.fn();
+    const res = await runFillRequest(4, {
+      sendNeeds: sendNeedsSpy,
+      sendFill,
+      listFrameIds: async () => [0],
+      expectOrigin: 'https://jobs.example.test',
+    });
+    expect(res).toEqual({ ok: false, error: 'origin_changed' });
+    expect(sendFill).not.toHaveBeenCalled();
+    expect(sendNeedsSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('loadAttachmentFiles', () => {
   it('returns data urls for the resume attachments, keyed by id, and ignores missing ones', async () => {
     const profile = createSampleProfile();

@@ -7,6 +7,7 @@ import { sendToBackground } from '../messaging';
 import { createFrameHandlers } from './handlers';
 import { idFor } from './ids';
 import { createContentListener } from './listener';
+import { createStepHandlers } from './steps';
 import { createScanWatcher } from './watcher';
 
 export * from './handlers';
@@ -15,6 +16,7 @@ export * from './inspector';
 export * from './intent';
 export * from './listener';
 export * from './needs';
+export * from './steps';
 export * from './watcher';
 
 /** Start the content script in `doc`; returns a stop function (extension context invalidated). */
@@ -51,12 +53,21 @@ export function startContentScript(doc: Document = document): () => void {
     },
   });
 
-  const listener = createContentListener(handlers);
+  // Only the top frame moves a multi-step form on; the FAB that starts it lives there too.
+  const isTop = doc.defaultView === doc.defaultView?.top;
+  const steps = isTop
+    ? createStepHandlers(doc, {
+        adapterStep: () => resolveAdapter(doc)?.stepSignature?.(doc) ?? null,
+        adapterNext: () => resolveAdapter(doc)?.nextButton,
+      })
+    : undefined;
+  const listener = createContentListener(handlers, steps);
   browser.runtime.onMessage.addListener(listener);
   watcher.start();
   scan(); // initial scan right away; the observer only reacts to later changes
   return () => {
     browser.runtime.onMessage.removeListener(listener);
     watcher.stop();
+    steps?.stop();
   };
 }

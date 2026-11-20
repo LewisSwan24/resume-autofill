@@ -140,6 +140,8 @@ function highestSchooling<T extends { entry: unknown }>(rows: T[]): T | undefine
 const lastSchooling = <T extends { entry: unknown }>(rows: T[]): T | undefined =>
   rows.reduce<T | undefined>((last, r) => (!last || endOfSchooling(r) > endOfSchooling(last) ? r : last), undefined);
 
+const NEW_ZEALAND = /new\s*zealand|\bnz\b|kiwi|新西兰|新西蘭|纽西兰|紐西蘭/i;
+
 function ageOf(birthDate: string, now: Date): number | null {
   const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(birthDate);
   if (!m) return null;
@@ -179,6 +181,26 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
       if (clean(basics.currentLocation) !== null) return null;
       const { country, province, city } = contact.address;
       return province.trim() || city.trim() ? { raw: { country, province, city }, source: 'contact.address' } : null;
+    }
+    case 'basics.isAdult': {
+      // A month-only birth date in the eighteenth birthday's month could go either way: say nothing.
+      const birth = basics.birthDate.trim();
+      const now = opts.now ?? new Date();
+      const oldest = ageOf(birth, now);
+      const youngest = /^\d{4}-\d{2}$/.test(birth) ? ageOf(`${birth}-31`, now) : oldest;
+      if (oldest === null || youngest === null || oldest >= 18 !== youngest >= 18) return null;
+      return { raw: oldest >= 18, source: 'basics.birthDate' };
+    }
+    case 'workRights.citizenOrResident': {
+      const status = resume.workRights.status;
+      if (status === 'citizen' || status === 'permanent_resident') return { raw: true, source: 'workRights.status' };
+      if (status === 'graduate_visa' || status === 'student_visa' || status === 'working_holiday' || status === 'no_rights') {
+        return { raw: false, source: 'workRights.status' };
+      }
+      // Another temporary visa: a New Zealander's, whom the question often counts in, unless the nationality says not.
+      const nationality = basics.nationality.trim();
+      if (status === 'other_temporary' && nationality && !NEW_ZEALAND.test(nationality)) return { raw: false, source: 'workRights.status' };
+      return null;
     }
     case 'basics.age': {
       const age = ageOf(basics.birthDate, opts.now ?? new Date());
@@ -394,6 +416,16 @@ function isSamePlace(name: string, label: string, level: PlaceLevel): boolean {
   return n === bare && WORD_OF_LEVEL[level].test(l);
 }
 
+/** The entry for a place the list does not name. */
+const OTHER_PLACE =
+  /^(?:other|others|other\s+(?:city|cities|location|area|region|place)|somewhere\s+else|其他|其它)(?:城市|地区|地區|地点|地點)?\s*(?:\(.*\)|（.*）)?$/i;
+
+/** The one "Other" on a list of places. Two of them, or none, and there is nothing to pick. */
+function otherPlace(options: OptionInfo[]): OptionMatch {
+  const hits = options.flatMap((o, i) => (!o.disabled && !isPlaceholderOption(o) && OTHER_PLACE.test(o.label.trim()) ? [i] : []));
+  return hits.length === 1 ? { status: 'matched', index: hits[0]!, confidence: 0.8 } : { status: 'none' };
+}
+
 /** On a list, the place itself comes first. A longer label has to end in it: 成都市第一中学 is a school. */
 function matchPlaceName(name: string, level: PlaceLevel, region: Region, options: OptionInfo[]): OptionMatch {
   const usable = options.flatMap((o, i) => (o.disabled || isPlaceholderOption(o) ? [] : [i]));
@@ -555,7 +587,16 @@ export function toIntent(
           query,
           match: (options: OptionInfo[]) => matchPlaceName(query, level, region, options),
         });
-        return { kind: 'choice', display: first!.query, ...asked(first!), ...(up.length > 0 ? { wider: up.map(asked) } : {}) };
+        const own = asked(first!);
+        const wider = up.map(asked);
+        // A list of a few big cities, and this place is not one of them nor in a state it lists: it is "Other".
+        // Only when nothing on the list could be this place, so a driver walking up the levels still gets them.
+        const match: OptionMatcher = (options) => {
+          const m = own.match(options);
+          if (m.status !== 'none' || wider.some((w) => w.match(options).status !== 'none')) return m;
+          return otherPlace(options);
+        };
+        return { kind: 'choice', display: first!.query, query: own.query, match, ...(wider.length > 0 ? { wider } : {}) };
       }
       return { kind: 'text', text: regionText(region, locale) };
     }

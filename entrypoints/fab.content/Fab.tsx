@@ -16,6 +16,8 @@ import { useT } from '../../src/i18n';
 import { isFromExtension, isValidMessage, sendToBackground, type Sender } from '../../src/messaging';
 import type { InspectorTargetInfo } from '../../src/content/inspector';
 import { Icon } from '../../src/ui/Icon';
+import type { AdvanceStop, WizardSessionState } from '../../src/background/wizardSession';
+import { findStepAction } from '../../src/fill/nextStep';
 import { ResumeChip } from './ResumeChip';
 import { SummaryCard } from './SummaryCard';
 import { countBoxes, looksUnderRead, summarize, type FillSummary } from './summarize';
@@ -27,7 +29,8 @@ type View =
   | { kind: 'idle' }
   | { kind: 'filling' }
   | { kind: 'preview' }
-  | { kind: 'done'; summary: FillSummary }
+  /** `summary` is null on a step auto-advance reached that had nothing to fill. */
+  | { kind: 'done'; summary: FillSummary | null }
   | { kind: 'error'; message: string };
 
 export interface FabProps {
@@ -58,6 +61,13 @@ function resultCaption(summary: FillSummary, t: ReturnType<typeof useT>): string
   return parts.join(' · ');
 }
 
+/** A wizard session as the background sends it, or null for anything else. */
+function asSession(x: unknown): WizardSessionState | null {
+  return typeof x === 'object' && x !== null && typeof (x as WizardSessionState).stepCount === 'number'
+    ? (x as WizardSessionState)
+    : null;
+}
+
 const ignore = () => {
   /* fire-and-forget: the background may be restarting; nothing useful to do on failure */
 };
@@ -83,6 +93,17 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   /** The card that is playing its exit animation (it has already been closed). */
   const [leaving, setLeaving] = useState<CardView | null>(null);
+  /** The tab's multi-page session, with its auto-advance run. */
+  const [wizard, setWizard] = useState<WizardSessionState | null>(null);
+  /** The user closed the card of a run that is still going. */
+  const [runHidden, setRunHidden] = useState(false);
+  /** Why a run stopped, when it stopped while this page was open; cleared by the next fill. */
+  const [liveStop, setLiveStop] = useState<AdvanceStop | null>(null);
+  /** The run is on a step that sent no report: nothing on it could be filled. */
+  const [emptyStep, setEmptyStep] = useState(false);
+  /** Steps of the run as last seen, and whether a report came for the step it is on. */
+  const runStepsRef = useRef<number | null>(null);
+  const reportedRef = useRef(false);
 
   const setView = useCallback((next: View) => {
     viewRef.current = next;
@@ -108,11 +129,34 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
           setTotal(Math.max(0, Math.floor(message.total)));
           setBoxes(countBoxes(document));
         }
+      } else if (message.type === 'wizard:updated') {
+        const session = asSession(message.session);
+        setWizard(session);
+        setRunHidden(false);
+        const run = session?.advance;
+        setLiveStop(run && !run.running ? (run.stopReason ?? null) : null);
+        // A page that changes steps in place keeps this button. A step with nothing to fill sends no report, so
+        // the numbers showing are the last step's: take them down.
+        const steps = run ? run.steps : null;
+        const before = runStepsRef.current;
+        if (steps !== null && (before === null || steps < before)) {
+          reportedRef.current = false; // a new run: its next step needs a report of its own
+        } else if (steps !== null && before !== null && steps > before) {
+          if (!reportedRef.current) {
+            setResult(null);
+            setEmptyStep(true);
+            if (viewRef.current.kind === 'done') setView({ kind: 'done', summary: null });
+          }
+          reportedRef.current = false;
+        }
+        runStepsRef.current = steps;
       } else if (message.type === 'report:updated') {
         if (!Array.isArray(message.report?.fields)) return;
         clearTimer();
         runRef.current++; // supersede any in-flight fill:request response handling
         const summary = summarize(message.report);
+        reportedRef.current = true;
+        setEmptyStep(false);
         setResult(summary);
         setView({ kind: 'done', summary });
       }
@@ -120,6 +164,10 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
     browser.runtime.onMessage.addListener(onMessage);
     // The scan usually finishes before this listener exists: ask for the current total.
     void sendToBackground({ type: 'scan:query' }).catch(ignore);
+    // A step loaded by auto-advance: pick the run up from the session.
+    void sendToBackground({ type: 'wizard:query' })
+      .then((session) => setWizard((now) => now ?? asSession(session)))
+      .catch(ignore);
     return () => browser.runtime.onMessage.removeListener(onMessage);
   }, [clearTimer, setView]);
 
@@ -131,6 +179,8 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
     const run = ++runRef.current;
     setLeaving(null);
     setResult(null);
+    setLiveStop(null);
+    setEmptyStep(false);
     setView({ kind: 'filling' });
     try {
       const res = await sendToBackground({ type: 'fill:request' });
@@ -162,12 +212,41 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
     const current = viewRef.current;
     if (current.kind === 'done' || current.kind === 'error') setLeaving(canAnimate() ? current : null);
     setView({ kind: 'idle' });
+    setRunHidden(true);
     buttonRef.current?.focus();
   }, [clearTimer, setView]);
 
+  const startAdvance = useCallback(() => {
+    void sendToBackground({ type: 'wizard:autoAdvance' })
+      .then((res) => {
+        if (!res?.ok) setView({ kind: 'error', message: t('fab.error.generic') });
+      })
+      .catch(() => setView({ kind: 'error', message: t('fab.error.generic') }));
+  }, [setView, t]);
+
+  const stopAdvance = useCallback(() => {
+    void sendToBackground({ type: 'wizard:stopAdvance' }).catch(ignore);
+  }, []);
+
   const filling = view.kind === 'filling';
   const cardView: CardView | null = view.kind === 'done' || view.kind === 'error' || view.kind === 'preview' ? view : null;
-  const shown = cardView ?? leaving;
+  const run = wizard?.advance;
+  const running = run?.running === true;
+  // The page's own buttons; the FAB's sit in a closed shadow root, out of this query's reach.
+  const offer = !running && wizard !== null && view.kind === 'done' && findStepAction(document).kind === 'next';
+  const advance = wizard
+    ? {
+        offer,
+        running: running ? run!.steps : null,
+        stopReason: running ? null : liveStop,
+        emptyStep,
+        onStart: startAdvance,
+        onStop: stopAdvance,
+      }
+    : undefined;
+  // A run keeps its card up, on every step it loads, unless the user closed it.
+  const runCard = running && !runHidden && !cardView;
+  const shown = cardView ?? leaving ?? (runCard ? ({ kind: 'done', summary: null } as const) : null);
   const detected = looksUnderRead(total, boxes)
     ? t('fab.detected.few', { n: total, boxes })
     : total === 0 ? t('fab.detected.none') : t(total === 1 ? 'fab.detected.one' : 'fab.detected.other', { n: total });
@@ -205,11 +284,11 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
       )}
       {shown && (
         <SummaryCard
-          key={cardView ? 'open' : 'leaving'}
+          key={cardView || runCard ? 'open' : 'leaving'}
           summary={shown.kind === 'done' ? shown.summary : null}
           error={shown.kind === 'error' ? shown.message : null}
           previewReady={shown.kind === 'preview'}
-          leaving={!cardView}
+          leaving={!cardView && !runCard}
           onSettled={() => setLeaving(null)}
           onClose={close}
           onFocusField={(item) =>
@@ -218,8 +297,9 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
           onOpenSidePanel={() => void sendToBackground({ type: 'ui:openSidePanel' }).catch(ignore)}
           onOpenOptions={() => void sendToBackground({ type: 'ui:openOptions' }).catch(ignore)}
           onFillMissing={() =>
-            void sendToBackground({ type: 'ui:openOptions', ...(shown.kind === 'done' ? shown.summary.firstMissing : undefined) }).catch(ignore)
+            void sendToBackground({ type: 'ui:openOptions', ...(shown.kind === 'done' ? shown.summary?.firstMissing : undefined) }).catch(ignore)
           }
+          {...(advance && (cardView?.kind === 'done' || runCard) ? { advance } : {})}
         />
       )}
       {/* Primary Button; with no detected fields it becomes the outlined button + muted caption (still clickable).

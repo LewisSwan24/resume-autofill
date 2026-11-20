@@ -16,6 +16,8 @@ export interface ProfileTarget {
 const SAME_AS: Readonly<Record<string, string>> = {
   'basics.fullName': 'familyName',
   'basics.age': 'birthDate',
+  'basics.isAdult': 'birthDate',
+  'workRights.citizenOrResident': 'status',
   'contact.addressCountry': 'address.country',
   'contact.addressProvince': 'address.province',
   'contact.addressCity': 'address.city',

@@ -12,12 +12,15 @@ export interface FieldSynonym {
   en: string[];
   /** Words that veto this key when present in the label (e.g. "家庭" for basics.familyName). */
   exclude?: string[];
+  /** Words of which the label must have one, or the key is vetoed: "citizen or permanent resident" is not "citizen". */
+  require?: string[];
 }
 
-export const s = (zh: string, en: string, exclude = ''): FieldSynonym => {
+export const s = (zh: string, en: string, exclude = '', require = ''): FieldSynonym => {
   const split = (v: string) => v.split('|').map((x) => x.trim()).filter(Boolean);
   const out: FieldSynonym = { zh: split(zh), en: split(en) };
   if (exclude) out.exclude = split(exclude);
+  if (require) out.require = split(require);
   return out;
 };
 
@@ -128,6 +131,10 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '年龄|岁数|周岁|实际年龄|您的年龄',
     'Age|Your age|Age (years)|Current age|Age in years',
   ),
+  'basics.isAdult': s(
+    '是否年满18周岁|是否已满18周岁|是否年满18岁|是否已满18岁|是否年满十八周岁|年满18周岁|是否成年|是否已成年',
+    'Are you over 18|Are you over 18 years|Are you over 18 years old|Are you 18 or over|Are you 18 or older|Are you 18 years or older|Are you 18 years of age or older|Are you at least 18|Are you at least 18 years of age|Are you at least 18 years old|Are you over the age of 18|Over 18|18 years or older|18 or over',
+  ),
 
   // ------------------------------------------------------------ contact
   'contact.email': s(
@@ -142,7 +149,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'contact.phone': s(
     '联系方式|手机|手机号|手机号码|联系电话|电话|联系手机|移动电话|电话号码|常用电话|联系电话(手机)|本人手机',
-    'Phone|Phone number|Mobile|Mobile number|Mobile phone|Contact number|Telephone|Cell phone|Contact phone|Mobile/phone',
+    'Phone|Phone number|Mobile|Mobile number|Mobile phone|Contact number|Telephone|Cell phone|Contact phone|Contact phone number|Mobile/phone',
     `备用|紧急|应急|家庭|推荐人|证明人|区号|验证|emergency|referee|reference|country code|verif|code|family|next of kin|${OTHER_PEOPLE}`,
   ),
   'contact.phoneFull': s(
@@ -228,6 +235,12 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'workRights.requiresSponsorship': s(
     '是否需要签证担保|是否需要担保|是否需要雇主担保|需要担保|签证担保|工作签证担保|是否需要工作签证担保',
     'Require sponsorship|Do you require sponsorship|Sponsorship required|Visa sponsorship|Require visa sponsorship|Need sponsorship|Employer sponsorship|Will you now or in the future require sponsorship',
+  ),
+  'workRights.citizenOrResident': s(
+    '是否为澳大利亚公民或永久居民|是否为公民或永久居民|是否为公民或永久居民身份|公民或永久居民',
+    'Are you an Australian citizen or permanent resident|Are you an Australian Citizen, Permanent Resident or a New Zealand Citizen|Are you an Australian citizen, permanent resident or New Zealand citizen|Are you a citizen or permanent resident|Australian citizen or permanent resident|Australian citizen, permanent resident or New Zealand citizen|Citizen or permanent resident',
+    '',
+    'permanent resident|permanent residency|permanent residence|永久居民|永久居留|永居',
   ),
   'workRights.hasFullWorkRights': s(
     '是否拥有完整工作权利|是否有工作权利|是否有合法工作资格|是否可以合法工作|完整工作权利|是否有完整工作权利|是否有权在澳工作',

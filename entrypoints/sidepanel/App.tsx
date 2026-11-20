@@ -187,6 +187,11 @@ export default function App() {
 
     const onMessage = (message: unknown, sender: { id?: string; tab?: unknown }) => {
       if (!isFromExtension(sender) || sender.tab != null || !isValidMessage(message)) return;
+      if (message.type === 'wizard:updated' && message.tabId === tabId) {
+        const next = message.session;
+        setWizard(next && typeof next.stepCount === 'number' ? next : null);
+        return;
+      }
       if (message.type === 'inspector:picked' && 'tabId' in message && message.tabId === tabId) {
         setInspectorActive(false);
         setPickedState({ url: message.url, target: message.target });
@@ -361,19 +366,58 @@ export default function App() {
         {wizard && wizard.stepCount > 0 ? (
           <Notice
             action={
-              <button
-                type="button"
-                className="raf-btn raf-btn-small"
-                onClick={() => {
-                  if (tabId !== null) void sendToBackground({ type: 'wizard:clear', tabId }).catch(() => undefined);
-                  setWizard(null);
-                }}
-              >
-                {t('panel.wizard.reset')}
-              </button>
+              <>
+                {wizard.advance?.running ? (
+                  <button
+                    type="button"
+                    className="raf-btn raf-btn-small"
+                    onClick={() => {
+                      if (tabId !== null) void sendToBackground({ type: 'wizard:stopAdvance', tabId }).catch(() => undefined);
+                    }}
+                  >
+                    {t('common.advance.stop')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="raf-btn raf-btn-primary raf-btn-small"
+                    onClick={() => {
+                      if (tabId !== null) void sendToBackground({ type: 'wizard:autoAdvance', tabId }).catch(() => undefined);
+                    }}
+                  >
+                    {t('common.advance.start')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="raf-btn raf-btn-small"
+                  onClick={() => {
+                    if (tabId !== null) void sendToBackground({ type: 'wizard:clear', tabId }).catch(() => undefined);
+                    setWizard(null);
+                  }}
+                >
+                  {t('panel.wizard.reset')}
+                </button>
+              </>
             }
           >
             {t('panel.wizard.banner', { step: wizard.stepCount, title: wizard.resumeTitle })}
+            {wizard.advance?.running ? (
+              <>
+                <br />
+                <span data-testid="panel-wizard-advance">{t('common.advance.running', { n: wizard.advance.steps })}</span>
+              </>
+            ) : wizard.advance?.stopReason ? (
+              <>
+                <br />
+                <span data-testid="panel-wizard-advance">{t(`common.advance.stop.${wizard.advance.stopReason}`)}</span>
+              </>
+            ) : (
+              <>
+                <br />
+                <span data-testid="panel-wizard-advance">{t('common.advance.hint')}</span>
+              </>
+            )}
           </Notice>
         ) : null}
         {profile && profile.resumes.length === 0 ? (

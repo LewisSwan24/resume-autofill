@@ -23,12 +23,13 @@ export function allSynonyms(key: FieldKey): string[] {
   return e ? [...e.zh, ...e.en] : [];
 }
 
-/** True when the label contains one of the key's exclusion words. */
+/** True when the label contains one of the key's exclusion words, or none of the words it requires. */
 export function isExcluded(key: FieldKey, label: string): boolean {
-  const ex = FIELD_SYNONYMS[key]?.exclude;
-  if (!ex?.length) return false;
+  const { exclude: ex, require: req } = FIELD_SYNONYMS[key] ?? {};
+  if (!ex?.length && !req?.length) return false;
   const t = normalizeLabel(label);
-  return ex.some((w) => containsPhrase(t, normalizeLabel(w), 'prefix'));
+  const has = (w: string) => containsPhrase(t, normalizeLabel(w), 'prefix');
+  return (ex?.some(has) ?? false) || (req !== undefined && req.length > 0 && !req.some(has));
 }
 
 /** A word that names the field only when it stands alone: "Office location" is another question. */

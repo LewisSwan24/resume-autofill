@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FillReport } from '../../src/engine/types';
-import { DEFAULT_LOCALE, parseDevice, type CaptureDevice } from '../../scripts/capture/device';
+import { DEFAULT_LOCALE, parseDevice, type CaptureDevice } from '../../scripts/capture/device.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const CAPTURED_DIR = path.join(ROOT, 'fixtures', 'captured');

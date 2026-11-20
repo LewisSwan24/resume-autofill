@@ -207,3 +207,35 @@ describe('scan watcher', () => {
     expect(scan).not.toHaveBeenCalled();
   });
 });
+
+describe('content listener: auto-advance steps', () => {
+  const bg = () => ({ id: browser.runtime.id });
+  const state = { url: 'u', fingerprint: 'f', action: 'next', blocker: null, userInputAt: 0 };
+  const handlers = { isBusy: () => false } as unknown as FrameHandlers;
+
+  it('answers frame:stepState and frame:pressNext in the frame that has the step handlers', () => {
+    const steps = { stepState: vi.fn(() => state), pressNext: vi.fn(() => ({ pressed: true })), stop: vi.fn() };
+    const listener = createContentListener(handlers, steps as never);
+    const respond = vi.fn();
+    expect(listener({ type: 'frame:stepState' }, bg(), respond)).toBe(false);
+    expect(respond).toHaveBeenLastCalledWith(state);
+    expect(listener({ type: 'frame:pressNext' }, bg(), respond)).toBe(false);
+    expect(respond).toHaveBeenLastCalledWith({ pressed: true });
+  });
+
+  it('leaves both alone in a frame without them (only the top frame moves the form on)', () => {
+    const listener = createContentListener(handlers);
+    const respond = vi.fn();
+    expect(listener({ type: 'frame:stepState' }, bg(), respond)).toBe(false);
+    expect(listener({ type: 'frame:pressNext' }, bg(), respond)).toBe(false);
+    expect(respond).not.toHaveBeenCalled();
+  });
+
+  it('does not press for a page or another extension', () => {
+    const steps = { stepState: vi.fn(), pressNext: vi.fn(), stop: vi.fn() };
+    const listener = createContentListener(handlers, steps as never);
+    listener({ type: 'frame:pressNext' }, { id: 'evil' }, vi.fn());
+    listener({ type: 'frame:pressNext' }, { id: browser.runtime.id, tab: { id: 1 } } as never, vi.fn());
+    expect(steps.pressNext).not.toHaveBeenCalled();
+  });
+});

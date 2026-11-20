@@ -84,6 +84,7 @@ export const FIELD_KEYS: FieldKeyDef[] = [
   }),
   def('basics.fullName', 'text', ['basics', 'contact', 'other'], { derived: true }),
   def('basics.age', 'number', ['basics', 'other'], { derived: true }),
+  def('basics.isAdult', 'bool', ['basics', 'other'], { derived: true, enumDomain: 'yesNo' }),
 
   ...module('contact', ['contact', 'basics', 'other'], {
     email: 'text', phoneCountryCode: 'text', phone: 'text', wechat: 'text', qq: 'text',
@@ -100,6 +101,7 @@ export const FIELD_KEYS: FieldKeyDef[] = [
     status: ['enum', 'workRightsStatus'], visaType: 'text', visaExpiry: 'date',
     requiresSponsorship: yesNo(), hasFullWorkRights: yesNo(),
   }),
+  def('workRights.citizenOrResident', 'bool', ['workRights', 'basics', 'other'], { derived: true, enumDomain: 'yesNo' }),
 
   ...module('jobIntention', ['jobIntention', 'other'], {
     positions: 'list', cities: 'list', industry: 'text', employmentType: ['enum', 'employmentType'],

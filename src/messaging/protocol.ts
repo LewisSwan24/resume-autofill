@@ -8,6 +8,7 @@ import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { WizardSessionState } from '../background/wizardSession';
 import type { InspectorTargetInfo } from '../content/inspector';
+import type { PressResult, StepState } from '../background/autoAdvance';
 
 // ------------------------------------------------------------------ messages
 
@@ -27,6 +28,10 @@ export type BgToFrame =
   | { type: 'frame:focus'; fieldId: string }
   | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string }
   | { type: 'frame:captureFingerprint'; fieldId: string }
+  /** Top frame: which step is showing and whether it can be left on its own (auto-advance). */
+  | { type: 'frame:stepState' }
+  /** Top frame: press the page's own Next button, never one that sends the application. */
+  | { type: 'frame:pressNext' }
   | { type: 'frame:inspectorStart' }
   | { type: 'frame:inspectorStop' };
 
@@ -44,6 +49,9 @@ export type UiToBg =
   | { type: 'scan:query' }
   | { type: 'wizard:query'; tabId?: number }
   | { type: 'wizard:clear'; tabId?: number }
+  /** Move through the remaining steps on its own, stopping before the final submit. */
+  | { type: 'wizard:autoAdvance'; tabId?: number }
+  | { type: 'wizard:stopAdvance'; tabId?: number }
   | { type: 'inspector:start'; tabId: number }
   | { type: 'inspector:stop'; tabId: number }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
@@ -86,6 +94,9 @@ export interface ResponseMap {
   'frame:captureFingerprint': SiteRecipeFingerprint | null;
   'field:captureFingerprint': SiteRecipeFingerprint | null;
   'wizard:query': WizardSessionState | null;
+  'wizard:autoAdvance': FillRequestResponse;
+  'frame:stepState': StepState | null;
+  'frame:pressNext': PressResult;
 }
 
 export type ResponseFor<M extends { type: string }> = M['type'] extends keyof ResponseMap
@@ -106,6 +117,10 @@ const TYPE_TABLE = {
   'wizard:query': true,
   'wizard:clear': true,
   'wizard:updated': true,
+  'wizard:autoAdvance': true,
+  'wizard:stopAdvance': true,
+  'frame:stepState': true,
+  'frame:pressNext': true,
   'inspector:start': true,
   'inspector:stop': true,
   'inspector:hover': true,

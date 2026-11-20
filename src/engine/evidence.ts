@@ -1,7 +1,7 @@
 // Evidence: every piece of text that may tell us what a control is for (labels, aria, placeholders,
 // table headers, nearby text, name/id), plus the "required" flag. Pure DOM reads, no side effects.
 import { isVisible } from './visibility';
-import { asksForConsent, isAddButtonText, isDeleteText, isNeverFill, normalizeLabel, resolveCode } from '../dictionary';
+import { askedFor, asksForConsent, isAddButtonText, isDeleteText, isNeverFill, normalizeLabel, resolveCode } from '../dictionary';
 import {
   ANSWER_BUTTON_SELECTOR,
   ARIA_COMBOBOX_SELECTOR,
@@ -293,6 +293,19 @@ function consentAbove(c: Ctx): string | null {
   return null;
 }
 
+/**
+ * A block that holds this field and no other, and opens with a heading worded as a question: that heading is this
+ * field's question. Breezy puts each question in an <h3>, then maybe a note, then the box. A heading that is not a
+ * question ("Employment 1") is a card's title, as before.
+ */
+function ownHeading(container: Element | null, c: Ctx): string | null {
+  if (!container || PAGE_PART_TAGS.test(container.tagName) || hasOtherFields(container, c)) return null;
+  const first = container.firstElementChild;
+  if (!first || !first.matches(STRICT_HEADING_SELECTOR) || containsField(first) || !isVisible(first)) return null;
+  const text = acceptNearby(textWithoutControls(first));
+  return text && (/[?？]$/.test(text) || askedFor(text) !== null) ? text : null;
+}
+
 function nearbyText(c: Ctx, reach = MAX_NEARBY_LEVELS): string | null {
   let node: Element = startOfLook(c);
   let skippedHelp = false;
@@ -313,7 +326,16 @@ function nearbyText(c: Ctx, reach = MAX_NEARBY_LEVELS): string | null {
       if (containsField(sib)) return null;
       if (isHeadingLike(sib)) {
         if (level >= USUAL_NEARBY_LEVELS) return null;
+        if (sib === sib.parentElement?.firstElementChild) {
+          const question = ownHeading(sib.parentElement, c);
+          if (question) return question;
+        }
         continue;
+      }
+      // Between a block's opening question and its box, anything else is help: "Please double check it".
+      if (level < USUAL_NEARBY_LEVELS) {
+        const question = ownHeading(sib.parentElement, c);
+        if (question) return question;
       }
       const raw = textWithoutControls(sib);
       if (isParagraph(raw)) {

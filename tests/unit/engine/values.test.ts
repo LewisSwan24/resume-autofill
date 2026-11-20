@@ -67,6 +67,32 @@ describe('resolveValue', () => {
     expect(resolveValue('basics.age', zh, 0, 'basics', { now: new Date(2026, 2, 15) })?.raw).toBe(24);
   });
 
+  it('works out "over 18" from the birth date, and leaves a month-only date on the birthday month unsaid', () => {
+    const born = (birthDate: string) => ({ ...en, basics: { ...en.basics, birthDate } });
+    const adult = (birthDate: string, now: Date) => resolveValue('basics.isAdult', born(birthDate), 0, 'basics', { now })?.raw;
+    expect(resolveValue('basics.isAdult', en, 0, 'basics', { now: new Date(2026, 10, 20) })).toEqual({ raw: true, source: 'basics.birthDate' });
+    expect(adult('2008-11-21', new Date(2026, 10, 20))).toBe(false);
+    expect(adult('2008-11-20', new Date(2026, 10, 20))).toBe(true);
+    expect(adult('2008-11', new Date(2026, 10, 20))).toBeUndefined();
+    expect(adult('2008-10', new Date(2026, 10, 20))).toBe(true);
+    expect(adult('2008-12', new Date(2026, 10, 20))).toBe(false);
+    expect(adult('', new Date(2026, 10, 20))).toBeUndefined();
+  });
+
+  it('works out "citizen or permanent resident" from work rights, and stays quiet when it cannot tell', () => {
+    const holding = (status: string, nationality = '') =>
+      resolveValue('workRights.citizenOrResident', { ...en, basics: { ...en.basics, nationality }, workRights: { ...en.workRights, status } } as Resume, 0, 'workRights')?.raw;
+    expect(resolveValue('workRights.citizenOrResident', en, 0, 'workRights')).toEqual({ raw: false, source: 'workRights.status' });
+    expect(holding('citizen')).toBe(true);
+    expect(holding('permanent_resident')).toBe(true);
+    for (const visa of ['graduate_visa', 'student_visa', 'working_holiday', 'no_rights']) expect(holding(visa), visa).toBe(false);
+    // A New Zealander in Australia holds a temporary visa too, and the question often counts them in.
+    expect(holding('other_temporary')).toBeUndefined();
+    expect(holding('other_temporary', 'New Zealand')).toBeUndefined();
+    expect(holding('other_temporary', 'Chinese')).toBe(false);
+    expect(holding('')).toBeUndefined();
+  });
+
   it('maps card i to entry i of the section', () => {
     expect(resolveValue('education.school', zh, 1, 'education')).toEqual({ raw: '澳大利亚国立大学', source: 'education[1].school' });
   });
@@ -191,6 +217,27 @@ describe('toIntent', () => {
     // A longer name is another place.
     expect(pick('Brisbane City QLD, Australia')).toBe('none');
     expect(pick('Sydney NSW, Australia')).toBe('none');
+  });
+
+  it('region on a list without the place: "Other" when no level of the address is on it either', () => {
+    const region = { country: 'Australia', province: 'ACT', city: 'Canberra' };
+    const pick = (...labels: string[]) => picked(intent('basics.currentLocation', region, control('select'), 'en-AU'), opts(...labels));
+    const cities = ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Gold Coast', 'Geelong'];
+    // The Breezy list of where you are based.
+    expect(pick('? undefined:undefined ?', ...cities, 'Other')).toBe('Other');
+    expect(pick(...cities, 'Other (please specify)')).toBe('Other (please specify)');
+    expect(pick('请选择', '北京', '上海', '其他')).toBe('其他');
+    // The place itself, or a wider level of it, beats "Other".
+    expect(pick(...cities, 'Canberra', 'Other')).toBe('Canberra');
+    expect(pick('NSW', 'VIC', 'ACT', 'Other')).toBe('none');
+    // Never a guess: several places that might be it, no "Other", or two of them.
+    expect(pick('Canberra, ACT, Australia', 'Canberra, ACT 2600, Australia', 'Other')).toBe('ambiguous');
+    expect(pick(...cities)).toBe('none');
+    expect(pick(...cities, 'Other', 'Others')).toBe('none');
+  });
+
+  it('only a place falls back to "Other"', () => {
+    expect(picked(intent('basics.gender', 'male', control('select'), 'en-AU'), opts('Female', 'Other'))).toBe('none');
   });
 
   describe('a gender question that lets you decline', () => {

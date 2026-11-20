@@ -1,6 +1,36 @@
 // Cross-page multi-step wizard session tracker stored purely in `chrome.storage.session` (zero disk/alarms persistence).
 import { browser } from 'wxt/browser';
 
+/** Why auto-advance handed the form back to the user. */
+export type AdvanceStop =
+  /** Only a send button is left: the user checks the pages and sends it. */
+  | 'final_step'
+  /** A required field is empty, the page shows an error, or Next is switched off. */
+  | 'needs_you'
+  /** A captcha or a texted code. */
+  | 'verification'
+  | 'no_next'
+  /** Next buttons that disagree, or a Next and a send button side by side. */
+  | 'ambiguous'
+  /** Next was pressed and the step did not change. */
+  | 'not_advanced'
+  | 'left_site'
+  | 'step_limit'
+  | 'user_took_over'
+  | 'stopped'
+  /** The user previews every fill: that preview is waiting. */
+  | 'preview'
+  | 'fill_failed'
+  | 'vault_locked'
+  | 'no_page';
+
+export interface AdvanceState {
+  running: boolean;
+  /** Steps moved forward and filled in this run. */
+  steps: number;
+  stopReason?: AdvanceStop;
+}
+
 export interface WizardSessionState {
   tabId: number;
   origin: string;
@@ -10,6 +40,8 @@ export interface WizardSessionState {
   filledUrls?: string[];
   lastUrl: string;
   lastUpdatedAt: number;
+  /** The last (or current) auto-advance run in this tab. */
+  advance?: AdvanceState;
 }
 
 export const WIZARD_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -64,7 +96,17 @@ export async function recordWizardStep(
     filledUrls: nextUrls,
     lastUrl: url,
     lastUpdatedAt: Date.now(),
+    ...(sameRun && prev.advance ? { advance: prev.advance } : {}),
   };
+  await browser.storage.session.set({ [wizardKey(tabId)]: next });
+  return next;
+}
+
+/** Store the auto-advance state on the tab's session. Without a session (the tab left the site) nothing is kept. */
+export async function setWizardAdvance(tabId: number, advance: AdvanceState): Promise<WizardSessionState | null> {
+  const prev = await loadWizardSession(tabId);
+  if (!prev) return null;
+  const next: WizardSessionState = { ...prev, advance, lastUpdatedAt: Date.now() };
   await browser.storage.session.set({ [wizardKey(tabId)]: next });
   return next;
 }

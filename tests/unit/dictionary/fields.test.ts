@@ -99,6 +99,12 @@ describe('allSynonyms', () => {
 });
 
 describe('isExcluded', () => {
+  it('vetoes a key whose required words are all missing', () => {
+    expect(isExcluded('workRights.citizenOrResident', 'Are you an Australian citizen?')).toBe(true);
+    expect(isExcluded('workRights.citizenOrResident', 'Are you an Australian citizen or permanent resident?')).toBe(false);
+    expect(isExcluded('workRights.citizenOrResident', '是否为澳大利亚公民或永久居民')).toBe(false);
+  });
+
   it('basics.familyName excludes family-member wording', () => {
     expect(isExcluded('basics.familyName', '家庭成员姓名')).toBe(true);
     expect(isExcluded('basics.familyName', 'Family member name')).toBe(true);

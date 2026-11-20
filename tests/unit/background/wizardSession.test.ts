@@ -5,6 +5,7 @@ import {
   handleWizardNavigation,
   loadWizardSession,
   recordWizardStep,
+  setWizardAdvance,
 } from '../../../src/background/wizardSession';
 
 describe('Cross-page multi-step wizard session tracker', () => {
@@ -35,5 +36,24 @@ describe('Cross-page multi-step wizard session tracker', () => {
     await recordWizardStep(42, 'https://jobs.ashbyhq.com/acme/step-1', { id: 'r1', title: 'Backend' });
     await clearWizardSession(42);
     expect(await loadWizardSession(42)).toBeNull();
+  });
+
+  it('keeps the auto-advance state while the run goes on, and drops it for a new run', async () => {
+    const r = { id: 'r1', title: 'Backend' };
+    await recordWizardStep(42, 'https://jobs.ashbyhq.com/acme/step-1', r);
+    const set = await setWizardAdvance(42, { running: true, steps: 0 });
+    expect(set?.advance).toEqual({ running: true, steps: 0 });
+
+    await handleWizardNavigation(42, 'https://jobs.ashbyhq.com/acme/step-2');
+    const s2 = await recordWizardStep(42, 'https://jobs.ashbyhq.com/acme/step-2', r);
+    expect(s2?.advance).toEqual({ running: true, steps: 0 });
+
+    const other = await recordWizardStep(42, 'https://jobs.ashbyhq.com/acme/step-2', { id: 'r2', title: 'Data' });
+    expect(other?.advance).toBeUndefined();
+  });
+
+  it('does not start a session just to hold auto-advance state', async () => {
+    expect(await setWizardAdvance(43, { running: false, steps: 0, stopReason: 'left_site' })).toBeNull();
+    expect(await loadWizardSession(43)).toBeNull();
   });
 });

@@ -17,6 +17,7 @@ export const workday: AtsAdapter = {
     fingerprints: ['[data-automation-id="applyFlowPage"]'],
   },
   stepSignature: readStepText,
+  nextButton: '[data-automation-id="pageFooterNextButton"]',
   prompts: [
     {
       input: '[data-automation-id="multiSelectContainer"] input',

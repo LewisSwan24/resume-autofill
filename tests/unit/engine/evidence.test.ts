@@ -207,6 +207,14 @@ describe('nearby text', () => {
     expect(texts(ev, 'nearby-text')).toEqual([]);
   });
 
+  it('takes the question that opens a block of its own, past a note under it (Breezy)', () => {
+    const ev = evidenceAt(
+      '<div><h3><span>Thanks! What about your last name?</span><span>*</span></h3><div><p>We use it on your contract.</p></div><input id="x"></div>',
+      '#x',
+    );
+    expect(texts(ev, 'nearby-text')).toEqual(['Thanks! What about your last name?']);
+  });
+
   it('never uses a card header block as nearby text', () => {
     const ev = evidenceAt(
       '<div class="ant-card"><div class="ant-card-head"><div class="ant-card-head-title">基本信息</div></div><div class="ant-card-body"><input id="x"></div></div>',

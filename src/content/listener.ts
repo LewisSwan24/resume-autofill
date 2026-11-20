@@ -4,10 +4,12 @@
 // false without responding lets other listeners answer.
 import { isFromExtension, isValidMessage, type Sender } from '../messaging';
 import type { FrameHandlers } from './handlers';
+import type { StepHandlers } from './steps';
 
 export type ContentListener = (message: unknown, sender: Sender, sendResponse: (response?: unknown) => void) => boolean;
 
-export function createContentListener(handlers: FrameHandlers): ContentListener {
+/** `steps` only in the top frame: it alone reports the step and presses Next (auto-advance). */
+export function createContentListener(handlers: FrameHandlers, steps?: StepHandlers): ContentListener {
   return (message, sender, sendResponse) => {
     if (!isFromExtension(sender) || sender.tab != null || !isValidMessage(message)) return false;
 
@@ -75,6 +77,16 @@ export function createContentListener(handlers: FrameHandlers): ContentListener 
         if (typeof message.optionLabel === 'string') request.optionLabel = message.optionLabel;
         handlers.apply(request).then(sendResponse, () => sendResponse(undefined));
         return true;
+      }
+      case 'frame:stepState': {
+        if (!steps) return false;
+        sendResponse(steps.stepState());
+        return false;
+      }
+      case 'frame:pressNext': {
+        if (!steps) return false;
+        sendResponse(steps.pressNext());
+        return false;
       }
       default:
         return false;

@@ -3,7 +3,7 @@
 // The server is the witness: nothing but GETs may reach it.
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { guardWrites, runLiveCheck } from '../../scripts/live/liveCheck.ts';
+import { advanceLive, guardWrites, runLiveCheck } from '../../scripts/live/liveCheck.ts';
 import { expect, test } from './fixtures';
 
 const FORM = `<!doctype html><html><head><title>Apply</title></head><body>
@@ -33,6 +33,30 @@ const FORM = `<!doctype html><html><head><title>Apply</title></head><body>
 </script>
 </body></html>`;
 
+/** Steps on one page: the first Next is client-side, the second must save to the server before it moves on. */
+const WIZARD = `<!doctype html><html><head><title>Apply in steps</title></head><body>
+<section id="s1">
+  <label for="first">First Name</label><input id="first" name="first" required>
+  <label for="last">Last Name</label><input id="last" name="last" required>
+  <button type="button" id="n1">Next</button>
+</section>
+<section id="s2" hidden>
+  <label for="email">Email</label><input id="email" name="email" type="email">
+  <button type="button" id="n2">Save and Continue</button>
+</section>
+<section id="s3" hidden>
+  <button type="button" id="send">Submit application</button>
+</section>
+<script>
+  const show = (id) => ['s1', 's2', 's3'].forEach((s) => (document.getElementById(s).hidden = s !== id));
+  document.getElementById('n1').addEventListener('click', () => show('s2'));
+  document.getElementById('n2').addEventListener('click', () => {
+    fetch('/save', { method: 'POST', body: 'step 2' }).then((r) => r.ok && show('s3'), () => {});
+  });
+  document.getElementById('send').addEventListener('click', () => fetch('/submit', { method: 'POST' }));
+</script>
+</body></html>`;
+
 interface Seen {
   method: string;
   path: string;
@@ -47,7 +71,7 @@ test.beforeAll(async () => {
   server = createServer((req, res) => {
     seen.push({ method: req.method!, path: req.url! });
     res.setHeader('content-type', 'text/html');
-    res.end(FORM);
+    res.end(req.url?.startsWith('/wizard') ? WIZARD : FORM);
   });
   server.on('upgrade', (_req, socket) => {
     upgrades++;
@@ -141,4 +165,30 @@ test('query strings are left out of the log, since they can hold what was typed'
   await page.evaluate(() => fetch('/save?email=private@example.com', { method: 'POST' }).catch(() => {}));
   await expect.poll(() => guard.blocked().map((b) => b.path)).toContain('/save');
   expect(JSON.stringify(guard.blocked())).not.toContain('private');
+});
+
+test('auto-advance on a live page: presses only Next, and a step that must save first stops it, with the save blocked', async ({
+  context,
+  serviceWorker,
+}) => {
+  const guard = await guardWrites(context);
+  const result = await runLiveCheck(context, serviceWorker, guard, { url: `${base}/wizard`, locale: 'en-AU', settleMs: 200 });
+  const advance = await advanceLive(result.page, serviceWorker, { timeoutMs: 60_000 });
+
+  expect(advance.offered).toBe(true);
+  expect(advance.state).toEqual({ running: false, steps: 1, stopReason: 'not_advanced' });
+  expect(advance.pressed).toEqual(['Next', 'Save and Continue']);
+  expect(advance.leftOrigin).toEqual([]);
+  expect(seen.filter((r) => r.method !== 'GET')).toEqual([]);
+  expect(guard.blocked().map((b) => `${b.method} ${b.path}`)).toContain('POST /save');
+  expect(guard.blocked().some((b) => b.path === '/submit')).toBe(false);
+});
+
+test('auto-advance is not offered on a single-page form, and nothing is pressed', async ({ context, serviceWorker }) => {
+  const guard = await guardWrites(context);
+  const result = await runLiveCheck(context, serviceWorker, guard, { url: `${base}/apply`, locale: 'en-AU', settleMs: 200 });
+  const advance = await advanceLive(result.page, serviceWorker, { timeoutMs: 10_000 });
+  expect(advance.offered).toBe(false);
+  expect(advance.pressed).toEqual([]);
+  expect(seen.some((r) => r.path.startsWith('/submit'))).toBe(false);
 });

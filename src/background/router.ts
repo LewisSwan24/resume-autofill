@@ -14,6 +14,7 @@ import { listFrameIds } from './frames';
 import { relayApply, relayCaptureFingerprint, relayFocus, type ApplyInput } from './relay';
 import { loadScanTotal, recordScan } from './tabState';
 import { clearWizardSession, loadWizardSession } from './wizardSession';
+import { startAutoAdvance, stopAutoAdvance } from './advanceRun';
 import type { SiteRecipeFingerprint } from '../schema';
 
 export type BgSender = Omit<Sender, 'tab'> & { frameId?: number; tab?: { id?: number } };
@@ -35,6 +36,9 @@ export interface RouterDeps {
   openSidePanel(tabId: number): void;
   /** Open the profile page, at one input when there is a target. */
   openOptions(target: ProfileTarget | null): void;
+  /** Start auto-advance in a tab; resolves once it has started (or could not), not when it ends. */
+  autoAdvance?(tabId: number): Promise<FillRequestResponse>;
+  stopAdvance?(tabId: number): void;
 }
 
 export const defaultRouterDeps: RouterDeps = {
@@ -54,6 +58,10 @@ export const defaultRouterDeps: RouterDeps = {
     browser.sidePanel?.open?.({ tabId })?.catch(() => undefined);
   },
   openOptions: (target) => openProfileAt(target),
+  autoAdvance: (tabId) => startAutoAdvance(tabId),
+  stopAdvance: (tabId) => {
+    stopAutoAdvance(tabId);
+  },
 };
 
 const isIndex = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
@@ -162,7 +170,24 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
       case 'wizard:clear': {
         const tabId = fromPage ? message.tabId : contentTabId;
         if (!isIndex(tabId)) return false;
+        (deps.stopAdvance ?? defaultRouterDeps.stopAdvance)?.(tabId);
         void clearWizardSession(tabId).catch(() => undefined);
+        return false;
+      }
+
+      case 'wizard:autoAdvance': {
+        // From the FAB (top frame of its own tab) or an extension page naming the tab.
+        const tabId = fromPage ? message.tabId : sender.frameId === 0 ? contentTabId : undefined;
+        if (!isIndex(tabId)) return false;
+        const start = deps.autoAdvance ?? defaultRouterDeps.autoAdvance!;
+        start(tabId).then(sendResponse, (e) => sendResponse({ ok: false, error: errorMessage(e) }));
+        return true;
+      }
+
+      case 'wizard:stopAdvance': {
+        const tabId = fromPage ? message.tabId : contentTabId;
+        if (!isIndex(tabId)) return false;
+        (deps.stopAdvance ?? defaultRouterDeps.stopAdvance)?.(tabId);
         return false;
       }
 

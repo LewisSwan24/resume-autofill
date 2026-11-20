@@ -30,7 +30,7 @@ function deliver(message: unknown, sender: { id?: string; tab?: unknown } = bgSe
 
 let send: ReturnType<typeof vi.fn>;
 const sentTypes = () =>
-  send.mock.calls.map((c) => (c[0] as { type: string }).type).filter((type) => type !== 'scan:query');
+  send.mock.calls.map((c) => (c[0] as { type: string }).type).filter((type) => type !== 'scan:query' && type !== 'wizard:query');
 
 beforeEach(() => {
   fakeBrowser.reset();
@@ -90,9 +90,9 @@ describe('Fab: idle', () => {
 });
 
 describe('Fab: initial total', () => {
-  it('asks the background for the current scan total on mount (the first push may have been missed)', () => {
+  it('asks the background for the current scan total and the multi-page session on mount (the first push may have been missed)', () => {
     render(<Fab />);
-    expect(send.mock.calls.map((c) => (c[0] as { type: string }).type)).toEqual(['scan:query']);
+    expect(send.mock.calls.map((c) => (c[0] as { type: string }).type)).toEqual(['scan:query', 'wizard:query']);
   });
 });
 
@@ -550,5 +550,126 @@ describe('Fab: inspector HUD', () => {
 
     deliver({ type: 'inspector:hover', target: null });
     expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
+describe('Fab: auto-advance', () => {
+  const session = (advance?: unknown) => ({
+    tabId: 1,
+    origin: 'https://jobs.example.test',
+    resumeId: 'r1',
+    resumeTitle: 'Main',
+    stepCount: 1,
+    lastUrl: 'https://jobs.example.test/apply/1',
+    lastUpdatedAt: 1,
+    ...(advance ? { advance } : {}),
+  });
+  let pageButtons: HTMLElement;
+
+  beforeEach(() => {
+    pageButtons = document.createElement('div');
+    pageButtons.innerHTML = '<button>Back</button><button>Next</button>';
+    document.body.appendChild(pageButtons);
+  });
+  afterEach(() => pageButtons.remove());
+
+  async function filledStep(wizard: unknown) {
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled')]) });
+    deliver({ type: 'wizard:updated', tabId: 1, session: wizard });
+    await screen.findByTestId('raf-card');
+  }
+
+  it('offers to advance after a fill on a step with a Next button, and starts it on click', async () => {
+    await filledStep(session());
+    const start = screen.getByRole('button', { name: 'Advance to the last page' });
+    expect(screen.getByText('It only presses Next. The final submit stays with you.')).toBeTruthy();
+    send.mockClear();
+    fireEvent.click(start);
+    expect(sentTypes()).toEqual(['wizard:autoAdvance']);
+  });
+
+  it('does not offer it on the last step, where only a send button is left', async () => {
+    pageButtons.innerHTML = '<button>Back</button><button>Submit application</button>';
+    await filledStep(session());
+    expect(screen.queryByRole('button', { name: 'Advance to the last page' })).toBeNull();
+  });
+
+  it('does not offer it outside a multi-page session', async () => {
+    await filledStep(null);
+    expect(screen.queryByRole('button', { name: 'Advance to the last page' })).toBeNull();
+  });
+
+  it('asks for the session on a freshly loaded step and shows the run with a Stop button', async () => {
+    send.mockImplementation(async (m: { type: string }) => (m.type === 'wizard:query' ? session({ running: true, steps: 2 }) : { ok: true }));
+    render(<Fab />);
+    expect(await screen.findByText('Advancing on its own: 2 steps so far')).toBeTruthy();
+    send.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(sentTypes()).toEqual(['wizard:stopAdvance']);
+  });
+
+  it('says why it stopped, in the card of the last fill', async () => {
+    await filledStep(session({ running: true, steps: 1 }));
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: false, steps: 2, stopReason: 'final_step' }) });
+    expect(screen.getByText('This is the last page. Check every page, then submit it yourself.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+  });
+
+  it("does not keep a step's numbers once the run moves on to a step with nothing to fill", async () => {
+    // A page that changes steps in place (Breezy): the button stays, and a step of questions only sends no report.
+    await filledStep(session({ running: true, steps: 0 }));
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled'), field('b', 'filled')]) });
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: true, steps: 1 }) });
+    expect(screen.getByTestId('raf-stats')).toBeTruthy();
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: true, steps: 2 }) });
+    expect(screen.queryByTestId('raf-stats')).toBeNull();
+    expect(screen.getByTestId('raf-advance-empty').textContent?.trim()).toBe('Nothing on this page could be filled from your resume.');
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: false, steps: 2, stopReason: 'needs_you' }) });
+    expect(screen.queryByTestId('raf-stats')).toBeNull();
+    expect(screen.getByTestId('raf-advance-stopped')).toBeTruthy();
+    expect(button().getAttribute('aria-label')).not.toContain('filled');
+  });
+
+  it('keeps the numbers of a step that was filled', async () => {
+    await filledStep(session({ running: true, steps: 0 }));
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled')]) });
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: true, steps: 1 }) });
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: false, steps: 1, stopReason: 'needs_you' }) });
+    expect(screen.getByTestId('raf-stats')).toBeTruthy();
+    expect(screen.queryByTestId('raf-advance-empty')).toBeNull();
+  });
+
+  it('does not repeat an old stop reason on a later fill of the same page', async () => {
+    await filledStep(session({ running: true, steps: 1 }));
+    deliver({ type: 'wizard:updated', tabId: 1, session: session({ running: false, steps: 1, stopReason: 'needs_you' }) });
+    expect(screen.getByTestId('raf-advance-stopped')).toBeTruthy();
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled')]) });
+    await screen.findByTestId('raf-card');
+    expect(screen.queryByTestId('raf-advance-stopped')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Advance to the last page' })).toBeTruthy();
+  });
+
+  it('does not show the stop reason of a run that ended before this page loaded', async () => {
+    send.mockImplementation(async (m: { type: string }) =>
+      m.type === 'wizard:query' ? session({ running: false, steps: 2, stopReason: 'needs_you' }) : { ok: true },
+    );
+    render(<Fab />);
+    await waitFor(() => expect(send).toHaveBeenCalledWith({ type: 'wizard:query' }));
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled')]) });
+    await screen.findByTestId('raf-card');
+    expect(screen.queryByTestId('raf-advance-stopped')).toBeNull();
+  });
+
+  it('does not pop a card up for a run that ended before this page loaded', async () => {
+    send.mockImplementation(async (m: { type: string }) =>
+      m.type === 'wizard:query' ? session({ running: false, steps: 2, stopReason: 'needs_you' }) : { ok: true },
+    );
+    render(<Fab />);
+    await waitFor(() => expect(send).toHaveBeenCalledWith({ type: 'wizard:query' }));
+    expect(screen.queryByTestId('raf-card')).toBeNull();
   });
 });

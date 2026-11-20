@@ -17,6 +17,8 @@ describe('targetOfField – where the profile page should jump for a field', () 
   it('a field worked out from others goes to where it comes from', () => {
     expect(targetOfField('basics.fullName')).toEqual({ module: 'basics', field: 'familyName' });
     expect(targetOfField('basics.age')).toEqual({ module: 'basics', field: 'birthDate' });
+    expect(targetOfField('basics.isAdult')).toEqual({ module: 'basics', field: 'birthDate' });
+    expect(targetOfField('workRights.citizenOrResident')).toEqual({ module: 'workRights', field: 'status' });
     expect(targetOfField('contact.phoneFull')).toEqual({ module: 'contact', field: 'phone' });
     expect(targetOfField('contact.addressFull')).toEqual({ module: 'contact', field: 'address.country' });
     expect(targetOfField('work.period')).toEqual({ module: 'work', entry: 0, field: 'startDate' });

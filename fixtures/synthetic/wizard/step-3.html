@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <title>Application, step 3 of 3 (wizard fixture)</title>
+  </head>
+  <body>
+    <h1>Graduate application</h1>
+    <ol class="steps"><li>Personal details</li><li>Contact</li><li aria-current="step">Review</li></ol>
+    <form id="f">
+      <div class="row"><label for="preferred">Preferred name</label> <input id="preferred" name="preferred_name" autocomplete="off" /></div>
+      <div class="row"><label for="email-again">Email</label> <input id="email-again" name="email_again" type="email" autocomplete="off" /></div>
+      <button type="button" id="back">Back</button>
+      <button type="submit" id="send">Submit application</button>
+    </form>
+    <script type="module">
+      import { countSends } from './wizard.ts';
+      document.getElementById('back').addEventListener('click', () => history.back());
+      countSends(document.getElementById('send'), document.getElementById('f'));
+    </script>
+  </body>
+</html>

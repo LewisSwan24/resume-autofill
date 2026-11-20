@@ -682,3 +682,52 @@ describe('Side panel – way to the profile page and to help', () => {
     expect(screen.getByRole('button', { name: '去填写简历资料' })).toBeTruthy();
   });
 });
+
+describe('Side panel – auto-advance', () => {
+  const session = (advance?: unknown) => ({
+    tabId: TAB_ID,
+    origin: 'https://jobs.test',
+    resumeId: 'r1',
+    resumeTitle: 'Main',
+    stepCount: 2,
+    lastUrl: 'https://jobs.test/apply',
+    lastUpdatedAt: Date.now(),
+    ...(advance ? { advance } : {}),
+  });
+  const storeSession = (s: unknown) => fakeBrowser.storage.session.set({ [`wizard:${TAB_ID}`]: s });
+  const sent = () => {
+    const spy = vi.spyOn(browser.runtime, 'sendMessage').mockResolvedValue({ ok: true } as never);
+    return () => spy.mock.calls.map((c) => c[0] as unknown as { type: string; tabId?: number }).filter((m) => m.type.startsWith('wizard:'));
+  };
+
+  it('offers to advance on a multi-page form and starts it for this tab', async () => {
+    await storeSession(session());
+    const messages = sent();
+    await renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Advance to the last page' }, WAIT));
+    expect(messages()).toEqual([{ type: 'wizard:autoAdvance', tabId: TAB_ID }]);
+  });
+
+  it('shows a run as it goes and stops it', async () => {
+    await storeSession(session({ running: true, steps: 1 }));
+    const messages = sent();
+    await renderPanel();
+    expect(await screen.findByText('Advancing on its own: 1 steps so far', undefined, WAIT)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Advance to the last page' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(messages()).toEqual([{ type: 'wizard:stopAdvance', tabId: TAB_ID }]);
+  });
+
+  it('follows the run live and says why it stopped', async () => {
+    await storeSession(session({ running: true, steps: 1 }));
+    await renderPanel();
+    await screen.findByText('Advancing on its own: 1 steps so far', undefined, WAIT);
+    act(() => {
+      (fakeBrowser.runtime.onMessage as unknown as { trigger: (...a: unknown[]) => unknown }).trigger(
+        { type: 'wizard:updated', tabId: TAB_ID, session: session({ running: false, steps: 3, stopReason: 'needs_you' }) },
+        { id: browser.runtime.id },
+      );
+    });
+    expect(await screen.findByText('This page needs you: a required field is empty or the page shows an error.', undefined, WAIT)).toBeTruthy();
+  });
+});

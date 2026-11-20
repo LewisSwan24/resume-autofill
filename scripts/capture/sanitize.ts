@@ -42,16 +42,59 @@ const PHONE_RES = [
   /(?<![\w.\-/=?&#])0[2378][\s.-]?\d{4}[\s.-]?\d{4}(?![\w-])/g, // AU landline
   /(?<![\w.\-/=?&#])1[3-9]\d[\s-]?\d{4}[\s-]?\d{4}(?![\w-])/g, // CN mobile
 ];
+// Chinese mode. A mainland mobile wherever it stands as a number of its own: a string, a query or form value,
+// a list, a tel: link, a bare JSON number, glued to a key. The only boundary that counts is another digit, except
+// that a %XX escape just before it (whose hex may end in a digit) also starts a number. The prefix may be +86,
+// 0086, 86 or an encoded %2B86, with a space, a dash, a + or %20 after it.
+const BEFORE_NUMBER = String.raw`(?:(?<=%[0-9A-Fa-f]{2})|(?<!\d))`;
+const CN_PREFIX = String.raw`(?:(?:\+|%2[Bb]|00)?86(?:[\s+-]|%20)?)`;
+const CN_MOBILE_RE = new RegExp(String.raw`${BEFORE_NUMBER}(${CN_PREFIX}?)(1[3-9]\d{9})(?!\d)`, 'g');
+// Written in three groups (139 0000 1111, 139-0000-1111) only where it stands apart from letters, dots and further
+// numbers, so path data and number lists in code are left alone.
+const CN_MOBILE_GROUPED_RE = new RegExp(
+  String.raw`(?:(?<=%[0-9A-Fa-f]{2})|(?<![\w.\-]))(${CN_PREFIX}?)(1[3-9]\d)( |-|%20)(\d{4})\3(\d{4})(?![\w.\-]|\s\d)`,
+  'g',
+);
+// An ID card number: region, birth date, sequence, check digit, contiguous or in groups (6-8-4, 6-4-4-4). Only a
+// real date and a valid check digit count (see isIdCard).
+const ID_CARD_RE = new RegExp(String.raw`${BEFORE_NUMBER}[1-9]\d{5}[ -]?\d{4}[ -]?\d{4}[ -]?\d{3}[\dXx](?!\d)`, 'g');
+const ID_WEIGHTS = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
+const isIdCard = (raw: string): boolean => {
+  const s = raw.replace(/[ -]/g, '');
+  if (s.length !== 18 || !/^\d{6}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])/.test(s)) return false;
+  return '10X98765432'[[...s.slice(0, 17)].reduce((sum, d, i) => sum + Number(d) * ID_WEIGHTS[i]!, 0) % 11] === s[17]!.toUpperCase();
+};
+// The ID card placeholder is 9000000 and a counter: all digits with no leading zero, so it stays a valid JSON
+// number, and its "birth year" 00 means it never matches an ID card or a mobile again.
 const SCRIPT_BLOCK = /(<script\b[\s\S]*?<\/script>)/gi;
 // Subresource integrity vouches for the original bytes. Scrubbing changes them and the browser would refuse
 // the script, so hashes are emptied in markup, manifests and bundles alike. This only touches the local sample.
 const INTEGRITY_RE = /(["']?\bintegrity["']?\s*[:=]\s*["'])sha(?:256|384|512)-[\w+/=\s-]+(["'])/gi;
 const isHtmlMime = (mime: string | undefined): boolean => /html/i.test(mime ?? '');
-const PHONE_PLACEHOLDER = /^\+0{6}\d+$/;
+// A mainland mobile becomes 10 and a nine-digit counter: digits only, so url-encoding leaves it as it is and a
+// replayed request still finds its recording, eleven long like the original, and never 1[3-9] again. Any other
+// phone becomes +000000 and a counter.
+const PHONE_PLACEHOLDER = /^(?:\+0{6}\d+|(?:(?:\+|00)?86[\s+-]?)?10\d{9})$/;
 const SECRET_PLACEHOLDER = /^REDACTED-/;
 const TERM_PLACEHOLDER = 'REDACTED-TERM';
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A term is matched as a whole word or a whole number. Inside words it would wreck the page: a name part such as
+// "Lin" sits in <link>, inline and line-height, and a QQ number sits inside longer ids and constants. Chinese text
+// has no spaces, so only an edge that is a Latin letter or a digit gets a boundary. A digit after a %XX escape
+// (`%20` before a number) still counts as the start of the number.
+const LATIN_WORD = /[\p{Script=Latin}\d_]/u;
+function termRe(t: string): RegExp {
+  const edge = (c: string, side: 'before' | 'after'): string => {
+    if (/\d/.test(c)) return side === 'before' ? String.raw`(?:(?<=%[0-9A-Fa-f]{2})|(?<!\d))` : String.raw`(?!\d)`;
+    if (LATIN_WORD.test(c)) {
+      return side === 'before' ? String.raw`(?<![\p{Script=Latin}\d_])` : String.raw`(?![\p{Script=Latin}\d_])`;
+    }
+    return '';
+  };
+  return new RegExp(`${edge(t[0]!, 'before')}${escapeRe(t)}${edge(t.at(-1)!, 'after')}`, 'giu');
+}
 
 function termRes(terms: string[] | undefined): RegExp[] {
   return [...(terms ?? [])]
@@ -61,7 +104,7 @@ function termRes(terms: string[] | undefined): RegExp[] {
     .map((t) => {
       // One letter would replace itself all over the page and break it.
       if (t.length < 2) throw new Error(`scrub term too short: "${t}"`);
-      return new RegExp(escapeRe(t), 'gi');
+      return termRe(t);
     });
 }
 
@@ -70,6 +113,124 @@ const isRealEmail = (m: string): boolean => !ASSET_SUFFIX.test(m) && !EMAIL_PLAC
 export interface ScrubOptions {
   /** Literal strings that must not survive: the account holder's name, address, and so on. */
   terms?: string[] | undefined;
+  /** A Chinese portal: mobiles under any key and ID card numbers too. */
+  cn?: boolean | undefined;
+}
+
+// Resume fields that identify a person, in any section: the applicant, relatives, the emergency contact and
+// referees. Bare cities, degrees, majors, skills and titles are left out: they are also the page's own option
+// labels, and scrubbing those would break the sample. A home region is taken as a phrase (province and city,
+// city and district) for the same reason.
+const NAME_KEYS = new Set(['familyName', 'givenName', 'preferredName', 'englishName']);
+const HAN = /\p{Script=Han}/u;
+const RESUME_TERM_KEYS = new Set([
+  'idNumber',
+  'email',
+  'phone',
+  'wechat',
+  'qq',
+  'street',
+  'linkedin',
+  'github',
+  'portfolio',
+  'website',
+  'school',
+  'schoolEn',
+  'company',
+  'employer',
+  'thesis',
+]);
+/** Sections whose `name` is a person's. Elsewhere (projects, awards, skills, certificates) it is not. */
+const PERSON_SECTIONS = new Set(['family', 'emergencyContact', 'referees']);
+/** Keys that identify only inside one section. */
+const SECTION_TERM_KEYS: Record<string, string> = { certificates: 'number', projects: 'link' };
+const REGION_KEYS = new Set(['nativePlace', 'studentOrigin', 'household', 'currentLocation', 'address']);
+const HONORIFIC = /^(?:dr|mr|mrs|ms|miss|mx|prof|professor)\.?\s+/i;
+
+/** A date of birth in the forms a page writes it: 1999-04-07, 1999/4/7, 19990407, 1999年4月7日 and so on. */
+function dateForms(v: string): string[] {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+  if (!m) return [];
+  const [, y, mm, dd] = m as unknown as [string, string, string, string];
+  const out = [`${y}${mm}${dd}`];
+  for (const [mo, d] of [
+    [mm, dd],
+    [String(Number(mm)), String(Number(dd))],
+  ] as const) {
+    out.push(`${y}-${mo}-${d}`, `${y}/${mo}/${d}`, `${y}.${mo}.${d}`, `${y}年${mo}月${d}日`);
+  }
+  return out;
+}
+
+/** A region as phrases of two or three adjacent parts, the way pickers and profile answers write them. */
+function regionForms(region: Record<string, unknown>): string[] {
+  const part = (k: string): string => (typeof region[k] === 'string' ? (region[k] as string).trim() : '');
+  const [province, city, district] = [part('province'), part('city'), part('district')];
+  const out: string[] = [];
+  for (const run of [
+    [province, city],
+    [city, district],
+    [province, city, district],
+  ]) {
+    if (run.some((p) => !p)) continue;
+    for (const sep of ['', ' ', '/', ' / ', '-']) out.push(run.join(sep));
+    out.push([...run].reverse().join(', '));
+  }
+  return out;
+}
+
+/**
+ * The identifying values of a resume (an export, any wrapping), as scrub terms. A Chinese name is mostly two
+ * or three characters, so family and given name are also joined in both orders; a part under two characters
+ * alone is dropped, because it would match all over the page. A bare number needs six digits for the same reason.
+ */
+export function resumeTerms(resume: unknown): string[] {
+  const out = new Set<string>();
+  const add = (v: unknown): void => {
+    if (typeof v !== 'string') return;
+    const t = v.trim();
+    if (t.length < 2 || (/^[\d\s+-]+$/.test(t) && t.replace(/\D/g, '').length < 6)) return;
+    out.add(t);
+  };
+  // A Chinese name part of two characters or more is a term of its own. A Latin one alone is a common word
+  // ("Min", "Mark", "Page") that turns up in markup and code, so it only counts inside a full name.
+  const addName = (v: unknown): void => {
+    if (typeof v !== 'string') return;
+    const t = v.trim();
+    if (HAN.test(t) || /\s/.test(t)) add(t);
+    const bare = t.replace(HONORIFIC, '');
+    if (bare !== t && /\s/.test(bare)) add(bare);
+  };
+  const walk = (node: unknown, section = ''): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, section);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    const o = node as Record<string, unknown>;
+    for (const [key, value] of Object.entries(o)) {
+      if (NAME_KEYS.has(key) || (key === 'name' && PERSON_SECTIONS.has(section))) addName(value);
+      else if (RESUME_TERM_KEYS.has(key) || SECTION_TERM_KEYS[section] === key) add(value);
+      else if (key === 'birthDate' && typeof value === 'string') dateForms(value).forEach(add);
+      else {
+        if (REGION_KEYS.has(key) && value && typeof value === 'object') regionForms(value as Record<string, unknown>).forEach(add);
+        walk(value, key);
+      }
+    }
+    const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+    const family = str(o.familyName);
+    if (!family) return;
+    if (HAN.test(family)) {
+      const given = str(o.givenName);
+      if (given) for (const full of [`${family}${given}`, `${family} ${given}`, `${given} ${family}`]) add(full);
+      return;
+    }
+    for (const given of [o.givenName, o.preferredName, o.englishName].map(str)) {
+      if (given && !HAN.test(given)) for (const full of [`${given} ${family}`, `${family} ${given}`]) add(full);
+    }
+  };
+  walk(resume);
+  return [...out];
 }
 
 export interface TextOptions {
@@ -83,13 +244,15 @@ export interface TextOptions {
 export class Scrubber {
   private readonly terms: RegExp[];
   private readonly map = new Map<string, string>();
+  private readonly cn: boolean;
   private counter = 0;
 
   constructor(opts: ScrubOptions = {}) {
     this.terms = termRes(opts.terms);
+    this.cn = opts.cn ?? false;
   }
 
-  private placeholder(kind: 'secret' | 'email' | 'phone', value: string): string {
+  private placeholder(kind: 'secret' | 'email' | 'phone' | 'cn-mobile' | 'id-card', value: string): string {
     const key = `${kind}:${value.toLowerCase().replace('%40', '@')}`;
     let out = this.map.get(key);
     if (!out) {
@@ -99,7 +262,11 @@ export class Scrubber {
           ? `REDACTED-${n}`
           : kind === 'email'
             ? `redacted-${n}@example.invalid`
-            : `+000000${String(n).padStart(4, '0')}`;
+            : kind === 'id-card'
+              ? `90000000${String(n).padStart(10, '0')}`
+              : kind === 'cn-mobile'
+                ? `10${String(n).padStart(9, '0')}`
+                : `+000000${String(n).padStart(4, '0')}`;
       this.map.set(key, out);
     }
     return out;
@@ -107,7 +274,10 @@ export class Scrubber {
 
   text(input: string, opts: TextOptions = {}): string {
     let s = input;
-    for (const re of this.terms) s = s.replace(re, TERM_PLACEHOLDER);
+    // A number stays a number of the same length (9 then zeros), so a term that is a JSON number keeps the JSON valid.
+    for (const re of this.terms) {
+      s = s.replace(re, (m) => (/^\d+$/.test(m) ? `9${'0'.repeat(m.length - 1)}` : TERM_PLACEHOLDER));
+    }
     s = s.replace(JWT_RE, (m) => this.placeholder('secret', m));
     const secret = (m: string, pre: string, value: string, post = ''): string =>
       SECRET_PLACEHOLDER.test(value) ? m : `${pre}${this.placeholder('secret', value)}${post}`;
@@ -117,6 +287,15 @@ export class Scrubber {
     s = s.replace(SECRET_QUERY_RE, (m, pre: string, value: string) => secret(m, pre, value));
     s = s.replace(SECRET_COOKIE_RE, (m, pre: string, value: string) => secret(m, pre, value));
     s = s.replace(EMAIL_RE, (m) => (isRealEmail(m) ? this.placeholder('email', m) : m));
+    if (this.cn) {
+      s = s.replace(ID_CARD_RE, (m) => (isIdCard(m) ? this.placeholder('id-card', m.replace(/[ -]/g, '')) : m));
+      // The prefix stays, so "+86 " written by the page and by page script around the number match alike.
+      const mobile = (prefix: string, digits: string): string => `${prefix}${this.placeholder('cn-mobile', digits)}`;
+      s = s.replace(CN_MOBILE_RE, (_m, prefix: string, digits: string) => mobile(prefix, digits));
+      s = s.replace(CN_MOBILE_GROUPED_RE, (_m, prefix: string, a: string, _sep: string, b: string, c: string) =>
+        mobile(prefix, `${a}${b}${c}`),
+      );
+    }
     s = s.replace(PHONE_KEYED_RE, (m, pre: string, value: string, post: string) =>
       PHONE_PLACEHOLDER.test(value) ? m : `${pre}${this.placeholder('phone', value)}${post}`,
     );
@@ -156,6 +335,7 @@ export interface Finding {
     | 'phone'
     | 'secret'
     | 'term'
+    | 'id-card'
     | 'unreadable'
     | 'script'
     | 'control-value';
@@ -179,7 +359,35 @@ function scanVisiblePhones(html: string, where: string): Finding[] {
   return out;
 }
 
-function scanText(text: string, where: string, terms: RegExp[]): Finding[] {
+/**
+ * Undoes the encodings a value wears on a page before the audit looks at it: %XX escapes, + for a space, JSON
+ * \uXXXX escapes. The scrub matches those forms one by one; decoding first is a separate way of looking, so a form
+ * the scrub's patterns miss still shows up here.
+ */
+function decodeLoosely(text: string): string {
+  const hex = (h: string): string => String.fromCharCode(parseInt(h, 16));
+  return text
+    .replace(/\\u([0-9A-Fa-f]{4})/g, (_m, h: string) => hex(h))
+    .replace(/%([0-9A-Fa-f]{2})/g, (_m, h: string) => hex(h))
+    .replace(/\+/g, ' ');
+}
+
+const LOOSE_MOBILE_RE = /(?<!\d)(?:(?:00)?86[\s-]?)?1[3-9]\d{9}(?!\d)/g;
+const LOOSE_MOBILE_GROUPED_RE = /(?<![\w.-])(?:(?:00)?86[\s-]?)?1[3-9]\d([ -])\d{4}\1\d{4}(?![\w.-]|\s\d)/g;
+const LOOSE_ID_RE = /(?<!\d)[1-9]\d{5}[ -]?\d{4}[ -]?\d{4}[ -]?\d{3}[\dXx](?!\d)/g;
+
+/** Mainland mobiles and ID numbers left anywhere in `text`, found independently of the scrub's patterns. */
+function scanCn(text: string, where: string): Finding[] {
+  const decoded = decodeLoosely(text);
+  const out: Finding[] = [];
+  for (const re of [LOOSE_MOBILE_RE, LOOSE_MOBILE_GROUPED_RE]) {
+    for (const m of decoded.match(re) ?? []) out.push({ kind: 'phone', where, sample: mask(m) });
+  }
+  for (const m of decoded.match(LOOSE_ID_RE) ?? []) if (isIdCard(m)) out.push({ kind: 'id-card', where, sample: mask(m) });
+  return out;
+}
+
+function scanText(text: string, where: string, terms: RegExp[], cn = false): Finding[] {
   const out: Finding[] = [];
   const add = (kind: Finding['kind'], value: string): void => {
     out.push({ kind, where, sample: mask(value) });
@@ -197,6 +405,7 @@ function scanText(text: string, where: string, terms: RegExp[]): Finding[] {
   for (const re of terms) {
     for (const m of text.match(re) ?? []) add('term', m);
   }
+  if (cn) out.push(...scanCn(text, where));
   return out;
 }
 
@@ -294,7 +503,7 @@ export function auditHtml(html: string, opts: ScrubOptions = {}): Finding[] {
       out.push({ kind: 'control-value', where: 'option', sample: 'selected' });
     }
   }
-  out.push(...scanText(html, 'html', termRes(opts.terms)));
+  out.push(...scanText(html, 'html', termRes(opts.terms), opts.cn));
   return out;
 }
 
@@ -451,7 +660,7 @@ export function auditHar(har: HarFile, io: SidecarIo, opts: ScrubOptions = {}): 
   const out: Finding[] = [];
   const scan = (text: string | undefined, where: string, mime?: string): void => {
     if (!text) return;
-    out.push(...scanText(text, where, terms));
+    out.push(...scanText(text, where, terms, opts.cn));
     if (isHtmlMime(mime)) out.push(...scanVisiblePhones(text, where));
   };
   const scanSidecar = (name: string, mime: string | undefined, where: string): void => {

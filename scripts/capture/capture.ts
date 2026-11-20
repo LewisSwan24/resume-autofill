@@ -17,6 +17,8 @@ export interface CaptureOptions {
   ats: string;
   name: string;
   terms?: string[] | undefined;
+  /** A Chinese portal: also redacts mainland mobiles under any key and ID card numbers. */
+  cn?: boolean | undefined;
   /** Screenshots cannot be scrubbed, so logged-in captures turn them off. */
   screenshots?: boolean | undefined;
   /** Replace an existing sample. Off by default, because a page may have changed since. */
@@ -176,20 +178,21 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
   await context.close();
 
   // ---- sanitise. One scrubber: a placeholder means the same value everywhere in this sample.
-  const scrub = new Scrubber({ terms: opts.terms });
+  const scrubOptions = { terms: opts.terms, cn: opts.cn };
+  const scrub = new Scrubber(scrubOptions);
   const io = sidecarIo(dir);
   const har = JSON.parse(readFileSync(harPath, 'utf8')) as HarFile;
   sanitizeHar(har, scrub, io);
   writeFileSync(harPath, JSON.stringify(har));
 
   const frames: CaptureResult['frames'] = [];
-  const findings: Finding[] = [...auditHar(har, io, { terms: opts.terms })];
+  const findings: Finding[] = [...auditHar(har, io, scrubOptions)];
   pages.forEach((p, i) => {
     const file = i === 0 ? 'page.html' : `frame-${i}.html`;
     const html = sanitizeStaticHtml(p.html, scrub, { css: p.css });
     writeFileSync(path.join(dir, file), html);
     frames.push({ url: scrub.text(p.url), file });
-    findings.push(...auditHtml(html, { terms: opts.terms }).map((f) => ({ ...f, where: `${file}: ${f.where}` })));
+    findings.push(...auditHtml(html, scrubOptions).map((f) => ({ ...f, where: `${file}: ${f.where}` })));
   });
 
   writeFileSync(

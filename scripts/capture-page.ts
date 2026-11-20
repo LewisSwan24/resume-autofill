@@ -3,6 +3,12 @@
 //   pnpm capture --ats greenhouse --name sample-a --url <url>     public page, headless
 //   pnpm capture --ats workday --name step-1 --url <url> --login  opens a window, waits for a manual login
 //   pnpm capture --ats workday --name step-2 --url <url> --profile  reuses that login, headless
+//   pnpm capture --ats moka --name phone-a --url <url> --device mobile --locale zh-CN --login \
+//     --profile-dir <dir> --resume <export.json>          a Chinese portal as a phone, in a profile of your own
+//
+// --profile-dir takes any browser profile directory outside the repository instead of ~/.raf-capture/profiles/<ats>.
+// --resume takes a resume export: its names, schools, addresses and contact details become scrub terms.
+// --cn (on by default for a zh locale) also redacts mainland mobiles under any key and ID card numbers.
 //
 // Logins live outside the repository in ~/.raf-capture/profiles/<ats>. Logged-in captures require
 // ~/.raf-capture/scrub-terms.txt (one literal per line: name, address, and so on), because no pattern can
@@ -16,6 +22,7 @@ import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
 import { capturePage } from './capture/capture.ts';
 import { DEFAULT_LOCALE, contextOptionsFor, parseDevice, type CaptureDevice } from './capture/device.ts';
+import { resumeTerms } from './capture/sanitize.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = path.join(homedir(), '.raf-capture');
@@ -28,6 +35,12 @@ const { values: args } = parseArgs({
     url: { type: 'string' },
     login: { type: 'boolean', default: false },
     profile: { type: 'boolean', default: false },
+    /** A logged-in browser profile directory to use instead of ~/.raf-capture/profiles/<ats>. Never inside the repo. */
+    'profile-dir': { type: 'string' },
+    /** A resume export whose identifying values must not survive. Read, never copied. */
+    resume: { type: 'string' },
+    /** Chinese redaction (mobiles under any key, ID card numbers). On by default for a zh locale. */
+    cn: { type: 'boolean' },
     force: { type: 'boolean', default: false },
     locale: { type: 'string', default: DEFAULT_LOCALE },
     /** desktop, or mobile for a site's phone pages (narrow, touch, an Android user agent). */
@@ -55,12 +68,28 @@ try {
 }
 const locale = args.locale ?? DEFAULT_LOCALE;
 
-const authenticated = args.login || args.profile;
+const cn = args.cn ?? /^zh\b/i.test(locale);
+
+const profileDirArg = args['profile-dir'] ? path.resolve(args['profile-dir']) : undefined;
+if (profileDirArg) {
+  // Outside means a parent step (".." alone or "../…") or another drive. A folder named "..profiles" is inside.
+  const rel = path.relative(ROOT, profileDirArg);
+  const outside = rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+  if (!outside) die('--profile-dir must be outside the repository');
+}
+const authenticated = args.login || args.profile || profileDirArg !== undefined;
 let terms: string[] = [];
 if (existsSync(TERMS_FILE)) {
   terms = readFileSync(TERMS_FILE, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 }
-if (authenticated && terms.length === 0) die(`logged-in capture needs terms in ${TERMS_FILE}`);
+if (args.resume) {
+  try {
+    terms = [...new Set([...terms, ...resumeTerms(JSON.parse(readFileSync(args.resume, 'utf8')))])];
+  } catch (error) {
+    die(`cannot read --resume: ${(error as Error).message}`);
+  }
+}
+if (authenticated && terms.length === 0) die(`logged-in capture needs terms in ${TERMS_FILE} or a --resume`);
 
 /** The window stays with the user until they say the page is ready. */
 const waitForFile = async (file: string): Promise<void> => {
@@ -80,7 +109,7 @@ async function waitForUser(): Promise<void> {
 }
 
 const dir = path.join(ROOT, 'fixtures', 'captured', ats, name);
-const profileDir = path.join(HOME, 'profiles', ats);
+const profileDir = profileDirArg ?? path.join(HOME, 'profiles', ats);
 if (authenticated) mkdirSync(profileDir, { recursive: true });
 
 const contextOptions = { ...contextOptionsFor(device, locale), serviceWorkers: 'block' as const };
@@ -95,10 +124,12 @@ const result = await capturePage(context, {
   ats,
   name,
   terms,
+  cn,
   force: args.force,
   device,
   locale,
-  screenshots: !authenticated,
+  // A page that may show the resume's values cannot be screenshotted: pixels cannot be scrubbed.
+  screenshots: !authenticated && !args.resume,
   beforeRecord: args.login ? waitForUser : undefined,
   // Recording by now, and past the login: the walk to the form is part of what a replay needs.
   beforeSnapshot: args.login && args['ready-file'] ? () => waitForFile(`${args['ready-file']}.form`) : undefined,

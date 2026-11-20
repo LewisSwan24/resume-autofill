@@ -7,9 +7,11 @@ import {
   auditHar,
   auditHtml,
   sanitizeHar,
+  resumeTerms,
   sanitizeStaticHtml,
   type HarFile,
 } from '../../../scripts/capture/sanitize';
+import { createSampleProfile } from '../../../src/schema/samples';
 
 const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlLXZhbHVl';
 const TOKEN = 'tok3n-Fake-Value-123456';
@@ -462,5 +464,316 @@ describe('audit', () => {
       `<script>a</script><input value="Jane"><input type="hidden" value="x"><meta name="csrf-token" content="${TOKEN}"><p>a@corp.example</p>`,
     ).map((f) => f.kind);
     for (const kind of ['script', 'control-value', 'secret', 'email']) expect(kinds).toContain(kind);
+  });
+});
+
+// Chinese portals. Every value is invented: the ID numbers carry a valid check digit on a made-up region.
+const CN_MOBILE = '13900001111';
+const CN_ID = '123456199001011233';
+const CN_ID_BAD_CHECK = '123456199001011234';
+const FAKE_RESUME = {
+  id: 'r1',
+  locale: 'zh-CN',
+  basics: { familyName: '甲', givenName: '乙丙', englishName: 'Fakey Person', idNumber: CN_ID },
+  contact: {
+    email: 'fake.person@example.cn',
+    phone: CN_MOBILE,
+    wechat: 'fake_wechat_01',
+    address: { city: '北京', street: '虚构路 1 号' },
+  },
+  education: [{ school: '虚构大学', schoolEn: 'Fakeston University', degree: 'bachelor', major: 'Computer Science' }],
+  work: [{ company: '虚构科技有限公司', position: 'Engineer' }],
+};
+
+describe('Chinese personal data', () => {
+  it('replaces a mainland mobile and an e-mail written next to Chinese text', () => {
+    const out = new Scrubber({ cn: true }).text(`手机：${CN_MOBILE}，邮箱：fake.person@example.cn。`, { phones: 'all' });
+    expect(out).not.toContain(CN_MOBILE);
+    expect(out).not.toContain('fake.person');
+  });
+
+  it('in Chinese mode replaces a mobile that is a whole string, a query value or a bare number, whatever its key', () => {
+    const s = new Scrubber({ cn: true });
+    const json = s.text(`{"ref":"${CN_MOBILE}","b":"+86 ${CN_MOBILE}","n":19000000001}`);
+    expect(json).not.toContain(CN_MOBILE);
+    expect(json).not.toContain('19000000001');
+    // The placeholder is digits only, so a JSON number stays a number.
+    expect(typeof JSON.parse(json).n).toBe('number');
+    expect(s.text(`/api?m=${CN_MOBILE}&x=1`)).not.toContain(CN_MOBILE);
+    expect(s.text(CN_MOBILE)).not.toContain(CN_MOBILE);
+  });
+
+  it('replaces an ID card number with a valid check digit, as text, string or bare number', () => {
+    const s = new Scrubber({ cn: true });
+    expect(s.text(`身份证号：${CN_ID}`, { phones: 'all' })).not.toContain(CN_ID);
+    const json = s.text(`{"a":"${CN_ID}","b":${CN_ID}}`);
+    expect(json).not.toContain(CN_ID);
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('keeps numbers that only look like an ID card: bad check digit, no date inside, or part of a longer number', () => {
+    const s = new Scrubber({ cn: true });
+    const t = `{"order":"${CN_ID_BAD_CHECK}","ts":"123456123456789012","long":"9${CN_ID}","longer":${CN_ID}5}`;
+    expect(s.text(t)).toBe(t);
+  });
+
+  it('leaves pages outside Chinese mode as they were', () => {
+    const t = `{"ref":"${CN_MOBILE}","id":"${CN_ID}"}`;
+    expect(new Scrubber().text(t)).toBe(t);
+  });
+
+  it('takes names, schools, addresses and contact details from a resume as terms', () => {
+    const terms = resumeTerms(FAKE_RESUME);
+    for (const v of [
+      '甲乙丙',
+      'Fakey Person',
+      CN_ID,
+      'fake.person@example.cn',
+      CN_MOBILE,
+      'fake_wechat_01',
+      '虚构路 1 号',
+      '虚构大学',
+      'Fakeston University',
+      '虚构科技有限公司',
+    ]) {
+      expect(terms).toContain(v);
+    }
+    // Shared vocabulary would wipe the page's own options: cities, degrees, majors, titles, one-letter names.
+    for (const v of ['北京', 'bachelor', 'Computer Science', 'Engineer', '甲', 'zh-CN', 'r1']) expect(terms).not.toContain(v);
+  });
+
+  it('scrubs every resume value from static HTML and a HAR, and the audit agrees', () => {
+    const terms = resumeTerms(FAKE_RESUME);
+    const scrub = new Scrubber({ terms, cn: true });
+    const html = sanitizeStaticHtml(
+      `<p>欢迎 甲乙丙，虚构大学，虚构路 1 号</p><div data-u="${CN_MOBILE}" data-id="${CN_ID}">Fakeston University</div>`,
+      scrub,
+    );
+    for (const v of ['甲乙丙', '虚构大学', '虚构路 1 号', CN_MOBILE, CN_ID, 'Fakeston']) expect(html).not.toContain(v);
+    expect(auditHtml(html, { terms, cn: true })).toEqual([]);
+
+    const har = makeHar();
+    har.log.entries[0]!.response.content.text = `{"u":{"n":"甲乙丙","x":"${CN_MOBILE}","card":${CN_ID},"s":"虚构大学"}}`;
+    har.log.entries[0]!.request.url = `https://x.example/api?m=${CN_MOBILE}&e=fake.person%40example.cn`;
+    const store = sidecarStore();
+    sanitizeHar(har, scrub, store.io);
+    const all = JSON.stringify(har) + JSON.stringify(store.files);
+    for (const v of ['甲乙丙', '虚构大学', CN_MOBILE, CN_ID, 'fake.person']) expect(all).not.toContain(v);
+    expect(auditHar(har, store.io, { terms, cn: true })).toEqual([]);
+  });
+
+  it('the audit reports a mobile and an ID card left in a body', () => {
+    const har = makeHar();
+    har.log.entries[0]!.response.content.text = `{"x":"${CN_MOBILE}","y":"${CN_ID}"}`;
+    const kinds = auditHar(har, sidecarStore().io, { cn: true }).map((f) => f.kind);
+    expect(kinds).toContain('phone');
+    expect(kinds).toContain('id-card');
+  });
+});
+
+// A Latin-script name split into its parts gives short words that live inside markup, CSS and code.
+describe('terms in Latin script', () => {
+  const LATIN = { basics: { familyName: 'Min', givenName: 'Fakeyuan', preferredName: 'Max', englishName: 'Ax' } };
+  const PAGE = '<link rel="stylesheet"><style>.x{min-width:0;display:inline;line-height:1}</style><p>Fakeyuan Min, MAX online</p><script>Math.max(a,b);minimal()</script>';
+
+  it('makes a short Latin name part a term only inside a full name', () => {
+    const terms = resumeTerms(LATIN);
+    expect(terms).toContain('Fakeyuan Min');
+    expect(terms).toContain('Min Fakeyuan');
+    for (const v of ['Min', 'Max', 'Ax']) expect(terms).not.toContain(v);
+  });
+
+  it('replaces a Latin term only as a whole word, so markup, CSS and code survive', () => {
+    const s = new Scrubber({ terms: [...resumeTerms(LATIN), 'Lin'], cn: true });
+    expect(s.text(PAGE)).toBe(PAGE.replace('Fakeyuan Min', 'REDACTED-TERM'));
+  });
+
+  it('still replaces a Latin term written straight after Chinese text', () => {
+    expect(new Scrubber({ terms: ['Fakeyuan Min'] }).text('欢迎Fakeyuan Min！')).toBe('欢迎REDACTED-TERM！');
+  });
+});
+
+describe('terms made of digits', () => {
+  it('replaces a number only where it is the whole run of digits', () => {
+    const s = new Scrubber({ terms: ['123456'] });
+    expect(s.text('qq 123456; const k=1712345678, h="ab123456cd", v=1234567')).toBe(
+      'qq 900000; const k=1712345678, h="ab900000cd", v=1234567',
+    );
+  });
+
+  it('keeps an audit quiet about a digit term inside a longer number', () => {
+    const har = makeHar();
+    har.log.entries[0]!.response.content.text = '{"k":1712345678}';
+    const kinds = auditHar(har, sidecarStore().io, { terms: ['345678'] }).map((f) => f.kind);
+    expect(kinds).not.toContain('term');
+  });
+});
+
+// Every part of the resume schema that names or locates a person, not only the applicant's own basics and contact.
+describe('resume terms across the whole schema', () => {
+  const RESUME = {
+    basics: {
+      familyName: '甲',
+      givenName: '乙丙',
+      birthDate: '1999-04-07',
+      nativePlace: { province: '虚构省', city: '甲市', district: '乙区' },
+      studentOrigin: { province: '虚构省', city: '甲市' },
+      household: { province: '虚构省', city: '丙市', district: '丁区' },
+      currentLocation: { country: '中国', province: '另一省', city: '戊市', district: '己区' },
+    },
+    contact: { address: { province: '虚构省', city: '甲市', district: '乙区', street: '虚构路 1 号' } },
+    education: [{ school: '虚构大学', city: '甲市', thesis: '一种虚构方法的研究', major: '计算机科学' }],
+    work: [{ company: '虚构科技有限公司', position: '工程师', description: '负责虚构系统' }],
+    projects: [{ name: 'Resume tool', link: 'https://example.test/fake-project' }],
+    campus: [{ organization: '学生会' }],
+    awards: [{ name: '一等奖学金', issuer: '虚构大学' }],
+    languages: [{ language: 'English', certificate: 'IELTS', score: '7.5' }],
+    certificates: [{ name: 'CET-6', number: 'CERT-2020-778899' }],
+    skills: [{ name: 'Python' }],
+    family: [{ name: '丁戊', relationship: 'father', employer: '虚构机械有限公司', position: '工程师', phone: '13700003333' }],
+    emergencyContact: { name: '己庚', phone: '13700004444' },
+    referees: [{ name: 'Dr Fakey Referee', title: 'Lecturer', company: 'Example Pty Ltd', email: 'referee@example.test' }],
+  };
+
+  it('takes relatives, referees, employers, certificate numbers, project links, birth date and home region', () => {
+    const terms = resumeTerms(RESUME);
+    for (const v of [
+      '丁戊',
+      '己庚',
+      'Dr Fakey Referee',
+      'Fakey Referee',
+      '虚构机械有限公司',
+      'Example Pty Ltd',
+      'referee@example.test',
+      '13700003333',
+      '13700004444',
+      'CERT-2020-778899',
+      'https://example.test/fake-project',
+      '一种虚构方法的研究',
+      '1999-04-07',
+      '1999/04/07',
+      '1999.04.07',
+      '19990407',
+      '1999年4月7日',
+      '1999年04月07日',
+      '虚构省甲市乙区',
+      '甲市乙区',
+      '虚构省甲市',
+      '虚构省丙市丁区',
+      '另一省戊市己区',
+      '戊市己区',
+    ]) {
+      expect(terms).toContain(v);
+    }
+    // A bare city, district or province is also an option label on the page; so are skills, awards and titles.
+    for (const v of ['甲市', '乙区', '虚构省', '中国', 'Python', 'CET-6', 'English', 'IELTS', '一等奖学金', 'Resume tool', 'Lecturer', '学生会']) {
+      expect(terms).not.toContain(v);
+    }
+  });
+
+  it('scrubs a profile answer that holds them, and the audit agrees', () => {
+    const terms = resumeTerms(RESUME);
+    const body = '{"emergencyName":"己庚","nativePlace":"虚构省甲市乙区","birth":"1999-04-07","father":"丁戊","cert":"CERT-2020-778899"}';
+    const out = new Scrubber({ terms, cn: true }).text(body);
+    for (const v of ['己庚', '甲市乙区', '1999-04-07', '丁戊', 'CERT-2020']) expect(out).not.toContain(v);
+    expect(() => JSON.parse(out)).not.toThrow();
+    const har = makeHar();
+    har.log.entries[0]!.response.content.text = body;
+    expect(auditHar(har, sidecarStore().io, { terms }).filter((f) => f.kind === 'term').length).toBeGreaterThan(0);
+  });
+
+  it('covers the names, employers and birth date of the built-in sample profile', () => {
+    const profile = createSampleProfile();
+    const terms = resumeTerms(profile);
+    for (const r of profile.resumes) {
+      for (const f of r.family) {
+        expect(terms).toContain(f.name);
+        if (f.employer) expect(terms).toContain(f.employer);
+      }
+      if (r.emergencyContact.name) expect(terms).toContain(r.emergencyContact.name);
+      for (const ref of r.referees) expect(terms).toContain(ref.name);
+      if (r.basics.birthDate) expect(terms).toContain(r.basics.birthDate);
+    }
+  });
+});
+
+describe('mainland mobile placeholders', () => {
+  it('are eleven digits that url-encoding leaves alone and that never look like a mobile again', () => {
+    const s = new Scrubber({ cn: true });
+    const seen = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      const mobile = `1390000${String(1000 + i)}`;
+      const out = s.text(`{"m":"${mobile}"}`);
+      const placeholder = /"m":"(.*)"/.exec(out)![1]!;
+      expect(placeholder).toMatch(/^\d{11}$/);
+      expect(placeholder).not.toMatch(/1[3-9]\d{9}/);
+      expect(encodeURIComponent(placeholder)).toBe(placeholder);
+      expect(s.text(`{"m":"${placeholder}"}`)).toBe(`{"m":"${placeholder}"}`);
+      seen.add(placeholder);
+    }
+    expect(seen.size).toBe(30);
+  });
+
+  it('are the same in a body, a query value and under a phone key', () => {
+    const s = new Scrubber({ cn: true });
+    const body = s.text(`{"ref":"${CN_MOBILE}","phone":"${CN_MOBILE}","mobile":"0086 ${CN_MOBILE}"}`);
+    const url = s.text(`/api?m=${CN_MOBILE}`);
+    const placeholder = /m=(\d+)/.exec(url)![1]!;
+    expect(body).toBe(`{"ref":"${placeholder}","phone":"${placeholder}","mobile":"0086 ${placeholder}"}`);
+  });
+});
+
+// The forms a mainland mobile or an ID number takes on a real portal: encoded, prefixed, grouped, in a list,
+// behind tel: or glued to a key. Each must be scrubbed, and the audit must see each one when it is not.
+describe('mainland mobiles and ID numbers in other shapes', () => {
+  const OTHER = '13700002222';
+  const LEAKS: [string, string][] = [
+    ['an encoded +86 in a query', `https://x.example.cn/api?acct=%2B86${CN_MOBILE}&y=1`],
+    ['an encoded +86 and a + for the space', `acct=%2B86+${CN_MOBILE}`],
+    ['an encoded +86 and %20', `acct=%2B86%20${CN_MOBILE}`],
+    ['an encoded delimiter', `list=a%2C${CN_MOBILE}`],
+    ['three groups with spaces', '{"a":"139 0000 1111"}'],
+    ['three groups with dashes', '{"a":"139-0000-1111"}'],
+    ['+86 and dashes', '{"a":"+86-139-0000-1111"}'],
+    ['a 0086 prefix', `{"a":"0086 ${CN_MOBILE}"}`],
+    ['a bare 86 prefix', `{"a":"86${CN_MOBILE}"}`],
+    ['a semicolon after it', `x=${CN_MOBILE};y`],
+    ['a list', `"${CN_MOBILE},${OTHER}"`],
+    ['a tel: link in a string', `{"href":"tel:${CN_MOBILE}"}`],
+    ['a tel: link in a script', `location.href='tel:+86${CN_MOBILE}'`],
+    ['a JSON escape before it', `{"q":"m\\u003d${CN_MOBILE}"}`],
+    ['a key glued to it', `{"k":"mobile_${CN_MOBILE}"}`],
+    ['a bare number', `{"n":${CN_MOBILE}}`],
+    ['a dashed ID number', '{"a":"123456-19900101-1233"}'],
+    ['an ID number in four groups', '{"a":"123456 1990 0101 1233"}'],
+    ['an ID number glued to a key', `idcard_${CN_ID}`],
+    ['an ID number after a %XX escape', `q=a%3D${CN_ID}`],
+  ];
+  const digits = (s: string): string => s.replace(/\D/g, '');
+  const leaked = (s: string): boolean => [CN_MOBILE, OTHER, CN_ID.slice(0, 17)].some((v) => digits(s).includes(v));
+
+  it.each(LEAKS)('scrubs %s', (_label, input) => {
+    expect(leaked(input)).toBe(true);
+    const out = new Scrubber({ cn: true }).text(input);
+    expect(leaked(out), out).toBe(false);
+  });
+
+  const audit = (text: string) => {
+    const har = makeHar();
+    har.log.entries = [har.log.entries[0]!];
+    har.log.entries[0]!.request = { method: 'GET', url: 'https://x.example/api', headers: [], cookies: [], queryString: [] };
+    har.log.entries[0]!.response = { status: 200, headers: [], cookies: [], content: { mimeType: 'text/plain', text } };
+    return auditHar(har, sidecarStore().io, { cn: true }).map((f) => f.kind);
+  };
+
+  it.each(LEAKS)('the audit reports %s left in a body, and nothing once it is scrubbed', (_label, input) => {
+    expect(audit(input).some((k) => k === 'phone' || k === 'id-card')).toBe(true);
+    expect(audit(new Scrubber({ cn: true }).text(input))).toEqual([]);
+  });
+
+  it('leaves numbers that only share digits with a mobile: timestamps, longer runs and grouped path data', () => {
+    const t = '{"ts":1712345678901,"big":"139000011112","n":"1390000111"}<path d="M139 0000 1111 L2 3"/><i data-v="139 0000 1111 22">';
+    expect(new Scrubber({ cn: true }).text(t)).toBe(t);
+    expect(audit(t)).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { changedControls } from '../shared/capturedExpectations';
 import { injectHarness } from '../drivers/helpers';
-import { inspect, unjudgedControls } from './readState';
+import { inspect, locatorsOf, unjudgedControls } from './readState';
 
 const PAGE = `<!doctype html><body>
 <label for="t">Text</label><input id="t">
@@ -184,4 +184,70 @@ test('reads what a Moka list, multi-select and span of months show, not their em
   const after = await inspect(page, MOKA_LOCATORS);
   expect(after.readings).toEqual({ list: '硕士', many: ['示例甲', '示例乙'], span: '2020 9 2024 6' });
   expect(changedControls(before.snapshot, after.snapshot).map((c) => c.key)).toHaveLength(6);
+});
+
+test('a verdict that finds two boxes reads the first and covers only it, so a change in the second is caught', async ({ page }) => {
+  await page.setContent('<!doctype html><body><div class="entry"><input class="company"></div><div class="entry"><input class="company"></div></body>');
+  const locators = { company: '.entry .company' };
+  const before = await inspect(page, locators);
+  expect(before.coverage.company).toHaveLength(1);
+  await page.locator('.company').nth(0).fill('Acme');
+  await page.locator('.company').nth(1).fill('Wrong Co');
+  const after = await inspect(page, locators);
+  expect(after.readings.company).toBe('Acme');
+  const covered = new Set(after.coverage.company);
+  expect(changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key))).toEqual([{ key: 'text~1', before: '', after: 'Wrong Co' }]);
+});
+
+test('a verdict that names a button and the file box behind it covers both, as parts of one field', async ({ page }) => {
+  await page.setContent('<!doctype html><body><div class="upload"><button type="button" class="pick">上传</button><input type="file" id="cv"></div></body>');
+  const locators = { resume: '.upload button.pick, #cv' };
+  const before = await inspect(page, locators);
+  expect(before.coverage.resume).toHaveLength(2);
+  await page.setInputFiles('#cv', { name: 'cv.pdf', mimeType: 'application/pdf', buffer: Buffer.from('x') });
+  const after = await inspect(page, locators);
+  const covered = new Set(after.coverage.resume);
+  expect(changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key))).toEqual([]);
+});
+
+test('reads a box with no input behind it once a verdict names it, and sees it change', async ({ page }) => {
+  await page.setContent('<!doctype html><body><div id="named" contenteditable="plaintext-only"></div><div id="other" contenteditable="true"></div></body>');
+  const locators = { duties: '#named' };
+  const before = await inspect(page, locators);
+  expect(before.readings.duties).toBe('');
+  expect(before.coverage.duties).toHaveLength(1);
+  await page.evaluate(() => {
+    document.getElementById('named')!.textContent = 'Wrote the tests';
+    document.getElementById('other')!.textContent = 'not judged';
+  });
+  const after = await inspect(page, locators);
+  expect(after.readings.duties).toBe('Wrote the tests');
+  // Only the named one is a control to the judge: a page's other editable boxes stay out of the comparison.
+  expect(changedControls(before.snapshot, after.snapshot)).toHaveLength(1);
+});
+
+test('an editable box whose hint is its own text, marked as a placeholder, reads as empty', async ({ page }) => {
+  await page.setContent('<!doctype html><body><div class="text_info"><div id="duty" contenteditable="plaintext-only" class="placeholder">内容</div></div></body>');
+  expect((await inspect(page, { duties: '#duty' })).readings.duties).toBe('');
+});
+
+test('reads boxes that only show an answer as their text, a start and an end as one span', async ({ page }) => {
+  await page.setContent('<!doctype html><body><div id="span"><span class="v"></span><span class="v"></span></div><div id="one"><span class="v">2002-03 (24岁)</span></div></body>');
+  const expected = {
+    __resume: 'zh-CN',
+    __knownGapsMax: 0,
+    fields: { span: { selector: '#span .v', shown: true as const }, birth: { selector: '#one .v', shown: true as const } },
+  };
+  const locators = locatorsOf(expected);
+  const before = await inspect(page, locators);
+  expect(before.readings).toMatchObject({ span: '', birth: '2002-03 (24岁)' });
+  expect(before.coverage.span).toHaveLength(2);
+  await page.evaluate(() => {
+    const [a, b] = document.querySelectorAll('#span .v');
+    a!.textContent = '2020-09';
+    b!.textContent = '2024-06';
+  });
+  const after = await inspect(page, locators);
+  expect(after.readings.span).toBe('2020-09 ~ 2024-06');
+  expect(changedControls(before.snapshot, after.snapshot)).toHaveLength(2);
 });

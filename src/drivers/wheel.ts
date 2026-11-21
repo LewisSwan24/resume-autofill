@@ -49,7 +49,7 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 /** A touch event the way a browser makes one; where Touch cannot be built, the same points on a plain event. */
-function touchEvent(target: Element, type: string, x: number, y: number, lifted: boolean): Event {
+export function touchEvent(target: Element, type: string, x: number, y: number, lifted: boolean): Event {
   const win = winOf(target) as unknown as Record<string, unknown> & Window;
   const point = { identifier: 1, target, clientX: x, clientY: y, screenX: x, screenY: y, pageX: x + win.scrollX, pageY: y + win.scrollY, radiusX: 1, radiusY: 1, force: 1 };
   const lists = (touch: unknown) => ({ touches: lifted ? [] : [touch], targetTouches: lifted ? [] : [touch], changedTouches: [touch] });

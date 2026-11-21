@@ -63,6 +63,25 @@ describe('phoneShortfalls', () => {
     expect(phoneShortfalls([row('desk', 'desktop', 10, 10), phone])).toMatchObject([{ phone: 'ats/phone', why: 'below' }]);
   });
 
+  it('pairs a phone capture Moka moved under /m/ with the desktop capture of the same page', () => {
+    const desk = row('desk', 'desktop', 10, 10, { url: 'https://app.mokahr.com/careers/acme/1#/job/a/apply' });
+    const phone = row('phone', 'mobile', 2, 10, { url: 'https://app.mokahr.com/m/careers/acme/1#/micro-resume/a' });
+    expect(phoneShortfalls([desk, phone])).toMatchObject([{ phone: 'ats/phone', desktop: 'ats/desk', why: 'below' }]);
+    // Only a whole first segment: /mobile/ or /m-site/ is some other page.
+    const other = row('phone', 'mobile', 2, 10, { url: 'https://app.mokahr.com/mobile/careers/acme/1' });
+    expect(phoneShortfalls([desk, other])).toMatchObject([{ why: 'no_desktop' }]);
+  });
+
+  it('keeps /m/ in the page of a site Moka does not run, where it can be another page', () => {
+    const desk = row('desk', 'desktop', 10, 10, { url: 'https://jobs.example/careers/acme/1' });
+    const phone = row('phone', 'mobile', 2, 10, { url: 'https://jobs.example/m/careers/acme/1' });
+    expect(phoneShortfalls([desk, phone])).toMatchObject([{ phone: 'ats/phone', desktop: null, why: 'no_desktop' }]);
+    // Nor a host that only ends in the same letters.
+    const lookalike = row('phone', 'mobile', 2, 10, { url: 'https://notmokahr.com/m/careers/acme/1' });
+    const itsDesk = row('desk', 'desktop', 10, 10, { url: 'https://notmokahr.com/careers/acme/1' });
+    expect(phoneShortfalls([itsDesk, lookalike])).toMatchObject([{ why: 'no_desktop' }]);
+  });
+
   it('flags a phone capture with no desktop capture of its page, since the rule cannot be checked', () => {
     const elsewhere = row('desk', 'desktop', 10, 10, { url: 'https://jobs.example/apply/2' });
     expect(phoneShortfalls([elsewhere, row('phone', 'mobile', 10, 10)])).toMatchObject([{ phone: 'ats/phone', desktop: null, why: 'no_desktop' }]);
@@ -97,14 +116,14 @@ describe('renderAccuracyTable', () => {
     expect(lines).toHaveLength(3);
     expect(lines[0]).toMatch(/^\| ats\/desk \| 电脑 \| harness \| 10 \| 10 \| 100% \|.* \| 80% \| 80% \|$/);
     // The phone row shows its own details: 1 false report, 2 touched fields.
-    expect(lines[1]).toMatch(/^\| ats\/phone \| 手机 \| harness \| 10 \| 8 \| 80% \| 0 \| 2 \| 0 \| 1 \| 0 \| 2 \|.* \| 80% \| 80% \|$/);
+    expect(lines[1]).toMatch(/^\| ats\/phone \| 手机 \| harness \| 10 \| 8 \| 80% \| 0 \| 0 \| 2 \| 0 \| 1 \| 0 \| 2 \|.* \| 80% \| 80% \|$/);
     expect(lines[2]).toMatch(/^\| ats\/zz \| 电脑 \|.* \| — \| — \|$/);
   });
 
   it('never folds away a second desktop capture of the same page', () => {
     const lines = tableRows(renderAccuracyTable([row('step-1', 'desktop', 10, 10), row('step-2', 'desktop', 6, 10, { wrong: [{ label: 'x' }] as SampleScore['wrong'] })]));
     expect(lines).toHaveLength(2);
-    expect(lines[1]).toMatch(/^\| ats\/step-2 \| 电脑 \| harness \| 10 \| 6 \| 60% \| 1 \|/);
+    expect(lines[1]).toMatch(/^\| ats\/step-2 \| 电脑 \| harness \| 10 \| 6 \| 60% \| 0 \| 1 \|/);
   });
 
   it('shows the worst phone on the desktop row when a page has several', () => {

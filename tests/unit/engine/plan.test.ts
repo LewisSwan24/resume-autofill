@@ -4,6 +4,7 @@ import { fieldKeyLabel, planFill } from '../../../src/engine/plan';
 import { scanDocument } from '../../../src/engine/scan';
 import type { Classification, FieldContext } from '../../../src/engine/types';
 import { ResumeSchema, createSampleProfile } from '../../../src/schema';
+import { LANGUAGES, mlist, mtext } from '../../shared/mokaMobileForm';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -242,6 +243,20 @@ describe('a question about English or about one test', () => {
     const englishFirst = withLanguages([{ language: '英语', certificate: 'CET-6' }, { language: '日语', certificate: 'JLPT N1' }]);
     const p = plan(`<h3>语言能力</h3>${select('英语水平', 'a', ['一般', '良好', '熟练', '精通'])}${text('其他外语', 'b')}`, englishFirst);
     expect(stepOf(p, '其他外语')).toMatchObject({ fieldKey: 'languages.language', source: 'languages[1].language' });
+  });
+
+  it('keeps English out of a Moka phone block whose advice, under its title, asks for the other languages', () => {
+    const englishOnly = withLanguages([{ language: '英语', certificate: 'CET-6' }]);
+    // On a phone the advice is a line of its own between the title and the fields.
+    const block = (advice: string) =>
+      `<div class="block-Bk2Lw9Qz0x"><div class="count-Cn4Tq7Vb2m">Step: 8/10</div><div class="title-Zx81Kd0Qwe fix-title-Fx0Ld3Kq8w"><span>语言能力</span></div>` +
+      `<div class="describe-Dz2Lq8Nn4c">${advice ? `<span>${advice}</span>` : ''}</div><div class="progress-Pg5Rt2Hy7u" style="width: 80%;"></div>` +
+      `<div class="mobile-layout__panel field-block-Fb6Hs1Jd4k"><div class="applyFields-Af3Gm7Pq2r">${mlist('语言类型', LANGUAGES)}${mtext('所获证书')}</div></div></div>`;
+    const besides = plan(block('除英语外的其他外语能力'), englishOnly);
+    expect(stepOf(besides, '语言类型')).toBeUndefined();
+    expect(stepOf(besides, '所获证书')).toBeUndefined();
+    const any = plan(block(''), englishOnly);
+    expect(stepOf(any, '语言类型')).toMatchObject({ source: 'languages[0].language' });
   });
 
   it('reads 四六级 as English, not as one of the two tests', () => {

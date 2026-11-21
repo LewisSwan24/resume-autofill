@@ -10,12 +10,14 @@ export type Locators = Record<string, string>;
 const EXISTS_PREFIX = 'exists:';
 /** A selector with this prefix reads the text of everything it matches: see `__entries`. */
 const ENTRIES_PREFIX = 'entries:';
+/** A selector with this prefix names boxes that show an answer with no input behind them: see `CapturedField.shown`. */
+const SHOWN_PREFIX = 'shown:';
 
 export function locatorsOf(expected: CapturedExpected): Locators {
   const out: Locators = {};
-  for (const [label, f] of Object.entries(expected.fields)) out[label] = f.exists ? `${EXISTS_PREFIX}${f.selector}` : f.selector;
+  for (const [label, f] of Object.entries(expected.fields)) out[label] = f.exists ? `${EXISTS_PREFIX}${f.selector}` : f.shown ? `${SHOWN_PREFIX}${f.selector}` : f.selector;
   for (const [label, g] of Object.entries(expected.__knownGaps ?? {})) out[label] = g.selector;
-  for (const [label, r] of Object.entries(expected.__review ?? {})) out[label] = r.selector;
+  for (const [label, r] of Object.entries(expected.__review ?? {})) out[label] = r.shown ? `${SHOWN_PREFIX}${r.selector}` : r.selector;
   for (const [label, r] of Object.entries(expected.__leaveEmpty ?? {})) out[label] = r.selector;
   for (const [label, e] of Object.entries(expected.__entries ?? {})) out[label] = `${ENTRIES_PREFIX}${e.selector}`;
   return out;
@@ -67,8 +69,11 @@ export function inspectInPage(locators: Locators): Inspection {
     const type = typeOf(el);
     const moka = type === 'text' ? mokaShown(el) : null;
     if (moka !== null) return moka;
-    // A list that is only a button shows its choice as the button's own text.
+    // A list that is only a button shows its choice as the button's own text, and an editable box its own text.
     if (type === 'button') return squash(el.textContent);
+    // An editable box that writes its hint as its own text, marked as a placeholder, is empty.
+    if (el.hasAttribute('contenteditable')) return el.classList.contains('placeholder') ? '' : squash(el.textContent);
+    if (shownBoxes.has(el)) return squash(el.textContent);
     // A search-and-pick box keeps its choices as pills beside it: the text in it is not an answer.
     const pills = el.closest('[data-automation-id="multiSelectContainer"]');
     if (pills) return [...pills.querySelectorAll('[data-automation-id="selectedItem"] [data-automation-id="promptOption"]')].map((p) => squash(p.textContent)).join(', ');
@@ -91,15 +96,28 @@ export function inspectInPage(locators: Locators): Inspection {
   // A plain button that opens a list has nothing to show it for one, except a verdict naming it.
   const namedButtons = new Set(
     Object.values(locators)
-      .filter((s) => !/^(?:exists|entries):/.test(s))
+      .filter((s) => !/^(?:exists|entries|shown):/.test(s))
       .flatMap((s) => queryAll(s).filter((el) => el.tagName === 'BUTTON')),
   );
-  const isControl = (el: Element): el is FormEl => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton) || namedButtons.has(el);
+  // A box that only shows its answer, a date on wheels with no input, as a verdict names it.
+  const shownBoxes = new Set(
+    Object.values(locators)
+      .filter((s) => s.startsWith('shown:'))
+      .flatMap((s) => queryAll(s.slice('shown:'.length))),
+  );
+  // A box the applicant types into with no input behind it (contenteditable) is one too, once a verdict names it.
+  const namedEditables = new Set(
+    Object.values(locators)
+      .filter((s) => !/^(?:exists|entries|shown):/.test(s))
+      .flatMap((s) => queryAll(s).filter((el) => el.hasAttribute('contenteditable'))),
+  );
+  const isControl = (el: Element): el is FormEl =>
+    /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton) || namedButtons.has(el) || namedEditables.has(el) || shownBoxes.has(el);
   const included = (el: FormEl): boolean => typeOf(el) !== 'hidden' && !/^g-recaptcha-response|^h-captcha-response/.test(el.name || el.id || '');
   const keys = new Map<Element, string>();
   const used = new Map<string, number>();
   const snapshot: Record<string, string> = {};
-  for (const el of [...queryAll(`input,select,textarea,${listButton}`), ...namedButtons]) {
+  for (const el of [...queryAll(`input,select,textarea,${listButton}`), ...namedButtons, ...namedEditables, ...shownBoxes]) {
     if (keys.has(el)) continue;
     if (!isControl(el) || !included(el)) continue;
     const type = typeOf(el);
@@ -132,25 +150,41 @@ export function inspectInPage(locators: Locators): Inspection {
       coverage[label] = [];
       continue;
     }
+    if (selector.startsWith('shown:')) {
+      // A start and an end shown in two boxes read as one span.
+      const boxes = queryAll(selector.slice('shown:'.length));
+      coverage[label] = boxes.flatMap((el) => keys.get(el) ?? []);
+      readings[label] = boxes.length === 0 ? null : boxes.every((b) => !squash(b.textContent)) ? '' : boxes.map((b) => squash(b.textContent)).join(' ~ ');
+      continue;
+    }
     const els = queryAll(selector).filter(isControl);
-    coverage[label] = els.flatMap((el) => keys.get(el) ?? []);
     if (els.length === 0) {
       readings[label] = null;
+      coverage[label] = [];
       continue;
     }
     const first = els[0]!;
     const type = typeOf(first);
+    // Only what is read is covered. Another control of the same kind the selector also finds, as the same box on a
+    // second entry, stays in the comparison: a change there is caught unless a verdict of its own reads it.
+    let read: Element[] = [first];
     if (type === 'radio') {
       const hit = els.find((el) => (el as HTMLInputElement).checked) as HTMLInputElement | undefined;
       readings[label] = hit ? optionLabel(hit) : '';
+      read = els;
     } else if (type === 'checkbox' && els.length > 1) {
       readings[label] = (els as HTMLInputElement[]).filter((el) => el.checked).map(optionLabel);
+      read = els;
     } else if (els.length > 1 && els.every((el) => el.closest('.month-range-select') && typeOf(el) === 'text')) {
       // Year and month, or both ends of a span: one answer in several lists, read in order.
       readings[label] = els.map((el) => single(el)).filter((v) => typeof v === 'string' && v).join(' ');
+      read = els;
     } else {
       readings[label] = single(first);
     }
+    // A control of another kind the selector names with it is a part of the same field: the file box behind a button.
+    const parts = els.filter((el) => !read.includes(el) && typeOf(el) !== type);
+    coverage[label] = [...read, ...parts].flatMap((el) => keys.get(el) ?? []);
   }
   return { snapshot, readings, coverage };
 }

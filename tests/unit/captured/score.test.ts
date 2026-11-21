@@ -216,6 +216,18 @@ describe('scoreSample', () => {
       expect(problems(e, after('')).join()).toMatch(/no report row/);
       expect(problems(e, after(''), allFilled([{ label: 'Pronouns', outcome: 'unmatched' }])).join()).toMatch(/reported unmatched/);
     });
+
+    it('pick their report row by resume path, when entries of a section share a label', () => {
+      const e2 = expected({ __review: { 'Dates 2': { selector: '#d2', labelRe: '^dates$', source: 'work[1].period' } } });
+      const page = filled({ readings: { 'Dates 2': '' }, coverage: { 'Dates 2': ['text#d2'] } });
+      const rows = allFilled([
+        { label: 'Dates', outcome: 'filled', observed: '2020-01', source: 'work[0].period' },
+        { label: 'Dates', outcome: 'needs_review', source: 'work[1].period' },
+      ]);
+      expect(problems(e2, page, rows)).toEqual([]);
+      const unsourced = expected({ __review: { 'Dates 2': { selector: '#d2', labelRe: '^dates$' } } });
+      expect(problems(unsourced, page, rows).join()).toMatch(/reported filled/);
+    });
   });
 
   it('passes an exists field only when the element is there, and does not call it stale', () => {
@@ -235,7 +247,36 @@ describe('scoreSample', () => {
 
   it('renders the accuracy table, with unexpected changes counted as wrong', () => {
     const score = scoreSample(sample(), 'extension', emptyPage, filled({ snapshot: { 'text#other': 'x' } }), report());
-    expect(renderAccuracyTable([score])).toContain('| ats/s | 电脑 | extension | 3 | 3 | 100% | 1 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 |');
+    expect(renderAccuracyTable([score])).toContain('| ats/s | 电脑 | extension | 3 | 3 | 100% | 0 | 1 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 |');
+  });
+
+  describe('fields filled only once the replay showed the steps the page held back', () => {
+    // As far as the step loop reached: Email filled, Phone and Resume on a step the page would not move on to.
+    const reached = filled({ readings: { Phone: '', Resume: [] }, snapshot: { 'text#phone': '', 'file#resume': '' } });
+
+    it('are named, apart from what the fill reached by itself', () => {
+      const score = scoreSample(sample(), 'harness', emptyPage, filled(), allFilled(), reached);
+      expect(score.correct).toBe(3);
+      expect(score.revealedOnly).toEqual(['Phone', 'Resume']);
+    });
+
+    it('do not count a field that came out wrong or a known gap', () => {
+      const wrong = filled({ readings: { Phone: '+61 400000000' } });
+      expect(scoreSample(sample(), 'harness', emptyPage, wrong, allFilled(), reached).revealedOnly).toEqual(['Resume']);
+    });
+
+    it('are none when nothing was held back', () => {
+      expect(scoreSample(sample(), 'harness', emptyPage, filled(), allFilled()).revealedOnly).toEqual([]);
+    });
+
+    it('get a column of their own in the table and a word in the score line', () => {
+      const score = scoreSample(sample(), 'harness', emptyPage, filled(), allFilled(), reached);
+      const table = renderAccuracyTable([score]);
+      expect(table).toContain('| 应填 | 填对 | 填对率 | 代答后才填 | 错填 |');
+      expect(table).toContain('| ats/s | 电脑 | harness | 3 | 3 | 100% | 2 | 0 |');
+      expect(scoreLine(score)).toContain('3/3 = 100% (2 only once the held-back steps were shown)');
+      expect(scoreLine(scoreSample(sample(), 'harness', emptyPage, filled(), allFilled()))).not.toContain('held-back');
+    });
   });
 
   it('prints a table line that counts unexpected changes as wrong', () => {
@@ -391,6 +432,14 @@ describe('every control gets a verdict', () => {
 
   it('collects the selector of every verdict', () => {
     expect(verdictSelectors(e).sort()).toEqual(['#city', '#email', '#phone', '#resume', '#source', '#why']);
+  });
+
+  it('leaves out a field on an entry the fill adds, which the page before the fill does not have', () => {
+    const added = expected({
+      fields: { 'Company 2': { selector: '#company-2', expect: 'Acme', added: true } },
+      __review: { 'Dates 2': { selector: '#dates-2', labelRe: 'dates', added: true } },
+    });
+    expect(verdictSelectors(added)).toEqual([]);
   });
 
   it('uses the control of a field that only checks what the site shows afterwards', () => {

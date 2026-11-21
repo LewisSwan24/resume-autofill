@@ -41,6 +41,9 @@ export interface UnsupportedWidget {
 /** Attribute that lets a page (or a test fixture) force the date granularity of a picker. */
 export const GRANULARITY_ATTR = 'data-granularity';
 
+/** The wrappers of Moka's phone lists, by what they ask: one answer, yes or no, or several. */
+export const MOKA_PHONE_LISTS = ['select', 'select_info', 'bool_info', 'multi_select_info'];
+
 // NOTE: antd v5 Cascader root is `.ant-select.ant-cascader`, so cascader must precede select.
 export const LIBRARY_WIDGETS: LibraryWidget[] = [
   // ---- Moka. Build hashes end every class, so these go by what comes before ----
@@ -49,6 +52,20 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'moka', kind: 'cascader', root: '[class*="sd-Input-tag-container"]' },
   // A list that takes several shows each answer as a tag inside the box.
   { lib: 'moka', kind: 'select', root: 'label[class*="sd-Select-container"]', multiple: '[class*="sd-Input-tag-container"]' },
+  // On a phone (/m/): a list is a readonly 「请选择」 input that opens a sheet, a date a box of wheels with no input.
+  {
+    lib: 'moka',
+    kind: 'select',
+    root: MOKA_PHONE_LISTS.map((c) => `[class*="applyField-"] > .${c}`).join(', '),
+    multiple: '.multi_select_info',
+    when: (el) => el.querySelector(':scope > input[readonly]') !== null,
+  },
+  {
+    lib: 'moka',
+    kind: 'date',
+    root: '[class*="applyField-"] > .old-style-hack',
+    when: (el) => el.querySelector('.mobile-text-input__wrapper') !== null,
+  },
 
   // ---- Beisen (北森, zhiye.com): one box for lists, dates and places alike; a date says so by its icon ----
   { lib: 'beisen', kind: 'date', root: '.phoenix-select', when: (el) => el.querySelector('.phoenix-select__switchArrow [id*="field_date"]') !== null },
@@ -238,7 +255,8 @@ function isMokaSpan(el: Element): boolean {
 export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor') ||
   // Two lists for each end. Ticking the 至今 box beside them takes the end's two off the page.
   (el.matches('.month-range-select') && isMokaSpan(el)) ||
-  el.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod');
+  el.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod') ||
+  (el.matches('.old-style-hack') && el.querySelector('.mobile-text-input.end-date') !== null);
 
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {
   return LIBRARY_UNSUPPORTED.find((u) => el.matches(u.root));

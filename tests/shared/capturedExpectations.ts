@@ -33,6 +33,11 @@ export interface CapturedField {
   follows?: true;
   /** On an entry the fill adds: the page before the fill has no such control to judge. Replays still check it. */
   added?: true;
+  /**
+   * The control keeps its answer as text with no input behind it (a date on wheels): `selector` names the boxes
+   * showing it, read as their text, two of them as a start and an end joined by ' ~ '.
+   */
+  shown?: true;
   /** Only the running page shows what this box is, by a value a snapshot does not keep. Replays still check it. */
   liveOnlyKey?: true;
   /**
@@ -60,11 +65,20 @@ export interface LeaveEmpty extends LocatedEntry {
   fieldKey?: string;
 }
 
+/**
+ * Must stay empty and be reported needs_review / no_option. The regex matches the report row's label. `shown` and
+ * `added` mean what they do on a `CapturedField`.
+ */
+export interface ReviewEntry extends LocatedEntry, Pick<CapturedField, 'shown' | 'added'> {
+  labelRe: string;
+  /** The row's resume path, as `work[1].period`, when entries of a section put several rows under one label. */
+  source?: string;
+}
+
 export interface CapturedExpected {
   __resume: string;
   __adapter?: string;
-  /** Must stay empty and be reported needs_review / no_option. The regex matches the report row's label. */
-  __review?: Record<string, LocatedEntry & { labelRe: string }>;
+  __review?: Record<string, ReviewEntry>;
   /** Report rows whose label matches may never be `filled`. */
   __traps?: string[];
   /** Not filled yet. They must stay empty and count as not correct. */
@@ -75,6 +89,11 @@ export interface CapturedExpected {
   __leaveEmpty?: Record<string, LeaveEmpty>;
   /** A banner the applicant answers first, which covers the FAB. Clicked in the replay only, where nothing leaves. */
   __banner?: string;
+  /**
+   * A step form that keeps every step on the page and hides all but the one showing (Moka on a phone): the boxes of
+   * its steps. The static checks show them all, so each control is judged as it will be once its step comes up.
+   */
+  __hiddenSteps?: string;
   /** Must equal the number of wrong guesses, as with `__knownGapsMax`. */
   __wrongGuessesMax?: number;
   fields: Record<string, CapturedField>;
@@ -176,6 +195,11 @@ export interface SampleScore {
   stale: string[];
   trapsFilled: string[];
   reviewProblems: string[];
+  /**
+   * Correct fields the fill only reached once the replay showed the steps the page held back (`__hiddenSteps`), playing
+   * an applicant who answered what no resume does. Counted in `correct`, and named so that share stays visible.
+   */
+  revealedOnly?: string[];
   /** The report says filled but read nothing back. The report must not claim what it cannot see. */
   falselyFilled: string[];
   /** The page holds the right value, yet the report says otherwise. A user would redo work that is done. */
@@ -220,7 +244,7 @@ export function verdictSelectors(expected: CapturedExpected): string[] {
   return [
     ...Object.values(expected.fields).flatMap(of),
     ...Object.values(expected.__knownGaps ?? {}).flatMap(of),
-    ...Object.values(expected.__review ?? {}).map((r) => r.selector),
+    ...Object.values(expected.__review ?? {}).flatMap((r) => (r.added ? [] : [r.selector])),
     ...Object.values(expected.__leaveEmpty ?? {}).map((r) => r.selector),
   ];
 }
@@ -270,18 +294,24 @@ function withoutRenumbering(changes: ControlChange[], before: Inspection['snapsh
   return changes.filter((c) => !moved.has(base(c.key)));
 }
 
+/**
+ * `reached`: the page as the fill left it before the replay showed the steps the page held back, when it did. A field
+ * right in the end but not there is one the fill only reached through that stand-in.
+ */
 export function scoreSample(
   sample: { ats: string; name: string; expected: CapturedExpected; device?: CaptureDevice; url?: string },
   mode: string,
   before: Inspection,
   after: Inspection,
   report: FillReport,
+  reached?: Inspection,
 ): SampleScore {
   const { expected } = sample;
   const missing: string[] = [];
   const wrong: WrongField[] = [];
   const stale: string[] = [];
   const falselyFailed: string[] = [];
+  const revealedOnly: string[] = [];
   let correct = 0;
 
   const allGaps = Object.entries(expected.__knownGaps ?? {});
@@ -292,6 +322,7 @@ export function scoreSample(
     const actual = after.readings[label] ?? null;
     if (matches(field, actual)) {
       correct++;
+      if (reached && !matches(field, reached.readings[label] ?? null)) revealedOnly.push(label);
       const rows = rowsOf(report, label, field.fieldKey);
       if (field.follows) continue;
       if (rows.length === 0) falselyFailed.push(`${label}: no report row`);
@@ -352,7 +383,7 @@ export function scoreSample(
     const problems: string[] = [];
     if (!isEmptyReading(after.readings[label] ?? null)) problems.push(`${label}: not empty`);
     const regex = new RegExp(entry.labelRe, 'i');
-    const row = report.fields.find((f) => regex.test(f.label));
+    const row = report.fields.find((f) => regex.test(f.label) && (entry.source === undefined || f.source === entry.source));
     if (!row) problems.push(`${label}: no report row`);
     else if (row.outcome !== 'needs_review' && row.outcome !== 'no_option') problems.push(`${label}: reported ${row.outcome}`);
     return problems;
@@ -390,6 +421,7 @@ export function scoreSample(
     stale,
     trapsFilled,
     reviewProblems,
+    revealedOnly,
     falselyFilled: report.fields.filter((f) => f.outcome === 'filled' && !f.observed && !/^(true|false)$/.test(f.value ?? '')).map((f) => f.label),
     falselyFailed,
     leaveEmpty: leaving.length,
@@ -450,11 +482,19 @@ const deviceOf = (r: SampleScore): CaptureDevice => r.device ?? 'desktop';
 const totalOf = (r: SampleScore): number => r.fields + r.gaps.length;
 const percent = (x: number): string => `${Math.round(1000 * x) / 10}%`;
 
-/** Host and path: a phone capture of a page often lands on it with another query or fragment. */
+/** Hosts that send a phone to the same path under /m/: the ones the Moka adapter claims (src/adapters/cnPortals.ts). */
+const PHONE_UNDER_M = /(?:^|\.)mokahr\.com$/;
+
+/**
+ * Host and path: a phone capture of a page often lands on it with another query or fragment, and Moka sends a phone
+ * to the same path under /m/. On any other site /m/ may be another page, so it stays.
+ */
 function pageUrl(url: string): string {
   try {
     const u = new URL(url);
-    return `${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}`;
+    const host = u.hostname.toLowerCase();
+    const route = PHONE_UNDER_M.test(host) ? u.pathname.replace(/^\/m(?=\/)/, '') : u.pathname;
+    return `${u.host.toLowerCase()}${route.replace(/\/+$/, '')}`;
   } catch {
     return url;
   }
@@ -516,8 +556,9 @@ const NO_RATIO: Record<NoPartner, string> = { no_desktop: '无电脑版', severa
 
 /**
  * The per-ATS table for the local acceptance report: one row per capture and run mode, each phone capture right
- * under the desktop capture of its page. The last two columns hold a phone fill rate and its share of the desktop
- * rate: on a desktop row, its worst phone's.
+ * under the desktop capture of its page. 代答后才填 counts the right fields the fill reached only once the replay showed
+ * steps the page held back for answers no resume gives (`revealedOnly`). The last two columns hold a phone fill rate
+ * and its share of the desktop rate: on a desktop row, its worst phone's.
  */
 export function renderAccuracyTable(rows: SampleScore[]): string {
   const paired = partners(rows);
@@ -525,7 +566,7 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
   for (const [phone, p] of paired) if ('desktop' in p) phonesOf.set(p.desktop, [...(phonesOf.get(p.desktop) ?? []), phone]);
   const ratioCell = (x: number | undefined): string => (x === undefined ? '—' : percent(x));
   const line = (r: SampleScore, phoneRate: string, ratio: string): string =>
-    `| ${r.sample} | ${deviceOf(r) === 'mobile' ? '手机' : '电脑'} | ${r.mode} | ${totalOf(r)} | ${r.correct} | ${accuracyOf(r)}% | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${(r.fillMs / 1000).toFixed(1)} | ${phoneRate} | ${ratio} |`;
+    `| ${r.sample} | ${deviceOf(r) === 'mobile' ? '手机' : '电脑'} | ${r.mode} | ${totalOf(r)} | ${r.correct} | ${accuracyOf(r)}% | ${r.revealedOnly?.length ?? 0} | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${(r.fillMs / 1000).toFixed(1)} | ${phoneRate} | ${ratio} |`;
 
   const body = rows.map((r) => {
     if (deviceOf(r) === 'mobile') {
@@ -546,8 +587,8 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
     return 0;
   });
   const lines = [
-    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
-    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 代答后才填 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
+    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
     ...body.map((b) => b.line),
   ];
   return `${lines.join('\n')}\n`;
@@ -555,5 +596,6 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
 
 /** One line per sample and mode, printed by the specs and used for the accuracy table. */
 export function scoreLine(score: SampleScore): string {
-  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}, took ${(score.fillMs / 1000).toFixed(1)}s`;
+  const revealed = score.revealedOnly?.length ? ` (${score.revealedOnly.length} only once the held-back steps were shown)` : '';
+  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%${revealed}, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}, took ${(score.fillMs / 1000).toFixed(1)}s`;
 }

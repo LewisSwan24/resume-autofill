@@ -16,7 +16,10 @@ export interface SectionInfo {
   root: Element;
   /** The heading element the title came from. */
   heading: Element;
-  /** A line of advice in the heading's box after the title: 工作经历, then 如为实习经历可在职位名称上备注实习生. */
+  /**
+   * A line of advice in the heading's box after the title: 工作经历, then 如为实习经历可在职位名称上备注实习生. On Moka's
+   * phone form the line is a box of its own between the title and the fields.
+   */
   note?: string;
 }
 
@@ -105,7 +108,7 @@ function titleBeforeNote(h: Element): { title: string; note?: string } | null {
 }
 
 /** The heading a previous sibling `s` provides for `parent`, or null. */
-function headingOf(s: Element, parent: Element): { title: string; heading: Element } | null {
+function headingOf(s: Element, parent: Element): { title: string; heading: Element; note?: string } | null {
   if (containsField(s)) return null;
   const strict = s.matches(STRICT_HEADING_SELECTOR) ? s : s.querySelector(STRICT_HEADING_SELECTOR);
   if (strict) {
@@ -131,6 +134,20 @@ function headingOf(s: Element, parent: Element): { title: string; heading: Eleme
   return null;
 }
 
+/** A box of advice that says what a section wants, by its class (Moka's phone form: describe-<hash>). */
+const ADVICE_CLASS = /(?:^|\s)describe-/;
+
+/** The advice between a heading and what it titles: the boxes after the heading that say so by their class. */
+function adviceAfter(heading: Element, node: Element): string | undefined {
+  const lines: string[] = [];
+  for (let s = heading.nextElementSibling; s && s !== node; s = s.nextElementSibling) {
+    if (!ADVICE_CLASS.test(s.getAttribute('class') ?? '') || containsField(s)) continue;
+    const text = cleanEvidenceText(textWithoutControls(s), Number.MAX_SAFE_INTEGER);
+    if (text) lines.push(text);
+  }
+  return lines.length ? lines.join(' ') : undefined;
+}
+
 /**
  * Nearest heading above `el`: walk up the ancestors and, at each level, look at the preceding siblings
  * (blocks that hold controls — earlier cards, rows — are skipped). `root` is the container the heading titles.
@@ -142,7 +159,10 @@ export function findSection(el: Element): SectionInfo | null {
     if (!parent) return null;
     for (let s = node.previousElementSibling; s; s = s.previousElementSibling) {
       const hit = headingOf(s, parent);
-      if (hit) return { ...hit, root: parent };
+      if (hit) {
+        const note = hit.note ?? adviceAfter(s, node);
+        return { ...hit, root: parent, ...(note ? { note } : {}) };
+      }
     }
     node = parent;
   }

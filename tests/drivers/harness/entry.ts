@@ -9,6 +9,7 @@ import { getDriver } from '../../../src/drivers/registry';
 import { registerAllDrivers } from '../../../src/drivers';
 import { scanDocument } from '../../../src/engine/scan';
 import { runFill } from '../../../src/fill/runFill';
+import { readStep, pressNext } from './steps';
 import { createSampleFiles, createSampleProfile } from '../../../src/schema';
 import { buildIntent, execIntent, listLabels, locate } from './inpage';
 
@@ -21,6 +22,8 @@ registerAllDrivers();
 const extra = {
   scanDocument,
   runFill,
+  readStep,
+  pressNext,
 };
 // ---------------------------------------------------------------------------------------------
 

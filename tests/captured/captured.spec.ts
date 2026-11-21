@@ -15,12 +15,14 @@ import {
   scoreProblems,
   scoreSample,
   type CapturedSample,
+  type Inspection,
   type SampleScore,
   verdictSelectors,
 } from '../shared/capturedExpectations';
 import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
 import { answerSearches } from '../shared/searchAnswers';
 import { replayFromHar, sameDocument } from '../shared/harReplay';
+import { fillThroughSteps, mergeReports } from '../shared/stepFill';
 import { injectHarness } from '../drivers/helpers';
 import { contextOptionsFor } from '../../scripts/capture/device';
 import { inspect, locatorsOf, unjudgedControls } from './readState';
@@ -70,12 +72,22 @@ async function openReplay(browser: Browser, sample: CapturedSample): Promise<{ p
   return { page, uploads };
 }
 
+/** A step form that keeps its later steps on the page, hidden: shown, so their controls are judged too. */
+async function showHiddenSteps(page: Page, sample: CapturedSample): Promise<void> {
+  const steps = sample.expected.__hiddenSteps;
+  if (!steps) return;
+  await page.evaluate((selector) => {
+    for (const el of document.querySelectorAll<HTMLElement>(selector)) if (el.style.display === 'none') el.style.display = '';
+  }, steps);
+}
+
 for (const sample of samples) {
   test.describe(`${sample.ats}/${sample.name}`, () => {
     test('static snapshot: controls classify as written in expected.json', async ({ browser }) => {
       const page = await openStatic(browser, sample);
       try {
         await injectHarness(page);
+        await showHiddenSteps(page, sample);
         const wanted = Object.entries(sample.expected.fields).flatMap(([label, f]) =>
           f.fieldKey && !f.liveOnlyKey && !f.added ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
         );
@@ -98,6 +110,7 @@ for (const sample of samples) {
       const page = await openStatic(browser, sample);
       try {
         await injectHarness(page);
+        await showHiddenSteps(page, sample);
         expect(await unjudgedControls(page, verdictSelectors(sample.expected))).toEqual([]);
       } finally {
         await page.context().close();
@@ -112,18 +125,37 @@ for (const sample of samples) {
         const locators = locatorsOf(sample.expected);
         await injectHarness(page);
         const before = await inspect(page, locators);
-        const report: FillReport = await page.evaluate(async (locale) => {
-          const raf = window.__raf;
-          const resume = raf.samples.resumes.find((r) => r.locale === locale);
-          if (!resume) throw new Error(`no sample resume for ${locale}`);
-          return (await raf.runFill(document, { resume, files: raf.sampleFiles })).report;
-        }, sample.expected.__resume);
+        const fillOnce = async (): Promise<FillReport> => {
+          await injectHarness(page);
+          return page.evaluate(async (locale) => {
+            const raf = window.__raf;
+            const resume = raf.samples.resumes.find((r) => r.locale === locale);
+            if (!resume) throw new Error(`no sample resume for ${locale}`);
+            return (await raf.runFill(document, { resume, files: raf.sampleFiles })).report;
+          }, sample.expected.__resume);
+        };
+        // A step form moves on through its own Next, as the extension's auto-advance does. A snapshot cannot.
+        const run = sample.readInPlace ? { report: await fillOnce(), steps: 0, stop: 'snapshot' } : await fillThroughSteps(page, fillOnce);
+        // A step that asks what no resume answers holds the page there until the applicant has answered. Past that
+        // point the replay plays the applicant moving on: it shows the remaining steps and fills them as well,
+        // answering nothing for the applicant. What the fill had reached before that is kept, so the score can say
+        // which fields came only from the stand-in.
+        let reached: Inspection | undefined;
+        if (sample.expected.__hiddenSteps && run.stop !== 'final') {
+          await uploads.settled();
+          reached = await inspect(page, locators);
+          await showHiddenSteps(page, sample);
+          run.report = mergeReports([run.report, await fillOnce()]);
+          run.stop += ', then the remaining steps shown';
+        }
+        const report = run.report;
+        if (process.env.CAPTURED_DEBUG) console.log(`  steps moved on: ${run.steps}, stopped: ${run.stop}`);
         await uploads.settled();
         const after = await inspect(page, locators);
-        score = scoreSample(sample, 'harness', before, after, report);
+        score = scoreSample(sample, 'harness', before, after, report, reached);
         if (process.env.CAPTURED_DEBUG) {
           for (const f of report.fields) {
-            console.log(`  · ${f.outcome} ${f.fieldKey ?? '-'} (${f.confidence}) "${f.label}" -> ${f.observed ?? f.value ?? ''}`);
+            console.log(`  · ${f.outcome} ${f.fieldKey ?? '-'} (${f.confidence}) "${f.label}" [${f.source ?? ''}] -> ${f.observed ?? f.value ?? ''}`);
           }
         }
       } finally {

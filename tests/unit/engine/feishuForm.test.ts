@@ -4,7 +4,7 @@ import { planFill } from '../../../src/engine/plan';
 import { entryCount } from '../../../src/engine/values';
 import { scanDocument } from '../../../src/engine/scan';
 import { createSampleProfile } from '../../../src/schema/samples';
-import { FEISHU_FORM } from '../../shared/feishuForm';
+import { FEISHU_ENTRY_FORM, FEISHU_FORM } from '../../shared/feishuForm';
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -120,5 +120,42 @@ describe('what the form is given', () => {
   it('the name field of a project is not the name of the person', () => {
     const names = scan().of('项目名称');
     expect(names.every((n) => n.step?.intent.kind === 'text' && n.step.intent.text !== '林知远')).toBe(true);
+  });
+});
+
+describe('sections that take several entries', () => {
+  function scanEntries() {
+    const doc = new DOMParser().parseFromString(`<body>${FEISHU_ENTRY_FORM}</body>`, 'text/html');
+    document.body.replaceChildren(...Array.from(doc.body.childNodes).map((n) => document.adoptNode(n)));
+    const { contexts, classifications } = scanDocument(document);
+    const resume = structuredClone(createSampleProfile().resumes.find((x) => x.id === 'sample-zh')!);
+    const plan = planFill(contexts, classifications, resume, {});
+    return (section: string, title: string) => {
+      const i = contexts.findIndex(
+        (c) =>
+          c.control.el.closest('.ud-formily-item')?.querySelector('label')?.textContent === title &&
+          c.control.el.closest('.applyFormModuleWrapper__d8a302')?.querySelector('.applyFormModuleWrapper-text')?.textContent === section,
+      );
+      if (i < 0) throw new Error(`no ${title} under ${section}`);
+      const planned = plan.steps.some((s) => s.fieldId === contexts[i]!.control.id);
+      return { key: classifications[i]!.fieldKey, planned };
+    };
+  }
+
+  it('the 描述 of an internship is filled, not left to check', () => {
+    expect(scanEntries()('实习经历', '描述')).toEqual({ key: 'work.description', planned: true });
+  });
+
+  it.each([
+    ['实习经历', '公司名称', 'work.company'],
+    ['实习经历', '职位名称', 'work.position'],
+    ['实习经历', '起止时间', 'work.period'],
+    ['实习经历', '描述', 'work.description'],
+    ['项目经历', '描述', 'projects.description'],
+    ['获奖经历', '奖项名称', 'awards.name'],
+    ['获奖经历', '获奖时间', 'awards.date'],
+    ['获奖经历', '描述', 'awards.description'],
+  ])('%s %s', (section, title, key) => {
+    expect(scanEntries()(section, title).key).toBe(key);
   });
 });

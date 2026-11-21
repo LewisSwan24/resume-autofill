@@ -59,6 +59,17 @@ describe('stripNumbering', () => {
     ['教育经历', '教育经历'],
     ['统一', '统一'],
     ['2', '2'],
+    ['教育经历一', '教育经历'],
+    ['教育经历二', '教育经历'],
+    ['实习经历十二', '实习经历'],
+    ['教育经历（二）', '教育经历'],
+    ['教育经历 (三)', '教育经历'],
+    ['教育经历【四】', '教育经历'],
+    ['教育经历　２', '教育经历'],
+    ['实习经历（２）', '实习经历'],
+    ['第二段教育经历', '教育经历'],
+    ['唯一', '唯一'],
+    ['ＡＢＣ 公司', 'ＡＢＣ 公司'],
   ])('%s -> %s', (input, expected) => {
     expect(stripNumbering(input)).toBe(expected);
   });
@@ -245,6 +256,24 @@ describe('findGroup', () => {
     // A lone antd Select item has 1 control (its search input is consumed by the widget).
     scan(`<div id="s"><h3>Jobs</h3>${antdItem('A', 'a', antdSelect('a'))}${antdItem('B', 'b', antdSelect('b'))}</div>`);
     expect(findGroup($('#a'), $('#s'))).toBeNull();
+  });
+
+  it.each([
+    ['教育经历一', '教育经历二'],
+    ['教育经历（一）', '教育经历（二）'],
+    ['教育经历１', '教育经历２'],
+  ])('keeps %s and %s as two cards of one section', (first, second) => {
+    const cnCard = (title: string, n: number) => `
+      <div class="card"><h4>${title}</h4>
+        <div class="row"><label for="s${n}">学校名称</label><input id="s${n}"></div>
+        <div class="row"><label for="m${n}">专业</label><input id="m${n}"></div>
+      </div>`;
+    scan(`<fieldset id="f"><legend>教育经历</legend>${cnCard(first, 1)}${cnCard(second, 2)}</fieldset>`);
+    const g0 = findGroup($('#s1'), $('#f'));
+    const g1 = findGroup($('#m2'), $('#f'));
+    expect(g0?.index).toBe(0);
+    expect(g1?.index).toBe(1);
+    expect(g0?.key).toBe(g1?.key);
   });
 });
 

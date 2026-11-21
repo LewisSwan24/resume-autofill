@@ -36,6 +36,23 @@ const project =
   item('link', '项目链接', box('link'), false) +
   item('desc', '描述', area('desc'), false);
 
+// No live form seen yet asks about internships or awards: these use the parts and the ways of naming them above.
+const internship =
+  item('company', '公司名称', box('company')) +
+  item('title', '职位名称', box('title')) +
+  item('start_end_time', '起止时间', feishuSpan()) +
+  item('desc', '描述', area('desc'), false);
+const award = item('name', '奖项名称', box('name')) + item('award_time', '获奖时间', feishuMonth(), false) + item('desc', '描述', area('desc'), false);
+
+/** Just the sections that take several entries, each with one empty card and 添加 under it. */
+export const FEISHU_ENTRY_FORM =
+  `<form><div class="ud-formily-layout">` +
+  moduleOf('教育经历', cards('education_list', schooling, 1)) +
+  moduleOf('实习经历', cards('internship_list', internship, 1)) +
+  moduleOf('项目经历', cards('project_list', project, 1)) +
+  moduleOf('获奖经历', cards('award_list', award, 1)) +
+  `</div></form>`;
+
 export const FEISHU_FORM =
   `<form><div class="ud-formily-layout">` +
   moduleOf('基本信息',

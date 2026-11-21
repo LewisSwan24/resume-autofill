@@ -94,6 +94,8 @@ export interface FieldContext {
   /** Sorted by weight desc, de-duplicated by normalized text. */
   evidence: Evidence[];
   sectionTitle: string | null;
+  /** Advice printed under the section's title, which can narrow it: 除英语外的其他外语能力. */
+  sectionNote?: string;
   sectionRoot: Element | null;
   /** Repeated card ("第 N 段经历"). */
   group: FieldGroup | null;
@@ -145,8 +147,8 @@ export interface FieldReport {
   /** Resume path, e.g. "education[1].school". */
   source?: string;
   candidates?: { label: string; value?: string; fieldKey?: FieldKey }[];
-  /** Why this row needs the user, when the outcome does not say. */
-  note?: 'same_file_held';
+  /** What the outcome does not say: why this row needs the user, or that its card was the page's own entry already. */
+  note?: 'same_file_held' | 'entry_held';
 }
 
 export interface FillReport {

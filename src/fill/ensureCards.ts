@@ -12,6 +12,7 @@ import { isVisible } from '../engine/visibility';
 import { waitFor } from '../drivers/wait';
 import { simulateClick } from '../drivers/events';
 import type { Resume } from '../schema';
+import { heldEntries } from './heldEntries';
 
 export interface SectionGrowth {
   section: SectionKey;
@@ -147,8 +148,10 @@ interface SectionState {
 function sectionStates(doc: Document, resume: Resume, idFor?: (el: HTMLElement) => string): SectionState[] {
   const scan = scanDocument(doc, idFor);
   const demand = planFill(scan.contexts, scan.classifications, resume).cardDemand;
+  // A card holding an entry the resume does not have takes none of the resume's.
+  const foreign = heldEntries(scan.contexts, scan.classifications, resume).foreign;
   const have = new Map<SectionKey, number>();
-  for (const d of demand) have.set(d.section, Math.max(have.get(d.section) ?? 0, d.have));
+  for (const d of demand) have.set(d.section, Math.max(have.get(d.section) ?? 0, d.have - (foreign.get(d.section) ?? 0)));
   for (const b of findAddButtons(doc)) {
     if (b.section && REPEATED.has(b.section) && !have.has(b.section)) have.set(b.section, 0);
   }

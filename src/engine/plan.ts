@@ -49,7 +49,7 @@ const MAX_REPORT_LABEL = 80;
 const shortLabel = (text: string | undefined): string | undefined =>
   text && text.length > MAX_REPORT_LABEL ? `${text.slice(0, MAX_REPORT_LABEL)}…` : text;
 
-function baseReport(ctx: FieldContext, cls: Classification, locale: Resume['locale']): FieldReport {
+export function baseReport(ctx: FieldContext, cls: Classification, locale: Resume['locale']): FieldReport {
   return {
     fieldId: ctx.control.id,
     label: shortLabel(ctx.evidence[0]?.text) ?? UNNAMED_REQUIRED[locale],
@@ -144,6 +144,7 @@ export function planFill(
         : resolveValue(cls.fieldKey, resume, entryIndex, cls.section, {
             hasInternshipSection,
             askedAs: report.label,
+            ...(ctx.sectionNote ? { sectionNote: ctx.sectionNote } : {}),
             ...(opts.now ? { now: opts.now } : {}),
           });
     if (!resolved) {
@@ -159,6 +160,12 @@ export function planFill(
       ...(opts.presetId ? { presetId: opts.presetId } : {}),
       presetCtx: { resume, ...(opts.pageTitle ? { pageTitle: opts.pageTitle } : {}), ...(opts.pageUrl ? { pageUrl: opts.pageUrl } : {}) },
     });
+    if (intent?.kind === 'multi' && cls.fieldKey === 'languages.certificate') {
+      // A list of tests that takes several wants every one passed, and which of them to tick, or whether one
+      // stands for those below it, is not settled. The resume's own answer is shown for the applicant to pick.
+      reports.push({ ...report, outcome: 'needs_review', value: intent.display, source: resolved.source });
+      return;
+    }
     if (!intent && def.type === 'period' && ctx.control.kind === 'date') {
       // A job still going, or a picker that holds one date: what to put is for the applicant to say.
       reports.push({ ...report, outcome: 'needs_review', source: resolved.source });

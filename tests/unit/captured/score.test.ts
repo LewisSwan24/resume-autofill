@@ -138,6 +138,43 @@ describe('scoreSample', () => {
     });
   });
 
+  describe('controls with no id or name are told apart by their order', () => {
+    const before: Inspection = { ...emptyPage, snapshot: { ...emptyPage.snapshot, 'checkbox=': '', 'checkbox=~1': 'true' } };
+
+    it('one the fill adds in front of another moves its number, which is not a change', () => {
+      const after = filled({ snapshot: { 'checkbox=': '', 'checkbox=~1': '', 'checkbox=~2': 'true' } });
+      expect(scoreSample(sample(expected()), 'harness', before, after, allFilled()).extras).toEqual([]);
+    });
+
+    it('one the fill adds that holds a value nothing covers is a change', () => {
+      const after = filled({ snapshot: { 'checkbox=': '', 'checkbox=~1': 'true', 'checkbox=~2': 'true' } });
+      expect(scoreSample(sample(expected()), 'harness', before, after, allFilled()).extras).toHaveLength(1);
+    });
+
+    it('a value that really went is still a change', () => {
+      const after = filled({ snapshot: { 'checkbox=': '', 'checkbox=~1': '' } });
+      expect(scoreSample(sample(expected()), 'harness', before, after, allFilled()).extras).toEqual([{ key: 'checkbox=~1', before: 'true', after: '' }]);
+    });
+
+    it('a tick that moved to another box, with none added, is a change', () => {
+      const after = filled({ snapshot: { 'checkbox=': 'true', 'checkbox=~1': '' } });
+      expect(scoreSample(sample(expected()), 'harness', before, after, allFilled()).extras).toHaveLength(2);
+    });
+
+    it('a tick that moved further down, with none added, is a change', () => {
+      const three: Inspection = { ...emptyPage, snapshot: { ...emptyPage.snapshot, 'checkbox=': 'true', 'checkbox=~1': '', 'checkbox=~2': '' } };
+      const after = filled({ snapshot: { 'checkbox=': '', 'checkbox=~1': '', 'checkbox=~2': 'true' } });
+      expect(scoreSample(sample(expected()), 'harness', three, after, allFilled()).extras).toHaveLength(2);
+    });
+
+    it('a tick that moved ahead of where it was, with one added, is a change', () => {
+      const three: Inspection = { ...emptyPage, snapshot: { ...emptyPage.snapshot, 'checkbox=': '', 'checkbox=~1': 'true' } };
+      // One box added, but the tick now sits on the first box, before every empty one that was there.
+      const after = filled({ snapshot: { 'checkbox=': 'true', 'checkbox=~1': '', 'checkbox=~2': '' } });
+      expect(scoreSample(sample(expected()), 'harness', three, after, allFilled()).extras.length).toBeGreaterThan(0);
+    });
+  });
+
   it('counts known gaps as not correct', () => {
     const e = expected({ __knownGaps: { Other: { selector: '#other', reason: 'no driver' } }, __knownGapsMax: 1 });
     const score = scoreSample(sample(e), 'harness', emptyPage, filled({ coverage: { Other: ['text#other'] } }), allFilled());
@@ -234,6 +271,26 @@ describe('a report that says something else than the page', () => {
     const before: Inspection = { ...emptyPage, snapshot: { ...filled().snapshot } };
     const r = report([{ label: 'E-mail *', fieldKey: 'contact.email', outcome: 'filled', observed: 'a@b.example' }]);
     expect(scoreSample(sample(e), 'harness', before, after, r).falselyFailed).toEqual([]);
+  });
+
+  describe('a list that takes several, holding only the answers it offers', () => {
+    const partial = expected({ fields: { ...expected().fields, Email: { selector: '#email', expect: 'a@b.example', partial: true } } });
+    const rowsWith = (outcome: FieldReport['outcome']) =>
+      report([
+        { label: 'Email', outcome, observed: 'a@b.example' },
+        { label: 'Phone', outcome: 'filled', observed: '0412345678' },
+        { label: 'Resume', outcome: 'filled', observed: 'cv.pdf' },
+      ]);
+
+    it('is right when it is reported for review, since the rest of the answers were not there', () => {
+      const score = scoreSample(sample(partial), 'harness', emptyPage, filled(), rowsWith('needs_review'));
+      expect(score.correct).toBe(3);
+      expect(scoreProblems(score, partial)).toEqual([]);
+    });
+
+    it('is a false report when it says filled, as if every answer had been taken', () => {
+      expect(scoreSample(sample(partial), 'harness', emptyPage, filled(), rowsWith('filled')).falselyFailed).toEqual(['Email: reported filled, not needs_review']);
+    });
   });
 
   it('does not call a wrong value a false report: the report is right to fail it', () => {
@@ -339,6 +396,16 @@ describe('every control gets a verdict', () => {
   it('uses the control of a field that only checks what the site shows afterwards', () => {
     const shown = expected({ fields: { Resume: { selector: '.uploaded', exists: true, control: '#resume' } } });
     expect(verdictSelectors(shown)).toEqual(['#resume']);
+  });
+
+  it('leaves out a field on an entry the fill adds, which the page before the fill does not have', () => {
+    const later = expected({
+      fields: {
+        Email: { selector: '#email', expect: 'a@b.example' },
+        'School, second entry': { selector: '.entry:nth-child(2) input', expect: 'Example University', added: true },
+      },
+    });
+    expect(verdictSelectors(later)).toEqual(['#email']);
   });
 });
 

@@ -269,6 +269,8 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
     const def = getFieldKeyDef(fieldKey)!;
     // Under a project or an award the bare word is where that was, and the resume has no such place.
     if (fieldKey === 'basics.currentLocation' && section && !def.sections.includes(section) && evidence.some((e) => BARE_PLACE.test(normalizeLabel(e.text)))) continue;
+    // 导师 under an internship, a project or a club is the mentor there, not anyone from school.
+    if (fieldKey === 'education.supervisor' && section !== 'education') continue;
     const someoneElses = def.sections.length > 0 && def.sections.every((s) => ABOUT_SOMEONE_ELSE.has(s));
     const score = round3(sectionAdjust(def, Math.min(1, 1 - miss), section) * (askedOfYou && someoneElses ? YOURS_FACTOR : 1));
     if (score >= MIN_CANDIDATE) candidates.push({ fieldKey, confidence: Math.min(1, score), weight, score });

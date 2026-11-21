@@ -25,6 +25,8 @@ export interface ResolveOptions {
   now?: Date;
   /** The question as the page words it: one about English, or about one test, picks its language entry. */
   askedAs?: string;
+  /** Advice under the section's title, which can narrow it: 除英语外的其他外语能力. */
+  sectionNote?: string;
 }
 
 /** Enum domains for text-typed keys that nevertheless have a dictionary (used when the control offers options). */
@@ -148,14 +150,30 @@ function highestSchooling<T extends { entry: unknown }>(rows: T[]): T | undefine
  * empty rather than taking another language's answer. A question about the languages besides English takes those in
  * order, and any other question takes the cards in order.
  */
-function languageRow<T extends { entry: unknown }>(rows: T[], entryIndex: number, askedAs = ''): T | undefined {
-  if (asksBesidesEnglish(askedAs)) return rows.filter((r) => languageOf(r.entry) !== 'en')[entryIndex];
+function languageRow<T extends { entry: unknown }>(rows: T[], entryIndex: number, askedAs = '', sectionNote = ''): T | undefined {
+  if (asksBesidesEnglish(askedAs) || asksBesidesEnglish(sectionNote)) return rows.filter((r) => languageOf(r.entry) !== 'en')[entryIndex];
   const tests = testsNamed(askedAs);
   if (tests.length > 0) return bestEnglish(rows.filter((r) => tests.includes(testOf(r.entry) ?? '')));
   const language = languageNamed(askedAs);
   if (language === 'en') return bestEnglish(rows.filter((r) => languageOf(r.entry) === 'en'));
   if (language) return rows.find((r) => languageOf(r.entry) === language);
   return rows[entryIndex];
+}
+
+const SUPERVISED = /导师|指导(?:老师|教师)|supervisor|advis[oe]r/i;
+const schoolName = (s: unknown): string => (typeof s === 'string' ? s.normalize('NFKC').replace(/\s+/g, '').toLowerCase() : '');
+
+/**
+ * 在校导师 on a school's card: a referee whose relationship says supervisor and who works at that school. Anyone
+ * else, or one at another school, is not this card's answer.
+ */
+function supervisorAt(school: Record<string, unknown>, resume: Resume): ResolvedValue | null {
+  const names = [school.school, school.schoolEn].map(schoolName).filter(Boolean);
+  if (names.length === 0) return null;
+  const hits = resume.referees.flatMap((r, index) =>
+    SUPERVISED.test(r.relationship ?? '') && names.includes(schoolName(r.company)) && r.name.trim() ? [{ name: r.name.trim(), index }] : [],
+  );
+  return hits.length === 1 ? { raw: hits[0]!.name, source: `referees[${hits[0]!.index}].name` } : null;
 }
 
 const lastSchooling = <T extends { entry: unknown }>(rows: T[]): T | undefined =>
@@ -290,6 +308,8 @@ export function resolveValue(
   }
   // The resume holds one score per test; a box for one skill's part of it (听力成绩) has no answer there.
   if (fieldKey === 'languages.score' && asksPartScore(opts.askedAs ?? '')) return null;
+  // A supervisor at school belongs to one school's card. Away from it, a mentor is someone else's.
+  if (fieldKey === 'education.supervisor' && section !== 'education') return null;
   if (ARRAY_MODULES.has(module)) {
     const rows = sectionEntries(resume, module as ArrayModule, section, opts.hasInternshipSection);
     // Away from the cards, as on 最高学历 next to the name, a question about schooling means the highest.
@@ -297,7 +317,7 @@ export function resolveValue(
       module === 'education' && section && section !== 'education' && entryIndex === 0
         ? highestSchooling(rows)
         : module === 'languages'
-          ? languageRow(rows, entryIndex, opts.askedAs)
+          ? languageRow(rows, entryIndex, opts.askedAs, opts.sectionNote)
           : rows[entryIndex];
     if (!row) return null;
     const entry = row.entry as Record<string, unknown>;
@@ -310,6 +330,7 @@ export function resolveValue(
     }
     if (field === 'endDate' && entry.current === true && !entry.endDate) return null;
     if (field === 'period') return periodOf(entry, source);
+    if (field === 'supervisor') return supervisorAt(entry, resume);
     return wrap(entry[field], source);
   }
   const single = (resume as unknown as Record<string, Record<string, unknown> | undefined>)[module];
@@ -539,7 +560,8 @@ export function toIntent(
     const [start = '', end = ''] = raw.split('/');
     if (kind === 'date') {
       const [from, to] = control.dateRange ? [dateIntent(start, control), dateIntent(end, control)] : [null, null];
-      if (from?.kind === 'date' && end === STILL_GOING && (control.lib === 'feishu' || control.lib === 'native')) {
+      const saysStillGoing = control.lib === 'feishu' || control.lib === 'native' || (control.lib === 'moka' && control.el.querySelector('input[type=checkbox]') !== null);
+      if (from?.kind === 'date' && end === STILL_GOING && saysStillGoing) {
         return { kind: 'dateFrom', display: `${from.display} ~ ${locale === 'zh-CN' ? '至今' : 'Present'}`, start: from };
       }
       if (from?.kind !== 'date' || to?.kind !== 'date') return null;

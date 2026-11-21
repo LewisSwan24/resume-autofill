@@ -325,6 +325,7 @@ export const zh = {
   'panel.editLabel': '新值',
   'panel.editInput': '“{label}”的新值',
   'panel.editHelp': '会直接写入页面上的这个字段。',
+  'panel.note.entryHeld': '页面上已有这一条，里面的内容没有改动。要按简历填写的话，先在页面上清空，再填写一次。',
   'panel.note.sameFileHeld': '页面上已有同名文件，它可能是旧版本。要换的话，先在页面上删掉，再填写一次。',
   'panel.save': '保存',
   'panel.locate': '定位到该字段',
@@ -344,6 +345,7 @@ export const zh = {
   'status.action_failed': '填写失败',
   'status.no_data': '简历里没有',
   'status.no_control': '没有控件',
+  'status.entry_held': '页面上已有',
   // status.group.* : tone groups shared by FAB card and side panel chips (STATUS_GROUPS in src/ui/status.ts)
   'status.group.filled': '已填写',
   'status.group.review': '待确认',

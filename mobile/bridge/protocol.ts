@@ -69,7 +69,7 @@ const FieldReportShape = z.strictObject({
     )
     .max(MAX_CANDIDATES)
     .optional(),
-  note: z.literal('same_file_held').optional(),
+  note: z.enum(['same_file_held', 'entry_held']).optional(),
 });
 
 /** Counts travel along but the app recomputes them (countOutcomes); only the shape is checked. */

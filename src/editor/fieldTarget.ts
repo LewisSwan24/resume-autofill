@@ -30,6 +30,11 @@ const SAME_AS: Readonly<Record<string, string>> = {
   'education.classYear': 'endDate',
 };
 
+/** Field keys worked out from another module's entries: the module and the input there. */
+const ELSEWHERE: Readonly<Record<string, { module: ModuleName; field: string }>> = {
+  'education.supervisor': { module: 'referees', field: 'name' },
+};
+
 /** In every list module: a span of dates starts at the start date; "Present" is the box under the end date. */
 const IN_ANY_LIST: Readonly<Record<string, string>> = { period: 'startDate', current: 'endDate' };
 
@@ -40,6 +45,8 @@ function entryOf(module: string, source: string | undefined): number {
 }
 
 export function targetOfField(fieldKey: string, source?: string): ProfileTarget | null {
+  const away = ELSEWHERE[fieldKey];
+  if (away) return { module: away.module, entry: entryOf(away.module, source), field: away.field };
   const dot = fieldKey.indexOf('.');
   if (dot <= 0) return null;
   const head = fieldKey.slice(0, dot);

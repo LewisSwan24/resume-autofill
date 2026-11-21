@@ -139,3 +139,20 @@ export const BEISEN_FORM =
     item('受雇于本公司亲属信息', TEXTAREA, false),
   ])) +
   '</div>';
+
+/** The questions of one entry, per section. No live form seen yet asks about internships: they are laid out as jobs. */
+export const BEISEN_ENTRY_ITEMS = {
+  education: [item('学校名称', INPUT()), item('开始时间', DATE), item('结束时间', DATE), item('专业名称', INPUT()), item('学历', SELECT)],
+  internship: [item('公司名称', INPUT()), item('职位名称', INPUT()), item('开始时间', DATE), item('结束时间', DATE, false), item('工作描述', TEXTAREA, false)],
+  projects: project,
+  awards: [item('获奖项', INPUT()), item('获奖时间', DATE)],
+};
+
+/** Just the sections that take several entries, each with the one empty entry a fresh form shows. */
+export const BEISEN_ENTRY_FORM =
+  '<div class="sc-form-root kLmNo">' +
+  section('教育经历', list([entry(BEISEN_ENTRY_ITEMS.education)], '教育经历')) +
+  section('实习经历', list([entry(BEISEN_ENTRY_ITEMS.internship)], '实习经历')) +
+  section('项目经历', list([entry(BEISEN_ENTRY_ITEMS.projects)], '项目经历')) +
+  section('获奖情况', list([entry(BEISEN_ENTRY_ITEMS.awards)], '获奖情况')) +
+  '</div>';

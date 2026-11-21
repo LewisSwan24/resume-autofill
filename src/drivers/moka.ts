@@ -88,6 +88,49 @@ async function fillSelect(control: Control, intent: FillIntent, ctx: DriverConte
   return taken ? { ok: true, observed: result.picked } : failed('the list did not take the choice', shownIn(control.el));
 }
 
+// ---- a list that takes several ----------------------------------------------------------------------------------
+
+const TAGS = '[class*="sd-Input-tag-container"]';
+const isMulti = (control: Control): boolean => control.el.querySelector(TAGS) !== null;
+const tagsIn = (control: Control): string[] => Array.from(control.el.querySelectorAll(REGION_TAG)).map((t) => clean(t.textContent));
+const readTags = (control: Control): string | null => tagsIn(control).join('、') || null;
+
+/**
+ * Each answer on the list gets a tick, one already there stays, and anything else is left as it is. When some answers
+ * are not on the list, the ticks made stay and the applicant is asked to look, told which answers were not there.
+ */
+async function fillMulti(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
+  if (intent.kind !== 'multi') return failed(`a ${intent.kind} answer on a list that takes several`, readTags(control));
+  const panel = await openPanel(control.el, ctx, 1500);
+  if (!panel) return failed('the list did not open', readTags(control));
+  try {
+    const labels = visibleOptions(panel, OPTION).map((o) => o.info);
+    const wanted: string[] = [];
+    const notThere: string[] = [];
+    let unsure = false;
+    for (const item of intent.items) {
+      const m = item.match(labels);
+      if (m.status === 'matched') {
+        if (!wanted.includes(labels[m.index]!.label)) wanted.push(labels[m.index]!.label);
+      } else notThere.push(item.query);
+      if (m.status === 'ambiguous') unsure = true;
+    }
+    if (wanted.length === 0) return failed('nothing on the list fits', readTags(control), unsure ? 'needs_review' : 'no_option');
+    for (const name of wanted) {
+      if (tagsIn(control).includes(name)) continue;
+      // Picking draws the list again, so the row is found afresh each time.
+      const row = visibleOptions(panel, OPTION).find((o) => o.info.label === name);
+      if (!row) return failed(`${name} went from the list`, readTags(control));
+      simulateClick(row.el.querySelector('[class*="sd-Menu-content"]') ?? row.el);
+      if (!(await settled(() => tagsIn(control).includes(name), ctx))) return failed(`the list did not take ${name}`, readTags(control));
+    }
+    if (notThere.length > 0) return failed(`not on the list: ${notThere.join('、')}`, readTags(control), 'needs_review');
+    return { ok: true, observed: readTags(control) };
+  } finally {
+    shutDropdown(ctx.doc, () => findDropdownNear(control.el, PANEL, { doc: ctx.doc }) !== null);
+  }
+}
+
 // ---- a date as two lists, year then month ------------------------------------------------------------------
 
 const asYear = (year: number) => (label: string) => clean(label).replace(/年$/, '') === String(year);
@@ -112,18 +155,40 @@ async function fillPart(picker: HTMLElement, fits: (label: string) => boolean, c
   return taken;
 }
 
+/** The 至今 box beside a span: ticked, it takes the end's two lists off the page. */
+const stillBox = (control: Control): HTMLInputElement | null => control.el.querySelector<HTMLInputElement>('input[type=checkbox]');
+
 const readParts = (control: Control): string | null => {
   const shown = Array.from(control.el.querySelectorAll(PICKER)).map(shownIn);
   if (shown.every((s) => !s)) return null;
   const date = (y = '', m = '') => (y && m ? `${y}-${m.padStart(2, '0')}` : y || m);
   const [a, b, c, d] = shown;
+  if (shown.length === 2 && stillBox(control)?.checked) return `${date(a, b)} ~ 至今`;
   return shown.length === 4 ? `${date(a, b)} ~ ${date(c, d)}` : date(a, b);
 };
 
+async function setStill(control: Control, on: boolean, ctx: DriverContext): Promise<boolean> {
+  const box = stillBox(control);
+  if (!box) return false;
+  if (box.checked !== on) simulateClick(box);
+  const lists = on ? 2 : 4;
+  return settled(() => box.checked === on && control.el.querySelectorAll(PICKER).length === lists, ctx);
+}
+
 async function fillParts(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
+  // Still going on a span with no 至今: a start alone would leave half an answer, so nothing is written.
+  if (intent.kind === 'dateFrom' && !stillBox(control)) return failed('still going, and the form has no word for that', readParts(control), 'needs_review');
+  // A span still going ticks 至今; one that ended needs it off, or there is nowhere for the end to go.
+  if (intent.kind === 'dateFrom' ||(intent.kind === 'dateRange' && stillBox(control)?.checked)) {
+    if (!(await setStill(control, intent.kind === 'dateFrom', ctx))) return failed('the 至今 box would not change', readParts(control));
+  }
   const pickers = Array.from(control.el.querySelectorAll<HTMLElement>(PICKER));
   const dates: DatePart[] | null =
-    intent.kind === 'date' && pickers.length === 2 ? [intent] : intent.kind === 'dateRange' && pickers.length === 4 ? [intent.start, intent.end] : null;
+    (intent.kind === 'date' || intent.kind === 'dateFrom') && pickers.length === 2
+      ? [intent.kind === 'date' ? intent : intent.start]
+      : intent.kind === 'dateRange' && pickers.length === 4
+        ? [intent.start, intent.end]
+        : null;
   if (!dates) return failed(`a ${intent.kind} answer on ${pickers.length} lists`, readParts(control));
   for (const [i, date] of dates.entries()) {
     if (!(await fillPart(pickers[i * 2]!, asYear(date.year), ctx))) return failed(`no year ${date.year} on the list`, readParts(control));
@@ -170,31 +235,72 @@ async function fillMonthPanel(control: Control, intent: FillIntent, ctx: DriverC
 
 // ---- places, a level at a time --------------------------------------------------------------------------------
 
-/** 浙江省 on the resume is 浙江 on the panel, and 中国香港 is 香港. */
+/** 浙江省 on the resume is 浙江 on the panel, 中国香港 is 香港, and 阿克苏地区 may be written 阿克苏. */
 const placeName = (raw: string): string =>
   clean(raw)
     .replace(/^中国/, '')
-    .replace(/(?:壮族|回族|维吾尔)?自治区$|特别行政区$|省$|市$/, '');
+    .replace(/(?:壮族|回族|维吾尔)?自治区$|特别行政区$|省$|市$|地区$|盟$/, '');
+
+/** Moka keeps a place that was merged or renamed on its list, with （旧） after the name. */
+const RETIRED = /\s*[（(]旧[）)]$/;
+
+/**
+ * How a word on the panel fits a level of the resume, closest first: the same name; the same name, retired; the
+ * same place written short (武侯 for 武侯区, 凉山州 or 凉山 for 凉山彝族自治州). Null when it does not fit.
+ */
+function fitOf(tagText: string, name: string): number | null {
+  const want = placeName(name);
+  const tag = placeName(tagText);
+  if (tag === want) return 0;
+  const current = placeName(tagText.replace(RETIRED, ''));
+  if (current !== tag && current === want) return 1;
+  if (current.replace(/[区县]$/, '') === want) return 2;
+  // An autonomous prefecture or county, and the short name people write for it.
+  if (/自治[州县旗]$/.test(current)) {
+    const stem = want.replace(/[州县旗]$/, '');
+    if (stem.length >= 2 && current.startsWith(stem)) return 2;
+  }
+  return null;
+}
 
 function regionTag(panel: Element, name: string): Element | null {
-  const want = placeName(name);
-  // The cities everyone picks are listed first, above the province they sit in: the list proper comes last.
   const tags = Array.from(panel.querySelectorAll(REGION_TAG));
-  const hits = tags.filter((t) => placeName(t.textContent ?? '') === want);
-  if (hits.length > 0) return hits[hits.length - 1]!;
-  // 武侯 on the resume is 武侯区 on the panel, as long as only one place on it reads that way.
-  const short = tags.filter((t) => placeName(t.textContent ?? '').replace(/[区县]$/, '') === want);
-  return short.length === 1 ? short[0]! : null;
+  for (const rank of [0, 1, 2]) {
+    const hits = tags.filter((t) => fitOf(t.textContent ?? '', name) === rank);
+    // The cities everyone picks are listed first, above the province they sit in: the list proper comes last.
+    if (rank === 0 && hits.length > 0) return hits[hits.length - 1]!;
+    // A looser fit counts only when nothing else on the panel fits as well.
+    if (hits.length === 1) return hits[0]!;
+    if (hits.length > 1) return null;
+  }
+  return null;
 }
 
 const readPlace = (control: Control): string | null => clean(control.el.textContent) || clean(inputOf(control.el)?.value) || null;
+const levelsOf = (shown: string | null): string[] => (shown ?? '').split(/[\s/／,，、>＞-]+/).filter(Boolean);
+
+/** The box against the resume's levels: the same place, as deep or deeper; the start of it; or another place. */
+function compareShown(shown: string[], path: string[]): 'covers' | 'wider' | 'other' {
+  const n = Math.min(shown.length, path.length);
+  for (let i = 0; i < n; i++) if (fitOf(shown[i]!, path[i]!) === null) return 'other';
+  return shown.length >= path.length ? 'covers' : 'wider';
+}
 
 async function fillPlace(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
   if (intent.kind !== 'cascade') return failed(`a ${intent.kind} answer on a place`, readPlace(control));
+  // A place the page or the applicant put there first: the same place, perhaps down to its district, stays as it
+  // is; another place is kept and left to check. Only one that stops short of the resume is taken further.
+  const before = readPlace(control);
+  if (before) {
+    const was = compareShown(levelsOf(before), intent.path);
+    if (was === 'covers') return { ok: true, observed: before };
+    if (was === 'other') return failed('another place is already there', before, 'needs_review');
+  }
   const panel = await openPanel(control.el, ctx, 1500);
   if (!panel) return failed('the place panel did not open', readPlace(control));
   try {
     let previous: Element | null = null;
+    const picked: string[] = [];
     for (const name of intent.path) {
       const stale: Element | null = previous;
       const tag: Element | null = await waitFor<Element>(
@@ -206,14 +312,19 @@ async function fillPlace(control: Control, intent: FillIntent, ctx: DriverContex
       );
       // The levels above it are already in the box, so what is there is true but short of the answer.
       if (!tag) return failed(`no ${name} on the panel`, readPlace(control), previous ? 'needs_review' : 'no_option');
+      picked.push(clean(tag.textContent));
       simulateClick(tag);
       previous = tag;
     }
     const confirm = panel.querySelector('[class*="confirm-"] button');
     if (confirm) simulateClick(confirm);
-    const last = placeName(intent.path[intent.path.length - 1] ?? '');
-    const taken = await settled(() => (readPlace(control) ?? '').includes(last), ctx);
-    return taken ? { ok: true, observed: readPlace(control) } : failed('the panel did not take the place', readPlace(control));
+    // Every level, in order: a box that ends right but lost a level above is not the resume's place.
+    const sameAsPicked = () => {
+      const shown = levelsOf(readPlace(control));
+      return shown.length === picked.length && picked.every((p, i) => levelsOf(p).join('') === shown[i] || fitOf(shown[i]!, p) === 0);
+    };
+    const taken = await settled(sameAsPicked, ctx);
+    return taken ? { ok: true, observed: readPlace(control) } : failed('the box does not show every level picked', readPlace(control));
   } finally {
     shutDropdown(ctx.doc, () => findDropdownNear(control.el, PANEL, { doc: ctx.doc }) !== null);
   }
@@ -237,8 +348,8 @@ export const mokaDrivers: Driver[] = [
     lib: 'moka',
     kinds: ['select'],
     match: () => true,
-    fill: (c, i, ctx) => guarded(() => fillSelect(c, i, ctx), () => shownIn(c.el)),
-    read: (c) => shownIn(c.el) || null,
+    fill: (c, i, ctx) => (isMulti(c) ? guarded(() => fillMulti(c, i, ctx), () => readTags(c)) : guarded(() => fillSelect(c, i, ctx), () => shownIn(c.el))),
+    read: (c) => (isMulti(c) ? readTags(c) : shownIn(c.el) || null),
   },
   {
     id: 'moka-date',

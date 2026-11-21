@@ -258,6 +258,21 @@ describe('ensureCards', () => {
     expect(results.find((r) => r.section === 'internship')).toMatchObject({ added: 2, status: 'ok', need: 2 });
   });
 
+  it('a card that already holds someone’s own entry takes none of the resume’s, and one that holds the resume’s does', async () => {
+    const twoCards = (school: string) => {
+      mount();
+      document.getElementById('edu')!.insertAdjacentHTML('beforeend', eduCard(2));
+      (document.getElementById('s1') as HTMLInputElement).value = school;
+    };
+    twoCards('他人大学');
+    await ensureCards(document, zh, { timeoutMs: 500 });
+    expect(document.querySelectorAll('#edu .entry')).toHaveLength(3);
+    document.body.innerHTML = '';
+    twoCards(zh.education[1]!.school);
+    await ensureCards(document, zh, { timeoutMs: 500 });
+    expect(document.querySelectorAll('#edu .entry')).toHaveLength(2);
+  });
+
   it('grows a Beisen section through its plain add button: one project on the page, two on the resume', async () => {
     const doc = new DOMParser().parseFromString(`<body>${BEISEN_FORM}</body>`, 'text/html');
     document.body.replaceChildren(...Array.from(doc.body.childNodes).map((n) => document.adoptNode(n)));

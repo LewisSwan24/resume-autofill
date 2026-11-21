@@ -9,10 +9,19 @@ const text = (placeholder: string) =>
   `<div class="sd-Tooltip-container-2B2OE"><label class="sd-Input-container-2S_vM string_info no-adaptive-tooltip sd-Input-lg-3X8ma"><input type="text" class="${INPUT}" placeholder="${placeholder}"></label></div>`;
 const month = `<div class="item-half-mz_My7kExy">${mokaSelect('年')}</div><div class="item-half-mz_My7kExy">${mokaSelect('月')}</div>`;
 
+/** A list that takes several answers: each one picked shows as a tag inside the box, and the list stays open. */
+export const mokaMulti = (placeholder = '请选择') =>
+  `<div class="sd-Dropdown-container-1CigZ"><label class="sd-Input-container-2S_vM sd-Select-container-1Eq4x multi_select_info no-adaptive-tooltip sd-Input-lg-3X8ma"><div><span class="sd-Input-input-10L0t sd-Input-tag-container-1AfzM sd-Input-lg-3X8ma sd-Input-has-addon-3djHe"><input type="text" class="sd-Input-tag-input-pfCKo sd-Input-common-input-1XimE" placeholder="${placeholder}"></span></div>${ADDON}</label><span></span></div>`;
+
+/** A span with a box for a job still going: ticking 至今 takes the end's two lists off the page. */
+export const MOKA_STILL = '<span class="sign-MhIus99jyR"><label class="sd-Checkbox-container-3IoOq"><span class="sd-Checkbox-box-1tF62"><span class="sd-Checkbox-checker-Y9ZGJ"><input type="checkbox" class="sd-Checkbox-input-1uFHv" value=""></span></span><span class="sd-Checkbox-label-187mu"><div class="sd-Checkbox-label-text-3hBVW">至今</div></span></label></span>';
+const spanWithStill = `<div class="month-range-select date_info wrapper-Wilqy7sjl0"><label class="label-ZJNsc2aXvx"></label><span>${month}</span><span class="till-QjTOI37re2">-<br></span><span class="span-end">${month}</span>${MOKA_STILL}</div>`;
+
 const field = (type: string, title: string, control: string, required = true) =>
   `<div class="apply-field-Q2iJ7AtQGX ${type} apply-filed-padding-gvR51AnKq6"><div class="title-IWWQ0Xa4L7"><span><span>${title}</span></span>${required ? '<span class="required-asterisk-av7daEKsLS"></span>' : ''}</div><div class="ctrl-CICMG4Fr4_">${control}<div><div class="describe-GCCjupJ4ID"></div></div></div></div>`;
-const block = (title: string, fields: string, button = '') =>
-  `<div class="apply-block-KRDTLLb5hU"><div class="blockTitle-dcmrfhpkg1"><div class="sd-Spacing-spacing-inline-2zHeO sd-Spacing-justify-between-3DYHz"><span class="text-JHHb1llnzL theme-border-color"><span>${title}</span></span>${button}</div></div><div class="apply-fields-BzcXI4i2Pm">${fields}</div></div>`;
+/** A block may carry a line of advice under its title, inside the title's own box. */
+const block = (title: string, fields: string, button = '', note = '') =>
+  `<div class="apply-block-KRDTLLb5hU"><div class="blockTitle-dcmrfhpkg1"><div class="sd-Spacing-spacing-inline-2zHeO sd-Spacing-justify-between-3DYHz"><span class="text-JHHb1llnzL theme-border-color"><span>${title}</span></span>${button}</div>${note ? `<div class="describe-GCCjupJ4ID"><span>${note}</span></div>` : ''}</div><div class="apply-fields-BzcXI4i2Pm">${fields}</div></div>`;
 
 const ADD = '<button class="sd-Button-container-1cq0K sd-Button-text-1IIJk" type="button"><span class="sd-Button-content-1Zgzx"><span><span>添加</span></span></span></button>';
 
@@ -36,6 +45,9 @@ export const MOKA_FORM =
       field('day_info-S5Nug1w6IL', '出生日期 (年龄)', `<div class="sd-Dropdown-container-1CigZ"><label class="sd-Input-container-2S_vM day_info sd-Input-lg-3X8ma"><input type="text" class="${INPUT} sd-Input-has-addon-3djHe" readonly="" placeholder="出生日期 (年龄)"><span class="sd-Input-addon-1Dv-z sd-picker-addon-1SMM0"><div></div></span></label><span></span></div>`) +
       field('date_info-nCj8tT_zjw', '毕业时间', `<div class="month-range-select date_info wrapper-Wilqy7sjl0"><label class="label-ZJNsc2aXvx"></label><span>${month}</span></div>`) +
       field('Select-oqOV0aGogs', '最高学历', mokaSelect('请选择')) +
+      field('bool_info-qV6GUinJsJ', '是否接收组织调配', mokaSelect('请选择')) +
+      field('multi_select_info-OvKzabLoLf', '语言技能', mokaMulti()) +
+      field('multi_select_info-OvKzabLoLf', '英语等级', mokaMulti()) +
       field('location_info-D41gUYJobm', '籍贯', `<div class="sd-Dropdown-container-1CigZ container-ukSuRKdZ3K"><label class="sd-Input-container-2S_vM sd-Input-lg-3X8ma sd-Input-readonly-35zdZ"><div><span class="sd-Input-input-10L0t sd-Input-tag-container-1AfzM sd-Input-lg-3X8ma sd-Input-has-addon-3djHe"><input type="text" class="sd-Input-tag-input-pfCKo sd-Input-common-input-1XimE" readonly="" placeholder="请输入籍贯"></span></div><span class="sd-Input-addon-1Dv-z"><div></div><span class="sd-Icon-container-1EGHG sd-Icon-iconcaretDown-juEqC suffix-JuFycnhumt"></span></span></label><span></span></div>`, false),
   ) +
   block(
@@ -49,6 +61,20 @@ export const MOKA_FORM =
     ADD,
   ) +
   block(
+    '工作经历',
+    field('string_info-UOJxKN5mtC', '公司名称', text('公司名称')) +
+      field('date_info-nCj8tT_zjw full-width-field-_9KdqB6mcu', '起止时间', spanWithStill, false),
+    ADD,
+    '如为实习经历可在职位名称上备注实习生',
+  ) +
+  block(
+    '语言能力',
+    field('select_info-zjdod05hST', '语言类型', mokaSelect('请选择')) + field('string_info-UOJxKN5mtC', '所获证书', text('所获证书'), false),
+    ADD,
+    '除英语外的其他外语能力',
+  ) +
+  block('实习意向', field('select_info-zjdod05hST', '是否需要/可以提前实习', mokaSelect('请选择')), ADD) +
+  block(
     '更新说明',
     `<div class="apply-field-Q2iJ7AtQGX confirm_info-iqEC7RvBDg"><div class="ctrl-CICMG4Fr4_"><label class="sd-Checkbox-container-3IoOq"><span class="sd-Checkbox-box-1tF62"><input type="checkbox" class="sd-Checkbox-input-1uFHv"></span><span class="sd-Checkbox-label-187mu"><div class="sd-Checkbox-label-text-3hBVW"><span>同步更新在线简历</span></div></span></label></div></div>`,
   ) +
@@ -57,6 +83,65 @@ export const MOKA_FORM =
 /** Every Moka page carries this hidden version tag, on a company's own domain too. */
 export const MOKA_MARKER =
   '<input style="display: none" id="moka-version" data-gray-released="0" data-version="20260101-0000-00000-release">';
+
+// ---- sections that take several entries --------------------------------------------------------------------------
+
+/** A span, with or without the 至今 box that takes the end's two lists off the page (工作经历 and 项目经验). */
+const span = (still: boolean) =>
+  still ? spanWithStill : `<div class="month-range-select date_info wrapper-Wilqy7sjl0"><label class="label-ZJNsc2aXvx"></label><span>${month}</span><span class="till-QjTOI37re2">-<br></span><span>${month}</span></div>`;
+const area = (placeholder: string) =>
+  `<div class="sd-Textarea-container-1Hj7A" style="width: 100%;"><textarea class="sd-Textarea-textarea-dyLbN text_info" placeholder="${placeholder}"></textarea></div>`;
+const yearMonth = `<div class="month-range-select date_info wrapper-Wilqy7sjl0"><label class="label-ZJNsc2aXvx"></label><span>${month}</span></div>`;
+
+const ADD_WITH_ICON =
+  '<button class="sd_global_focus_controller_class sd-Button-container-1cq0K sd-Button-text-1IIJk" type="button"><span class="sd-Button-content-1Zgzx"><span class="sd-Icon-container-1EGHG sd-Icon-iconadd-2bWGG sd-Button-left-icon-21UeS"></span><span><span>添加</span></span></span></button>';
+const REMOVE_ENTRY =
+  '<div class="sd-Tooltip-container-2B2OE"><button class="sd_global_focus_controller_class sd-Button-container-1cq0K" type="button"><span class="sd-Button-content-1Zgzx"><span><span>删除本条</span></span></span></button></div>';
+
+/** One entry: its questions, then 删除本条. */
+export const mokaEntry = (fields: string) => `<div class="apply-fields-BzcXI4i2Pm multi-NTCDdF2lci">${fields}${REMOVE_ENTRY}</div>`;
+
+/** The questions of one entry, per section, in the order the live form asks them. */
+export const MOKA_ENTRY_FIELDS = {
+  education:
+    field('Select-oqOV0aGogs', '学历', mokaSelect('请选择')) +
+    field('string_info-UOJxKN5mtC', '学校名称', mokaSelect('请输入就读学校')) +
+    field('string_info-UOJxKN5mtC', '专业名称', mokaSelect('请输入专业名称')) +
+    field('date_info-nCj8tT_zjw', '就读时间', span(false)),
+  work:
+    field('string_info-UOJxKN5mtC', '公司名称', text('公司名称'), false) +
+    field('string_info-UOJxKN5mtC', '职位名称', text('职位名称'), false) +
+    field('date_info-nCj8tT_zjw', '起止时间', span(true), false) +
+    field('text_info-YMkFcQzvoO', '工作职责', area('内容'), false),
+  projects:
+    field('string_info-UOJxKN5mtC', '项目名称', text('项目名称'), false) +
+    field('text_info-YMkFcQzvoO', '项目中职责', area('项目中职责'), false) +
+    field('date_info-nCj8tT_zjw', '起止时间', span(true), false) +
+    field('text_info-YMkFcQzvoO', '项目描述', area('内容'), false),
+  // No live Moka form seen yet asks about awards: the same parts, under the words such a section would use.
+  awards:
+    field('string_info-UOJxKN5mtC', '奖项名称', text('奖项名称'), false) +
+    field('date_info-nCj8tT_zjw', '获奖时间', yearMonth, false),
+};
+
+/**
+ * A section that takes several entries: 添加 beside its title adds an empty entry under the last one, and the page
+ * starts with one empty entry. The live 工作经历 has a line under its title saying internships go there too.
+ */
+export const mokaEntryBlock = (title: string, fields: string, note = '', entries = 1) =>
+  `<div class="apply-block-KRDTLLb5hU"><div class="blockTitle-dcmrfhpkg1"><div class="sd-Spacing-spacing-inline-2zHeO sd-Spacing-stretched-1WTcn sd-Spacing-align-center-1syHL"><span class="text-JHHb1llnzL theme-border-color"><span>${title}</span></span>${ADD_WITH_ICON}</div>${
+    note ? `<div class="describe-GCCjupJ4ID"><span>${note}</span></div>` : ''
+  }</div>${Array.from({ length: entries }, () => mokaEntry(fields)).join('')}</div>`;
+
+/** Just the sections that take several entries, as the live desktop form lays them out. */
+export const MOKA_ENTRY_FORM =
+  `<div class="apply-blocks-ir_MrIodtj">${MOKA_MARKER}` +
+  block('个人信息', field('string_info-UOJxKN5mtC', '姓名', text('姓名'))) +
+  mokaEntryBlock('教育背景', MOKA_ENTRY_FIELDS.education) +
+  mokaEntryBlock('工作经历', MOKA_ENTRY_FIELDS.work, '如为实习经历可在职位名称上备注实习生') +
+  mokaEntryBlock('项目经验', MOKA_ENTRY_FIELDS.projects) +
+  mokaEntryBlock('获奖情况', MOKA_ENTRY_FIELDS.awards) +
+  `</div>`;
 
 /** The desktop form's only button at the bottom: it opens a preview that sends the application. */
 export const MOKA_SUBMIT =

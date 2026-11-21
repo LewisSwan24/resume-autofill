@@ -2,30 +2,30 @@
 // (IconButton, Badge, Notice, Toast, EmptyState, Loading). Styles live in sidepanel.css.
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Outcome } from '../../src/engine/types';
-import { useT } from '../../src/i18n';
+import { useT, type MessageKey } from '../../src/i18n';
 import { Icon, type IconName } from '../../src/ui/Icon';
 import { OUTCOME_STATUS, TONE_COLOR_VAR } from '../../src/ui/status';
 import { formatConfidence } from './model';
 
 /** Status glyph of an outcome. Its colour is the third signal; the icon shape and the word carry the meaning. */
-export function StatusIcon({ outcome, size, labelled = false }: { outcome: Outcome; size?: number; labelled?: boolean }) {
+export function StatusIcon({ outcome, size, labelled = false, word }: { outcome: Outcome; size?: number; labelled?: boolean; word?: MessageKey }) {
   const t = useT();
   const status = OUTCOME_STATUS[outcome];
   return (
     <span className="raf-status-icon" style={{ color: TONE_COLOR_VAR[status.tone] }}>
-      <Icon name={status.icon} size={size} label={labelled ? t(status.labelKey) : undefined} />
+      <Icon name={status.icon} size={size} label={labelled ? t(word ?? status.labelKey) : undefined} />
     </span>
   );
 }
 
 /** Outlined badge: icon + word, 1px outline in the tone colour (never colour alone). */
-export function StatusBadge({ outcome }: { outcome: Outcome }) {
+export function StatusBadge({ outcome, word }: { outcome: Outcome; word?: MessageKey }) {
   const t = useT();
   const status = OUTCOME_STATUS[outcome];
   return (
     <span className="raf-badge" data-tone={status.tone} data-outcome={outcome} style={{ color: TONE_COLOR_VAR[status.tone], borderColor: TONE_COLOR_VAR[status.tone] }}>
       <Icon name={status.icon} size={14} />
-      {t(status.labelKey)}
+      {t(word ?? status.labelKey)}
     </span>
   );
 }

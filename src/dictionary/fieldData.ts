@@ -235,6 +235,8 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'workRights.requiresSponsorship': s(
     '是否需要签证担保|是否需要担保|是否需要雇主担保|需要担保|签证担保|工作签证担保|是否需要工作签证担保',
     'Require sponsorship|Do you require sponsorship|Sponsorship required|Visa sponsorship|Require visa sponsorship|Need sponsorship|Employer sponsorship|Will you now or in the future require sponsorship',
+    // 是否需要提前实习 asks when someone can start, not about a visa.
+    '实习|入职|到岗',
   ),
   'workRights.citizenOrResident': s(
     '是否为澳大利亚公民或永久居民|是否为公民或永久居民|是否为公民或永久居民身份|公民或永久居民',
@@ -292,7 +294,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Notice period|Notice required|Current notice period|Length of notice|Period of notice|How much notice|How much notice do you need to give|Notice',
   ),
   'jobIntention.acceptAdjustment': s(
-    '是否服从调剂|是否接受调剂|是否同意调剂|是否服从分配|服从调剂|接受调剂|是否服从岗位调剂|是否服从调配|是否愿意调剂|是否愿意服从公司分配|是否服从公司分配|服从公司分配|是否愿意服从分配',
+    '是否服从调剂|是否接受调剂|是否同意调剂|是否服从分配|服从调剂|接受调剂|是否服从岗位调剂|是否服从调配|是否愿意调剂|是否愿意服从公司分配|是否服从公司分配|服从公司分配|是否愿意服从分配|是否接收组织调配|是否接受组织调配|是否服从组织调配|服从组织调配|接受组织调配',
     'Accept adjustment|Willing to be reassigned|Open to other roles|Open to alternative positions|Consider other roles|Would you consider other positions|Open to similar roles|Willing to accept alternative positions',
   ),
   'jobIntention.acceptRelocation': s(

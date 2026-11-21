@@ -18,7 +18,11 @@ async function runFillIn(target: Page | Frame, locale: string): Promise<FillRepo
     const raf = window.__raf;
     const resume = raf.samples.resumes.find((r) => r.locale === loc);
     if (!resume) throw new Error(`no sample resume for ${loc}`);
-    const run = await raf.runFill(document, { resume, files: raf.sampleFiles });
+    // Ids that stay with their element from one run to the next, as the content script keeps them.
+    const w = window as unknown as { __runIds?: WeakMap<HTMLElement, string> };
+    const ids = (w.__runIds ??= new WeakMap());
+    const idFor = (el: HTMLElement) => ids.get(el) ?? (ids.set(el, `r${Math.random().toString(36).slice(2)}`), ids.get(el)!);
+    const run = await raf.runFill(document, { resume, files: raf.sampleFiles }, { idFor });
     return run.report;
   }, locale);
 }
@@ -126,7 +130,17 @@ for (const spec of FIXTURE_SPECS) {
       const state = await fixtureState(page);
       const topKeys = Object.keys(expected).filter((k) => !k.startsWith('frame.'));
       expect(topKeys.filter((k) => !same(state[k], expected[k]))).toEqual([]);
-      expect(second.counts).toEqual(first.counts);
+      // The entries the first run filled are the page's own by now: left alone, and reported as already there. Every
+      // other row comes back exactly as it was.
+      const rows = (r: FillReport) => r.fields.map((f) => `${f.fieldId} ${f.outcome}`);
+      const held = new Set(second.fields.filter((f) => f.note === 'entry_held').map((f) => f.fieldId));
+      expect(first.fields.filter((f) => f.note === 'entry_held')).toEqual([]);
+      expect(second.fields.map((f) => f.fieldId)).toEqual(first.fields.map((f) => f.fieldId));
+      expect(rows(second).filter((_, i) => !held.has(second.fields[i]!.fieldId))).toEqual(
+        rows(first).filter((_, i) => !held.has(first.fields[i]!.fieldId)),
+      );
+      for (const f of second.fields.filter((x) => held.has(x.fieldId))) expect(f.outcome, f.label).toBe('no_data');
+      expect(second.counts.filled).toBeGreaterThan(0);
     });
   });
 }

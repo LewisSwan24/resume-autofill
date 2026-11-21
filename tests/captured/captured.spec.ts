@@ -77,7 +77,7 @@ for (const sample of samples) {
       try {
         await injectHarness(page);
         const wanted = Object.entries(sample.expected.fields).flatMap(([label, f]) =>
-          f.fieldKey && !f.liveOnlyKey ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
+          f.fieldKey && !f.liveOnlyKey && !f.added ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
         );
         const rows = await page.evaluate((items) => {
           const { contexts, classifications } = window.__raf.scanDocument(document);

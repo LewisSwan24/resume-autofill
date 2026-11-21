@@ -35,6 +35,17 @@ describe('resolveValue', () => {
     expect(resolveValue('basics.fullName', en, 0, 'basics')?.raw).toBe('Zhiyuan Lin');
   });
 
+  it('answers a school supervisor only on that school card', () => {
+    const r = structuredClone(zh);
+    // At the highest school, which is what a question about schooling away from the cards would read.
+    r.referees = [{ name: '示例导师', title: '教授', company: zh.education[1]!.school, email: '', phone: '', relationship: '导师' }];
+    expect(resolveValue('education.supervisor', r, 1, 'education')?.raw).toBe('示例导师');
+    expect(resolveValue('education.supervisor', r, 0, 'education')).toBeNull();
+    for (const section of ['internship', 'work', 'projects', 'campus', 'basics', 'other', null] as const) {
+      expect(resolveValue('education.supervisor', r, 0, section), String(section)).toBeNull();
+    }
+  });
+
   it('reads plain, address and phone values with their resume path', () => {
     expect(resolveValue('contact.email', zh, 0, 'contact')).toEqual({ raw: 'zhiyuan.lin@example.com', source: 'contact.email' });
     expect(resolveValue('contact.addressCity', en, 0, 'contact')).toEqual({ raw: 'Canberra', source: 'contact.address.city' });

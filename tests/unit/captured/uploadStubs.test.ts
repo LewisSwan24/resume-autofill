@@ -3,7 +3,7 @@
 // box. The stubs answer in each site's own protocol, so the score shows what the fill did, not what the
 // recording lacks.
 import { describe, expect, it } from 'vitest';
-import { STORAGE_ORIGIN, uploadReply } from '../../shared/uploadStubs';
+import { STORAGE_ORIGIN, storesItself, uploadReply } from '../../shared/uploadStubs';
 
 const json = (reply: ReturnType<typeof uploadReply>): Record<string, any> => JSON.parse(reply!.body);
 
@@ -65,7 +65,30 @@ describe('upload stubs', () => {
     expect(reply?.headers['access-control-allow-methods']).toMatch(/POST/);
   });
 
+  it('answers Moka: the resume it stored, in its usual wrapper, with nothing read out of a blank page', () => {
+    const boundary = '----replayBoundary';
+    const body =
+      `--${boundary}\r\nContent-Disposition: form-data; name="orgId"\r\n\r\nexample-org\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="resume"; filename="示例-简历.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4\r\n--${boundary}--\r\n`;
+    const reply = uploadReply({
+      method: 'POST',
+      url: 'https://app.mokahr.com/api/outer/ats-candidate-extractor/resume/uploadAndParse/candidate',
+      postData: body,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+    expect(reply?.status).toBe(200);
+    const { code, success, data } = json(reply);
+    expect({ code, success }).toEqual({ code: 0, success: true });
+    expect(data).toEqual({ resumeKey: expect.any(String), resumeName: '示例-简历.pdf' });
+  });
+
+  it('a Moka upload is the file itself, so nothing waits for a storage post after it', () => {
+    expect(storesItself({ method: 'POST', url: 'https://app.mokahr.com/api/outer/ats-candidate-extractor/resume/uploadAndParse/candidate' })).toBe(true);
+    expect(storesItself({ method: 'GET', url: 'https://apply.workable.com/api/v1/jobs/ABC123/form/upload/resume' })).toBe(false);
+  });
+
   it('leaves everything else to the recording', () => {
+    expect(uploadReply({ method: 'POST', url: 'https://app.mokahr.com/api/outer/ats-candidate-extractor/resume/uploadAndParse/idCard' })).toBeNull();
     expect(uploadReply({ method: 'GET', url: 'https://apply.workable.com/api/v1/jobs/ABC123/form' })).toBeNull();
     expect(uploadReply({ method: 'POST', url: 'https://ats.rippling.com/api/v1/apply' })).toBeNull();
     expect(uploadReply({ method: 'GET', url: 'https://somecompany.teamtailor.com/uploads/presigned_data' })).toBeNull();

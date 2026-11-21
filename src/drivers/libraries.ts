@@ -47,7 +47,8 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'moka', kind: 'date', root: '.month-range-select' },
   { lib: 'moka', kind: 'date', root: 'label[class*="sd-Input-container"].day_info' },
   { lib: 'moka', kind: 'cascader', root: '[class*="sd-Input-tag-container"]' },
-  { lib: 'moka', kind: 'select', root: 'label[class*="sd-Select-container"]' },
+  // A list that takes several shows each answer as a tag inside the box.
+  { lib: 'moka', kind: 'select', root: 'label[class*="sd-Select-container"]', multiple: '[class*="sd-Input-tag-container"]' },
 
   // ---- Beisen (北森, zhiye.com): one box for lists, dates and places alike; a date says so by its icon ----
   { lib: 'beisen', kind: 'date', root: '.phoenix-select', when: (el) => el.querySelector('.phoenix-select__switchArrow [id*="field_date"]') !== null },
@@ -228,9 +229,15 @@ export function isAriaMultiple(el: HTMLElement): boolean {
   );
 }
 
+function isMokaSpan(el: Element): boolean {
+  const lists = el.querySelectorAll('input:not([type=checkbox])').length;
+  return lists === 4 || (lists === 2 && el.querySelector('input[type=checkbox]') !== null);
+}
+
 /** A picker that holds a start and an end in one field. */
 export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor') ||
-  (el.matches('.month-range-select') && el.querySelectorAll('input').length === 4) ||
+  // Two lists for each end. Ticking the 至今 box beside them takes the end's two off the page.
+  (el.matches('.month-range-select') && isMokaSpan(el)) ||
   el.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod');
 
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {

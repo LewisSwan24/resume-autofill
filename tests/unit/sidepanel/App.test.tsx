@@ -213,6 +213,20 @@ describe('Side panel – report list', () => {
     expect(rowOf('Photo').querySelector('.raf-field-note')).toBeNull();
   });
 
+  it('says a card was the page’s own entry, and offers nothing to add to the resume for it', async () => {
+    const report = makeReport([
+      field('held', 'no_data', { label: '学校名称', note: 'entry_held' }),
+      field('other', 'no_data', { label: 'GPA' }),
+    ]);
+    await renderPanel({ report });
+    await screen.findByText('学校名称');
+    const held = rowOf('学校名称');
+    expect(held.querySelector('.raf-field-note')?.textContent).toMatch(/已有这一条|already/);
+    expect(held.querySelector('.raf-add-missing')).toBeNull();
+    expect(held.querySelector('.raf-badge')?.textContent).toMatch(/已有|already/i);
+    expect(rowOf('GPA').querySelector('.raf-add-missing')).not.toBeNull();
+  });
+
   it('shows no confidence for a filled row without a numeric confidence', async () => {
     await renderPanel({ report: makeReport([field('x', 'filled', { label: 'No score', value: 'v', confidence: undefined as never })]) });
     await screen.findByText('No score');

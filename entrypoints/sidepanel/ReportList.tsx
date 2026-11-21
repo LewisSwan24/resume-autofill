@@ -105,7 +105,10 @@ function FieldItem({
   const candidates = hasCandidateChoices(field) ? (field.candidates ?? []).filter((c) => c.label.trim() !== '') : [];
   // Confidence only where it means something (filled / needs_review with a number): badge + bar.
   const percent = hasConfidence(field) ? confidencePercent(field.confidence) : null;
-  const statusWord = t(OUTCOME_STATUS[field.outcome].labelKey);
+  // A card the page already held keeps its outcome for the counts, and says what happened in its own word.
+  const held = field.note === 'entry_held';
+  const word = held ? ('status.entry_held' as const) : undefined;
+  const statusWord = t(word ?? OUTCOME_STATUS[field.outcome].labelKey);
 
   const run = async (input: ApplyInput) => {
     setBusy(true);
@@ -129,7 +132,7 @@ function FieldItem({
         {/* Opening or closing a row also points at the field on the page. */}
         <summary className="raf-item-head" onClick={() => onFocus(field)}>
           <span className="raf-tile" title={statusWord}>
-            <StatusIcon outcome={field.outcome} labelled />
+            <StatusIcon outcome={field.outcome} labelled word={word} />
           </span>
           <span className="raf-item-text">
             <span className="raf-item-name" title={label}>
@@ -143,7 +146,7 @@ function FieldItem({
             {field.outcome === 'filled' ? (
               percent !== null ? <ConfidenceBadge confidence={field.confidence} /> : null
             ) : (
-              <StatusBadge outcome={field.outcome} />
+              <StatusBadge outcome={field.outcome} word={word} />
             )}
             <span className="raf-chevron">
               <Icon name="chevron-down" />
@@ -159,8 +162,9 @@ function FieldItem({
           </div>
 
           {field.note === 'same_file_held' ? <p className="raf-help raf-field-note">{t('panel.note.sameFileHeld')}</p> : null}
+          {held ? <p className="raf-help raf-field-note">{t('panel.note.entryHeld')}</p> : null}
 
-          {field.outcome === 'no_data' ? (
+          {field.outcome === 'no_data' && !held ? (
             <button
               type="button"
               className="raf-btn raf-btn-small raf-add-missing"

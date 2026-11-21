@@ -3,7 +3,8 @@
 // dates typed into a day calendar or picked a month at a time, places walked down and then confirmed, and radio
 // answers with no input behind them. The real page is still the real proof.
 import { expect, test, type Page } from '@playwright/test';
-import { BEISEN_FORM } from '../shared/beisenForm';
+import { BEISEN_ENTRY_FORM, BEISEN_FORM } from '../shared/beisenForm';
+import { fillEntries } from './cnEntries';
 import { execIntent, injectHarness } from './helpers';
 
 let page: Page;
@@ -34,12 +35,27 @@ interface Setup {
   constants?: Record<string, { entries: string[] | Record<string, string[]>; limit?: number }>;
 }
 
-async function mountBeisen(setup: Setup): Promise<void> {
+async function mountBeisen(setup: Setup, form = BEISEN_FORM): Promise<void> {
   await page.evaluate(
     ([html, s, tree]) => {
       const setup = s as Setup;
       const places = tree as Record<string, Record<string, string[]>>;
       document.body.innerHTML = html as string;
+      // 添加 puts an empty entry in a wrapper of its own after the last, and moves itself into it (seen live).
+      const blank = new Map<Element, string>();
+      for (const body of document.querySelectorAll('.sc-body')) {
+        const first = body.querySelector('.sc-entry');
+        if (first) blank.set(body, first.outerHTML);
+      }
+      document.body.addEventListener('click', (e) => {
+        const add = (e.target as Element).closest('.sc-add');
+        const body = add?.closest('.sc-body');
+        if (!add || !body || !blank.has(body)) return;
+        const last = add.closest('.sc-wrap')!;
+        last.className = 'sc-wrap bBcCd';
+        last.insertAdjacentHTML('afterend', `<div class="sc-wrap eEfFg">${blank.get(body)!}</div>`);
+        last.nextElementSibling!.append(add);
+      });
       const closeLayers = () => document.querySelectorAll('[data-layer]').forEach((l) => l.remove());
       document.addEventListener('mousedown', (e) => {
         if (!(e.target as Element).closest('[data-layer]')) closeLayers();
@@ -234,7 +250,7 @@ async function mountBeisen(setup: Setup): Promise<void> {
         else if (setup.lists?.[title]) openList(box, setup.lists[title]!);
       });
     },
-    [BEISEN_FORM, setup, TREE] as const,
+    [form, setup, TREE] as const,
   );
 }
 
@@ -402,5 +418,58 @@ test.describe('Beisen radios', () => {
     const r = await execIntent(page, '性别', choice('其他'));
     expect(r.outcome).toBe('no_option');
     await expect(item('性别').locator('.phoenix-radio--checked')).toHaveCount(0);
+  });
+});
+
+/** Every entry of a section, as title → what it shows: a box its words, a list what it picked. */
+function beisenEntries(section: string): Promise<Record<string, string>[]> {
+  return page.evaluate((title) => {
+    const sect = Array.from(document.querySelectorAll('.sc-sect')).find((s) => s.querySelector('.sc-title')?.textContent === title);
+    if (!sect) throw new Error(`no section ${title}`);
+    return Array.from(sect.querySelectorAll('.sc-entry')).map((entry) =>
+      Object.fromEntries(
+        Array.from(entry.querySelectorAll('.form-item')).map((it) => {
+          const name = it.querySelector('.form-item__text')!.textContent!.trim();
+          const select = it.querySelector('.phoenix-select');
+          if (select) return [name, select.querySelector<HTMLInputElement>('.phoenix-select__input')!.value];
+          return [name, it.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea')!.value];
+        }),
+      ),
+    );
+  }, section);
+}
+
+const ENTRY_SETUP: Setup = { lists: { 学历: ['本科', '硕士', '博士'] }, months: ['开始时间', '结束时间', '获奖时间'] };
+
+test.describe('Beisen entries', () => {
+  test('two schools, two internships, a project and an award, each in an entry of its own', async () => {
+    await mountBeisen(ENTRY_SETUP, BEISEN_ENTRY_FORM);
+    const rows = await fillEntries(page);
+    expect(await beisenEntries('教育经历')).toEqual([
+      { 学校名称: '示例大学', 开始时间: '2019-09', 结束时间: '2023-06', 专业名称: '示例工程', 学历: '本科' },
+      { 学校名称: '示例研究院', 开始时间: '2023-09', 结束时间: '2026-06', 专业名称: '示例科学', 学历: '硕士' },
+    ]);
+    // The end of an internship still going is the applicant's to say: the form has no word for it.
+    expect(await beisenEntries('实习经历')).toEqual([
+      { 公司名称: '示例科技有限公司', 职位名称: '示例实习生', 开始时间: '2022-07', 结束时间: '2022-09', 工作描述: '示例工作内容一。' },
+      { 公司名称: '样例数据有限公司', 职位名称: '样例分析实习生', 开始时间: '2025-10', 结束时间: '', 工作描述: '示例工作内容二。' },
+    ]);
+    expect(await beisenEntries('项目经历')).toEqual([
+      expect.objectContaining({ 项目名称: '示例项目', 开始时间: '2021-03', 结束时间: '2021-06', 项目描述: '示例项目描述。' }),
+    ]);
+    expect(await beisenEntries('获奖情况')).toEqual([{ 获奖项: '示例奖学金', 获奖时间: '2021-10' }]);
+    expect(rows.filter((r) => r.outcome === 'action_failed')).toEqual([]);
+  });
+
+  test('an entry the page already holds is left as it is, and run again nothing more is added', async () => {
+    await mountBeisen(ENTRY_SETUP, BEISEN_ENTRY_FORM);
+    await page.locator('.sc-sect', { hasText: '教育经历' }).locator('input.phoenix-input__input').first().fill('他人大学');
+    await fillEntries(page, 2);
+    const schools = await beisenEntries('教育经历');
+    expect(schools.map((s) => s['学校名称'])).toEqual(['他人大学', '示例大学', '示例研究院']);
+    expect(schools[0]).toEqual({ 学校名称: '他人大学', 开始时间: '', 结束时间: '', 专业名称: '', 学历: '' });
+    for (const [section, count] of [['实习经历', 2], ['项目经历', 1], ['获奖情况', 1]] as const) {
+      expect(await beisenEntries(section), section).toHaveLength(count);
+    }
   });
 });

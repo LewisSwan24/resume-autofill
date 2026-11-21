@@ -154,3 +154,34 @@ test('names a verdict whose selector finds nothing', async ({ page }) => {
   const missing = await unjudgedControls(page, ['#a', '#gone']);
   expect(missing).toEqual([{ label: 'verdict finds nothing: #gone', kind: '-' }]);
 });
+
+// Moka keeps its boxes empty: a list shows its choice beside the input, a multi-select as tags, and a span of
+// year and month as four lists side by side.
+const mokaList = (id: string, shown = '') =>
+  `<label class="sd-Input-container-2S_vM sd-Select-container-1Eq4x"><span class="sd-Input-display-value-RwqDy">${shown}</span><input type="text" id="${id}"></label>`;
+const MOKA = `<!doctype html><body>
+${mokaList('one-list')}
+<label class="sd-Input-container-2S_vM sd-Select-container-1Eq4x multi_select_info"><div><span class="sd-Input-tag-container-1AfzM"><input type="text" id="many"></span></div></label>
+<div class="month-range-select date_info">${mokaList('y1')}${mokaList('m1')}${mokaList('y2')}${mokaList('m2')}<label><input type="checkbox" id="still"></label></div>
+</body>`;
+const MOKA_LOCATORS = { list: '#one-list', many: '#many', span: '.month-range-select input[type=text]' };
+
+test('reads what a Moka list, multi-select and span of months show, not their empty boxes', async ({ page }) => {
+  await page.setContent(MOKA);
+  const before = await inspect(page, MOKA_LOCATORS);
+  expect(before.readings).toEqual({ list: '', many: [], span: '' });
+  await page.evaluate(() => {
+    const show = (id: string, text: string) => {
+      document.getElementById(id)!.closest('label')!.querySelector('[class*="display-value"]')!.textContent = text;
+    };
+    show('one-list', '硕士');
+    for (const [id, text] of [['y1', '2020'], ['m1', '9'], ['y2', '2024'], ['m2', '6']] as const) show(id, text);
+    document.querySelector('[class*="tag-container"]')!.insertAdjacentHTML(
+      'afterbegin',
+      '<span class="sd-Tag-container"><div class="sd-Tag-text-2nFJX">示例甲</div></span><span class="sd-Tag-container"><div class="sd-Tag-text-2nFJX">示例乙</div></span>',
+    );
+  });
+  const after = await inspect(page, MOKA_LOCATORS);
+  expect(after.readings).toEqual({ list: '硕士', many: ['示例甲', '示例乙'], span: '2020 9 2024 6' });
+  expect(changedControls(before.snapshot, after.snapshot).map((c) => c.key)).toHaveLength(6);
+});

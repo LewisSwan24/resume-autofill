@@ -45,6 +45,14 @@ interface Service {
   name: string;
   matches(method: string, url: URL): boolean;
   reply(request: StubRequest, url: URL): StubReply;
+  /** The file goes up in this request itself, with no storage post to wait for after it. */
+  storesItself?: true;
+}
+
+/** The file name of one file part in a multipart body. */
+function fileName(body: string, field: string): string | null {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`name="${escaped}"; filename="([^"]*)"`).exec(body)?.[1] ?? null;
 }
 
 const SERVICES: Service[] = [
@@ -73,7 +81,31 @@ const SERVICES: Service[] = [
     matches: (method, url) => method === 'POST' && url.pathname === '/uploads/presigned_data',
     reply: () => ok(storageForm('teamtailor', 'uploads/replay/${filename}')),
   },
+  {
+    // Moka: `POST /api/outer/ats-candidate-extractor/resume/uploadAndParse/candidate`, the file as the multipart
+    // field `resume`. Its answer, in Moka's { code, data, msg, success } wrapper, is the candidate read out of the
+    // file; the page keeps `resumeKey` and `resumeName` (or `key` and `name`) as the stored resume, and copies
+    // the rest into boxes that are still empty. The sample files are blank pages with nothing to read, so the
+    // answer holds the stored resume and no fields.
+    name: 'moka',
+    matches: (method, url) => method === 'POST' && url.pathname === '/api/outer/ats-candidate-extractor/resume/uploadAndParse/candidate',
+    reply: (request) =>
+      ok({
+        code: 0,
+        codeType: 0,
+        data: { resumeKey: 'replay/resume', resumeName: fileName(request.postData ?? '', 'resume') ?? 'resume.pdf' },
+        msg: '成功',
+        success: true,
+      }),
+    storesItself: true,
+  },
 ];
+
+/** Whether an upload request carries the file itself, so nothing is left to wait for once it is answered. */
+export function storesItself(request: StubRequest): boolean {
+  const url = new URL(request.url);
+  return SERVICES.some((s) => s.storesItself === true && s.matches(request.method, url));
+}
 
 /** The value of one text field in a multipart body. */
 function formField(body: string, name: string): string | null {
@@ -117,7 +149,8 @@ export async function answerUploads(context: BrowserContext): Promise<UploadStub
     const request = route.request();
     const reply = uploadReply({ method: request.method(), url: request.url(), postData: request.postData(), headers: request.headers() });
     if (!reply) return route.fallback();
-    if (new URL(request.url()).origin !== STORAGE_ORIGIN) handedOut++;
+    const stub = { method: request.method(), url: request.url() };
+    if (new URL(request.url()).origin !== STORAGE_ORIGIN && !storesItself(stub)) handedOut++;
     else if (request.method() === 'POST') stored++;
     return route.fulfill(reply);
   });

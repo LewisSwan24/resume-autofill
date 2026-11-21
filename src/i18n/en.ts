@@ -327,6 +327,7 @@ export const en: Record<MessageKey, string> = {
   'panel.editLabel': 'New value',
   'panel.editInput': 'New value for "{label}"',
   'panel.editHelp': 'Saves straight to this field on the page.',
+  'panel.note.entryHeld': 'The page already had this entry, so nothing in it was changed. To fill it from your resume, clear it on the page and fill again.',
   'panel.note.sameFileHeld': 'The page already has a file with the same name, and it may be an older version. To replace it, delete it on the page and fill again.',
   'panel.save': 'Save',
   'panel.locate': 'Locate this field',
@@ -346,6 +347,7 @@ export const en: Record<MessageKey, string> = {
   'status.action_failed': 'Fill failed',
   'status.no_data': 'No data in resume',
   'status.no_control': 'No control',
+  'status.entry_held': 'Already on the page',
   // status.group.* : tone groups shared by the FAB card and the side panel chips (STATUS_GROUPS in src/ui/status.ts)
   'status.group.filled': 'Filled',
   'status.group.review': 'Needs review',

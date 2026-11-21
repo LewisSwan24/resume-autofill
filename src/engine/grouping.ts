@@ -16,6 +16,8 @@ export interface SectionInfo {
   root: Element;
   /** The heading element the title came from. */
   heading: Element;
+  /** A line of advice in the heading's box after the title: 工作经历, then 如为实习经历可在职位名称上备注实习生. */
+  note?: string;
 }
 
 const MAX_CLASS_HEADING = 30;
@@ -33,11 +35,16 @@ const DIGEST_SIMILARITY = 0.6;
 /** "教育经历 1" / "Employment #2" / "实习经历（2）" / "第2段教育经历" → the un-numbered title. */
 export function stripNumbering(title: string): string {
   const t = title.trim();
-  const stripped = t
+  // Full-width digits and brackets (教育经历（２）) read as their plain forms.
+  const plain = t.normalize('NFKC');
+  const stripped = plain
     .replace(/^第\s*[0-9一二三四五六七八九十百]+\s*[段条项个份]\s*/, '')
-    .replace(/\s*[#＃]?\s*[(（[]?\s*\d+\s*[)）\]]?$/, '')
+    .replace(/\s*#?\s*[([]?\s*\d+\s*[)\]]?$/, '')
+    // An ordinal in Chinese numerals: 教育经历（二）, or bare after a title of two characters or more (教育经历二).
+    .replace(/\s*[([【]\s*[一二三四五六七八九十百]+\s*[)\]】]$/, '')
+    .replace(/(?<=\p{Script=Han}{2})[一二三四五六七八九十]{1,3}$/u, '')
     .trim();
-  return stripped || t;
+  return stripped && stripped !== plain ? stripped : t;
 }
 
 const isNumbered = (title: string): boolean => stripNumbering(title) !== title.trim();
@@ -84,13 +91,28 @@ function headingText(h: Element, limit: number): string | null {
   return t && t.length <= limit ? t : null;
 }
 
+/**
+ * A heading box that holds a section's name and, after it, a line of advice (Moka: 语言能力, then
+ * 除英语外的其他外语能力). Read whole they name nothing, so the first words that name a section are the title.
+ */
+function titleBeforeNote(h: Element): { title: string; note?: string } | null {
+  const leaves = Array.from(h.querySelectorAll('*')).filter((e) => e.children.length === 0 && !e.closest('button'));
+  const lead = leaves.map((e) => cleanEvidenceText(e.textContent)).find((t) => t !== '');
+  if (!lead || lead.length > MAX_PLAIN_HEADING || !matchSection(lead)) return null;
+  const whole = cleanEvidenceText(textWithoutControls(h), Number.MAX_SAFE_INTEGER);
+  const note = whole.startsWith(lead) ? whole.slice(lead.length).trim() : '';
+  return note ? { title: lead, note } : { title: lead };
+}
+
 /** The heading a previous sibling `s` provides for `parent`, or null. */
 function headingOf(s: Element, parent: Element): { title: string; heading: Element } | null {
   if (containsField(s)) return null;
   const strict = s.matches(STRICT_HEADING_SELECTOR) ? s : s.querySelector(STRICT_HEADING_SELECTOR);
   if (strict) {
     const title = headingText(strict, Number.MAX_SAFE_INTEGER);
-    return title ? { title, heading: strict } : null;
+    if (!title) return null;
+    const split = matchSection(title) ? null : titleBeforeNote(strict);
+    return split ? { ...split, heading: strict } : { title, heading: strict };
   }
   const cls = s.getAttribute('class') ?? '';
   // The caption of one question, even when its answer takes several boxes: 就读时间 over year, month, year, month.
@@ -131,7 +153,7 @@ export function findSection(el: Element): SectionInfo | null {
  * Section of a control for classification: the nearest heading that is not the repeated card's own
  * (numbered) title — "教育经历" rather than "教育经历 1" — falling back to the stripped card title.
  */
-function resolveSection(el: Element): { title: string; root: Element } | null {
+function resolveSection(el: Element): { title: string; root: Element; note?: string } | null {
   const near = findSection(el);
   if (!near) return null;
   const own = matchSection(near.title)?.section;
@@ -173,6 +195,8 @@ const digestKey = (s: string): string => normalizeLabel(s).replace(/\d+/g, '').r
 function labelDigest(root: Element): Set<string> {
   const set = new Set<string>();
   for (const l of Array.from(root.querySelectorAll('label, th, legend, .ant-form-item-label, .el-form-item__label'))) {
+    // A widget drawn as a label (Moka's lists) shows its answer there, which differs from one entry to the next.
+    if (l.matches(LIBRARY_ROOT_SELECTOR)) continue;
     const k = digestKey(textWithoutControls(l));
     if (k) set.add(k);
   }
@@ -203,11 +227,25 @@ function cardMembers(a: Element): Element[] | null {
   if (!parent || countControls(a) < 2) return null;
   const sig = signature(a);
   const digest = labelDigest(a);
+  const title = ownTitle(a);
   const members = Array.from(parent.children).filter(
-    (ch) => ch === a || (signature(ch) === sig && countControls(ch) >= 1 && similar(labelDigest(ch), digest)),
+    (ch) => ch === a || (signature(ch) === sig && countControls(ch) >= 1 && similar(labelDigest(ch), digest) && sameTitle(ownTitle(ch), title)),
   );
   return members.length >= 2 ? members : null;
 }
+
+/** The title a block opens with, numbering dropped: 教育经历 1 and 教育经历 2 are one section's cards. */
+function ownTitle(block: Element): string | null {
+  const first = block.firstElementChild;
+  const hit = first ? headingOf(first, block) : null;
+  return hit ? normalizeLabel(stripNumbering(hit.title)) : null;
+}
+
+/**
+ * Two blocks built alike, each under a title of its own, are two sections (Moka's 工作经历 and 项目经验 both end a
+ * span with 至今), not two cards of one. Without a title on both, nothing is said.
+ */
+const sameTitle = (a: string | null, b: string | null): boolean => a === null || b === null || a === b;
 
 function findAddButtons(root: Element): Element[] {
   const buttons = Array.from(root.querySelectorAll(ADD_BUTTON_SELECTOR)).filter((b) => {
@@ -262,12 +300,13 @@ export function findGroup(el: Element, sectionRoot: Element | null, sectionTitle
 
 export function buildFieldContext(control: Control): FieldContext {
   const { evidence, required } = analyzeControl(control);
-  const section = control.fixedSection ?? resolveSection(control.el);
+  const section: { title: string; root: Element; note?: string } | null = control.fixedSection ?? resolveSection(control.el);
   const group = findGroup(control.el, section?.root ?? null, section?.title ?? null);
   return {
     control,
     evidence,
     sectionTitle: section?.title ?? null,
+    ...(section?.note ? { sectionNote: section.note } : {}),
     sectionRoot: section?.root ?? null,
     group,
     required,

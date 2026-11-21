@@ -136,6 +136,8 @@ export const FIELD_KEYS: FieldKeyDef[] = [
   def('education.period', 'period', ['education'], { derived: true }),
   // 届别: the year of graduating.
   def('education.classYear', 'text', ['education', 'basics', 'other'], { derived: true }),
+  // 在校导师: a referee who supervised the applicant at this card's school.
+  def('education.supervisor', 'text', ['education'], { derived: true }),
   def('work.period', 'period', ['work', 'internship'], { derived: true }),
   def('projects.period', 'period', ['projects'], { derived: true }),
   def('campus.period', 'period', ['campus'], { derived: true }),

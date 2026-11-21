@@ -5,14 +5,15 @@ import { registerAllDrivers } from '../drivers';
 import { intentDisplay } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
 import { waitFor } from '../drivers/wait';
-import { planFill, type FillStep } from '../engine/plan';
+import { baseReport, planFill, type CardDemand, type FillStep } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
-import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
+import type { Classification, Control, FieldContext, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { isVisible } from '../engine/visibility';
 import type { Resume, SiteRecipe } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import { ensureCards, type SectionGrowth } from './ensureCards';
 import { fillEntryEditors } from './entryEditors';
+import { heldEntries, placeInCard } from './heldEntries';
 import { runStep } from './runStep';
 import { applyHighlights } from './highlight';
 import { countOutcomes } from './report';
@@ -102,6 +103,44 @@ function growthReports(growth: SectionGrowth[]): FieldReport[] {
 }
 
 /**
+ * The plan for the page as it is now, shared by the fill and its preview so both show the same cards. An editor that
+ * is open is someone's own typing, not a card to fill (see fillEntryEditors). So is a card that already names its
+ * entry: it is left alone and reported as such, and the resume's entries go to the empty cards.
+ */
+function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
+  const { resume } = payload;
+  const held = heldEntries(scan.contexts, scan.classifications, resume);
+  const free: { ctx: FieldContext; cls: Classification }[] = [];
+  const left: FieldReport[] = [];
+  scan.contexts.forEach((ctx, i) => {
+    if (ctx.control.fixedSection) return;
+    const cls = scan.classifications[i]!;
+    const placed = placeInCard(held, ctx);
+    if (placed) free.push({ ctx: placed, cls });
+    else left.push({ ...baseReport(ctx, cls, resume.locale), outcome: 'no_data', note: 'entry_held' });
+  });
+  const plan = planFill(
+    free.map((f) => f.ctx),
+    free.map((f) => f.cls),
+    resume,
+    payload.files,
+    {
+      ...(payload.presetId ? { presetId: payload.presetId } : {}),
+      ...(payload.recipes ? { recipes: payload.recipes } : {}),
+      ...(doc.title ? { pageTitle: doc.title } : {}),
+      ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
+    },
+  );
+  /** Cards per section as ensureCards counts them: one holding an entry the resume does not have takes none of its. */
+  const cardDemand = (): CardDemand[] =>
+    planFill(scan.contexts, scan.classifications, resume).cardDemand.map((d) => ({
+      ...d,
+      have: Math.max(0, d.have - (held.foreign.get(d.section) ?? 0)),
+    }));
+  return { plan, left, cardDemand };
+}
+
+/**
  * Fill the page with the resume. Never clicks submit / next buttons (only section add buttons).
  * Fields are filled strictly one after another; each result is read back from the page.
  */
@@ -120,20 +159,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
   }
   const scan: ScanResult = scanDocument(doc, idFor);
-  // An editor that is open now is someone's own typing, not a card to fill. See fillEntryEditors.
-  const free = scan.contexts.flatMap((ctx, i) => (ctx.control.fixedSection ? [] : [{ ctx, cls: scan.classifications[i]! }]));
-  const plan = planFill(
-    free.map((f) => f.ctx),
-    free.map((f) => f.cls),
-    resume,
-    files,
-    {
-      ...(payload.presetId ? { presetId: payload.presetId } : {}),
-      ...(payload.recipes ? { recipes: payload.recipes } : {}),
-      ...(doc.title ? { pageTitle: doc.title } : {}),
-      ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
-    },
-  );
+  const { plan, left } = planPage(doc, scan, payload);
 
   const controls = new Map<string, Control>();
   for (const ctx of scan.contexts) controls.set(ctx.control.id, ctx.control);
@@ -148,7 +174,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
         : s,
     );
 
-  const results: FieldReport[] = [...plan.reports];
+  const results: FieldReport[] = [...plan.reports, ...left];
   // Files first: many forms read an uploaded resume and write over their fields with what they find.
   const steps = [...plannedSteps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
   const uploadBusy = adapter?.uploadBusy;
@@ -205,19 +231,7 @@ export function runPreview(doc: Document, payload: FillPayload, opts: Pick<RunFi
   registerAllDrivers();
   const idFor = opts.idFor ?? makeIdFor();
   const scan = scanDocument(doc, idFor);
-  const free = scan.contexts.flatMap((ctx, i) => (ctx.control.fixedSection ? [] : [{ ctx, cls: scan.classifications[i]! }]));
-  const plan = planFill(
-    free.map((f) => f.ctx),
-    free.map((f) => f.cls),
-    payload.resume,
-    payload.files,
-    {
-      ...(payload.presetId ? { presetId: payload.presetId } : {}),
-      ...(payload.recipes ? { recipes: payload.recipes } : {}),
-      ...(doc.title ? { pageTitle: doc.title } : {}),
-      ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
-    },
-  );
+  const { plan, cardDemand } = planPage(doc, scan, payload);
   return {
     url: doc.location?.href ?? '',
     items: plan.steps.map((s) => ({
@@ -230,7 +244,7 @@ export function runPreview(doc: Document, payload: FillPayload, opts: Pick<RunFi
       ...(s.source !== undefined ? { source: s.source } : {}),
       section: s.section ?? null,
     })),
-    cardDemand: plan.cardDemand.filter((d) => d.need > d.have).map(({ section, have, need }) => ({ section, have, need })),
+    cardDemand: cardDemand().filter((d) => d.need > d.have).map(({ section, have, need }) => ({ section, have, need })),
     unresolvedCount: plan.reports.filter((r) => r.outcome === 'needs_review' || r.outcome === 'unmatched').length,
   };
 }

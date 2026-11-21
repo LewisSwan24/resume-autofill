@@ -372,6 +372,37 @@ describe('fieldKeyLabel', () => {
   });
 });
 
+describe('a supervisor is asked only on a school card', () => {
+  const form = `
+    <h3>教育经历</h3>${text('学校名称', 'es')}${text('导师', 'ed')}
+    <h3>项目经历</h3>${text('项目名称', 'pn')}${text('指导老师', 'pt')}
+    <h3>校园经历</h3>${text('组织名称', 'cn')}${text('指导老师', 'ct')}
+    <h3>实习经历</h3>${text('公司名称', 'ic')}${text('导师', 'im')}`;
+  const withSupervisorAt = (school: string) => {
+    const r = structuredClone(zh);
+    r.referees = [{ name: '示例导师', title: '教授', company: school, email: '', phone: '', relationship: '导师' }];
+    return r;
+  };
+  const at = (p: ReturnType<typeof plan>, id: string) => {
+    const i = p.scan.contexts.findIndex((c) => c.control.el.id === id);
+    return { key: p.scan.classifications[i]!.fieldKey, step: p.plan.steps.find((s) => s.fieldId === p.scan.contexts[i]!.control.id) };
+  };
+
+  it.each(['pt', 'ct', 'im'])('the mentor box %s outside education is not the school supervisor, and stays empty', (id) => {
+    // Whichever school the supervisor is at, a project, campus or internship mentor is someone else.
+    for (const school of [zh.education[0]!.school, zh.education[1]!.school]) {
+      const p = plan(form, withSupervisorAt(school));
+      expect(at(p, id).key).not.toBe('education.supervisor');
+      expect(at(p, id).step).toBeUndefined();
+    }
+  });
+
+  it("the school card takes the supervisor only from its own school", () => {
+    expect(at(plan(form, withSupervisorAt(zh.education[0]!.school)), 'ed').step?.intent).toEqual({ kind: 'text', text: '示例导师' });
+    expect(at(plan(form, withSupervisorAt(zh.education[1]!.school)), 'ed').step).toBeUndefined();
+  });
+});
+
 // Compile-time check that the plan only uses the shared FillStep from drivers/execute.
 const _types: [Classification?, FieldContext?] = [];
 void _types;

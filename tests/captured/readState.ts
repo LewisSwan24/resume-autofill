@@ -55,8 +55,18 @@ export function inspectInPage(locators: Locators): Inspection {
     return squash(byLabel || el.getAttribute('aria-label') || el.value);
   };
 
+  // Moka's lists keep their input empty: the choice is shown beside it, several choices as tags.
+  const mokaShown = (el: FormEl): string | string[] | null => {
+    const label = el.closest('label[class*="sd-Select-container"]');
+    if (!label) return null;
+    if (label.querySelector('[class*="sd-Input-tag-container"]')) return [...label.querySelectorAll('[class*="sd-Tag-text"]')].map((t) => squash(t.textContent));
+    return squash(label.querySelector('[class*="sd-Input-display-value"]')?.textContent) || el.value;
+  };
+
   const single = (el: FormEl): string | boolean | string[] => {
     const type = typeOf(el);
+    const moka = type === 'text' ? mokaShown(el) : null;
+    if (moka !== null) return moka;
     // A list that is only a button shows its choice as the button's own text.
     if (type === 'button') return squash(el.textContent);
     // A search-and-pick box keeps its choices as pills beside it: the text in it is not an answer.
@@ -135,6 +145,9 @@ export function inspectInPage(locators: Locators): Inspection {
       readings[label] = hit ? optionLabel(hit) : '';
     } else if (type === 'checkbox' && els.length > 1) {
       readings[label] = (els as HTMLInputElement[]).filter((el) => el.checked).map(optionLabel);
+    } else if (els.length > 1 && els.every((el) => el.closest('.month-range-select') && typeOf(el) === 'text')) {
+      // Year and month, or both ends of a span: one answer in several lists, read in order.
+      readings[label] = els.map((el) => single(el)).filter((v) => typeof v === 'string' && v).join(' ');
     } else {
       readings[label] = single(first);
     }

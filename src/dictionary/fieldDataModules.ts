@@ -33,6 +33,12 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '届别|毕业届别|所属届别|毕业届|届次|应届届别',
     'Class of|Graduating class|Graduation class|Graduating year group',
   ),
+  'education.supervisor': s(
+    '在校导师|导师|导师姓名|指导老师|指导教师|研究生导师|论文导师|学业导师',
+    // Not a bare Supervisor: in a job's card that is the manager there.
+    'Academic supervisor|Thesis supervisor|Research supervisor|PhD supervisor|Academic advisor',
+    '电话|手机|邮箱|职称|单位|方向|phone|mobile|email|title|position',
+  ),
   'education.degree': s(
     '学历|学位|学历/学位|最高学历|最高学位|学历层次|学历学位|学历水平|受教育程度|教育程度|文化程度|毕业学历',
     'Degree|Degree level|Degree type|Qualification|Qualification level|Level of education|Education level|Highest level of education|Highest level of tertiary education|Highest qualification|Level of study|Type of degree|Degree/qualification',
@@ -149,7 +155,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'I currently work here|I currently work in this role|Currently working here|Still working here|Current job|Present|Currently employed here|This is my current role',
   ),
   'work.description': s(
-    '工作内容|工作描述|工作职责|职责描述|主要职责|工作业绩|工作成果|实习内容|实习描述|岗位职责|工作经历描述|经历描述|具体工作',
+    '工作内容|工作描述|工作职责|职责描述|主要职责|工作业绩|工作成果|实习内容|实习描述|岗位职责|工作经历描述|经历描述|具体工作|描述',
     'Description|Job description|Role description|Responsibilities|Duties|Key responsibilities|Main duties|Duties and responsibilities|Key achievements|Role and responsibilities|Describe your role|Achievements|Summary of duties',
   ),
 
@@ -234,7 +240,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
 
   // ------------------------------------------------------------ languages
   'languages.language': s(
-    '语种|语言|外语语种|语言种类|外语|语言名称',
+    '语种|语言|外语语种|语言种类|外语|语言名称|语言类型|外语类型|外语种类|语言技能|掌握语言|掌握的语言',
     'Language|Language name|Foreign language|Other language|Language spoken',
     '等级|水平|证书|成绩|level|proficiency|certificate|score|test',
   ),
@@ -244,7 +250,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '证书|考试|成绩|certificate|test|exam|score',
   ),
   'languages.certificate': s(
-    '英语等级|外语等级|语言等级|语言证书|外语证书|英语证书|等级证书|语言考试|语言考试类型|英语考试|考试类型|英语水平考试|英语四六级|四六级',
+    '英语等级|外语等级|语言等级|语言证书|外语证书|英语证书|等级证书|语言考试|语言考试类型|英语考试|考试类型|英语水平考试|英语四六级|四六级|所获证书|已获证书|获得证书',
     'Language certificate|Language test|English test|English test type|Test type|Language qualification|Language exam|English proficiency test|Test taken',
   ),
   'languages.score': s(

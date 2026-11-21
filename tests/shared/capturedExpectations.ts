@@ -31,8 +31,15 @@ export interface CapturedField {
   fieldKey?: string;
   /** Not a field of its own: the page changes it when another one is filled. It must show this, with no report row. */
   follows?: true;
+  /** On an entry the fill adds: the page before the fill has no such control to judge. Replays still check it. */
+  added?: true;
   /** Only the running page shows what this box is, by a value a snapshot does not keep. Replays still check it. */
   liveOnlyKey?: true;
+  /**
+   * A list that takes several, holding the resume's answers it offers while others are not on it. The ticks stay,
+   * and the report row must say needs_review so the applicant hears of the rest.
+   */
+  partial?: true;
 }
 
 export interface LocatedEntry {
@@ -206,6 +213,7 @@ function rowsOf(report: FillReport, label: string, fieldKey?: string): FillRepor
 /** Every selector that gives a control on the page its verdict. */
 export function verdictSelectors(expected: CapturedExpected): string[] {
   const of = (f: CapturedField): string[] => {
+    if (f.added) return [];
     if (f.control) return [f.control];
     return f.exists || f.follows ? [] : [f.selector];
   };
@@ -226,6 +234,40 @@ export function changedControls(before: Inspection['snapshot'], after: Inspectio
     if (a !== b) out.push({ key, before: b, after: a });
   }
   return out;
+}
+
+/**
+ * Controls with no id or name are keyed by their order (`checkbox=~2`), so one the fill adds, on an entry it adds,
+ * moves the numbers of those after it. Such a group is forgiven only when it grew, and the values nothing covers,
+ * read in order, are the ones from before with only empty controls slipped in between. A tick that moved from one
+ * box to another is still a change.
+ */
+function withoutRenumbering(changes: ControlChange[], before: Inspection['snapshot'], after: Inspection['snapshot'], covered: Set<string>): ControlChange[] {
+  const base = (key: string): string => key.replace(/~\d+$/, '');
+  const ordinal = (key: string): number => Number(/~(\d+)$/.exec(key)?.[1] ?? 0);
+  const keysOf = (snapshot: Inspection['snapshot'], of: string): string[] =>
+    Object.keys(snapshot)
+      .filter((key) => base(key) === of)
+      .sort((a, b) => ordinal(a) - ordinal(b));
+  const valuesOf = (snapshot: Inspection['snapshot'], of: string): string[] =>
+    keysOf(snapshot, of)
+      .filter((key) => !covered.has(key))
+      .map((key) => snapshot[key] ?? '');
+  /** `was` read in order inside `now`, where whatever `now` holds besides is empty. */
+  const onlyEmptiesAdded = (was: string[], now: string[]): boolean => {
+    let i = 0;
+    for (const value of now) {
+      if (i < was.length && value === was[i]) i++;
+      else if (value !== '') return false;
+    }
+    return i === was.length;
+  };
+  const moved = new Set(
+    [...new Set(changes.map((c) => base(c.key)))].filter(
+      (of) => keysOf(after, of).length > keysOf(before, of).length && onlyEmptiesAdded(valuesOf(before, of), valuesOf(after, of)),
+    ),
+  );
+  return changes.filter((c) => !moved.has(base(c.key)));
 }
 
 export function scoreSample(
@@ -253,7 +295,9 @@ export function scoreSample(
       const rows = rowsOf(report, label, field.fieldKey);
       if (field.follows) continue;
       if (rows.length === 0) falselyFailed.push(`${label}: no report row`);
-      else if (!rows.some((r) => r.outcome === 'filled')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}`);
+      else if (field.partial) {
+        if (!rows.some((r) => r.outcome === 'needs_review')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}, not needs_review`);
+      } else if (!rows.some((r) => r.outcome === 'filled')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}`);
     } else if (isEmptyReading(actual)) missing.push(label);
     else wrong.push({ label, expected: field.contains ? `contains ${field.contains}` : field.expect, actual });
     if (!field.exists && (after.coverage[label] ?? []).length === 0) stale.push(label);
@@ -287,7 +331,12 @@ export function scoreSample(
   // A field the page rebuilt under a new id was covered under its old one, which no control holds any more.
   const gone = (key: string): boolean => !(key in after.snapshot);
   const covered = new Set(Object.keys(checked).flatMap((label) => [...(before.coverage[label] ?? []).filter(gone), ...(after.coverage[label] ?? [])]));
-  const extras = changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key));
+  const extras = withoutRenumbering(
+    changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key)),
+    before.snapshot,
+    after.snapshot,
+    covered,
+  );
 
   const gaps = allGaps.filter(([label]) => !(label in checked)).map(([label]) => label);
   for (const label of [...gaps, ...Object.keys(expected.__review ?? {})]) {

@@ -45,6 +45,12 @@ describe('decodePageMessage', () => {
     });
   }
 
+  it('accepts a report row whose card was the page’s own entry already', () => {
+    const held = { ...row(1), outcome: 'no_data', note: 'entry_held' };
+    const out = decodePageMessage(JSON.stringify({ ...(valid.report as object), report: report([held]) }));
+    expect(out?.kind === 'report' && out.report.fields[0]?.note).toBe('entry_held');
+  });
+
   it('keeps only known needs keys and drops a message with an unknown field key', () => {
     const bad = { ...(valid.needs as object), needs: { fieldKeys: ['basics.nope'], repeatSections: [], attachmentKeys: [] } };
     expect(decodePageMessage(JSON.stringify(bad))).toBeNull();

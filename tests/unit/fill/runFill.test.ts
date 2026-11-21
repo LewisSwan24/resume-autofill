@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { highlightRun, runFill } from '../../../src/fill/runFill';
+import { highlightRun, runFill, runPreview } from '../../../src/fill/runFill';
 import { clearHighlights } from '../../../src/fill/highlight';
 import { createSampleFiles, createSampleProfile } from '../../../src/schema';
 
@@ -228,5 +228,94 @@ describe('runFill on a page that keeps the file it already holds', () => {
     const { report } = await runFill(document, { resume: en, files });
     expect(row(report)?.outcome).toBe('filled');
     expect(box.files?.[0]?.name).toBe(name);
+  });
+});
+
+describe('runFill on entries the page already holds', () => {
+  /** The resume's schools under made-up names; the page lists them under other wording. */
+  const aliased = structuredClone(zh);
+  aliased.education[0] = { ...aliased.education[0]!, school: '星河理工大学', schoolEn: 'Xinghe University of Technology', major: '示例工程' };
+  aliased.education[1] = { ...aliased.education[1]!, school: '晨光师范大学', schoolEn: 'Chenguang Normal University', major: '示例科学' };
+
+  const selectCard = (n: number) => `
+    <div class="entry"><h4>教育经历 ${n}</h4>
+      <div class="row"><label for="s${n}">学校名称</label><select id="s${n}">
+        <option value="">请选择</option><option>星河理工大学（XHU）</option><option>晨光师范</option><option>他人大学</option>
+      </select></div>
+      <div class="row"><label for="m${n}">专业</label><input id="m${n}"></div>
+    </div>`;
+
+  function mountSelects(): { clicks: string[] } {
+    document.body.innerHTML = `<form id="f">
+      <h2>教育经历</h2><div id="edu">${selectCard(1)}</div>
+      <button type="button" id="add">添加教育经历</button>
+    </form>`;
+    const clicks: string[] = [];
+    document.getElementById('add')!.addEventListener('click', () => {
+      clicks.push('add');
+      document.getElementById('edu')!.insertAdjacentHTML('beforeend', selectCard(document.getElementById('edu')!.children.length + 1));
+    });
+    return { clicks };
+  }
+
+  const picked = (id: string) => {
+    const select = document.getElementById(id) as HTMLSelectElement;
+    return select.options[select.selectedIndex]?.text ?? '';
+  };
+  const idsOf = (idFor: (el: HTMLElement) => string, ...ids: string[]) => ids.map((id) => idFor(document.getElementById(id)!));
+  const stableIds = () => {
+    const ids = new WeakMap<HTMLElement, string>();
+    let n = 0;
+    return (el: HTMLElement) => ids.get(el) ?? (ids.set(el, `h${++n}`), ids.get(el)!);
+  };
+
+  it('a second run takes a school it picked under the page’s wording as in place, and adds no card', async () => {
+    const { clicks } = mountSelects();
+    await runFill(document, { resume: aliased, files });
+    expect([picked('s1'), picked('s2')]).toEqual(['星河理工大学（XHU）', '晨光师范']);
+    await runFill(document, { resume: aliased, files });
+    expect(document.querySelectorAll('#edu .entry')).toHaveLength(2);
+    expect(clicks).toEqual(['add']);
+    expect([picked('s1'), picked('s2')]).toEqual(['星河理工大学（XHU）', '晨光师范']);
+  });
+
+  it('a school the resume does not have is still someone’s own entry, and the resume’s go to new cards', async () => {
+    const { clicks } = mountSelects();
+    (document.getElementById('s1') as HTMLSelectElement).selectedIndex = 3;
+    await runFill(document, { resume: aliased, files });
+    expect(clicks).toEqual(['add', 'add']);
+    expect([picked('s1'), picked('s2'), picked('s3')]).toEqual(['他人大学', '星河理工大学（XHU）', '晨光师范']);
+  });
+
+  it('reports every field of a card it leaves alone, as an entry already there', async () => {
+    mount();
+    (document.getElementById('s1') as HTMLInputElement).value = '他人大学';
+    const idFor = stableIds();
+    const { report } = await runFill(document, { resume: zh, files }, { idFor });
+    expect(value('s1')).toBe('他人大学');
+    const held = idsOf(idFor, 's1', 'm1', 'g1').map((id) => report.fields.find((f) => f.fieldId === id));
+    for (const row of held) expect(row).toMatchObject({ outcome: 'no_data', note: 'entry_held', section: 'education' });
+    expect(Object.values(report.counts).reduce((a, b) => a + b, 0)).toBe(report.fields.length);
+  });
+
+  it('the preview plans the same cards as the fill', async () => {
+    mount();
+    document.getElementById('edu')!.insertAdjacentHTML('beforeend', card(2));
+    (document.getElementById('s1') as HTMLInputElement).value = '他人大学';
+    const idFor = stableIds();
+    const preview = runPreview(document, { resume: zh, files }, { idFor });
+    const [s1, m1, g1, s2, m2] = idsOf(idFor, 's1', 'm1', 'g1', 's2', 'm2');
+    const planned = new Map(preview.items.map((i) => [i.fieldId, i.value]));
+    for (const id of [s1, m1, g1]) expect(planned.has(id!), id).toBe(false);
+    expect(planned.get(s2!)).toBe('浙江大学');
+    expect(planned.get(m2!)).toBe('计算机科学与技术');
+    expect(preview.cardDemand).toEqual([{ section: 'education', have: 1, need: 2 }]);
+
+    const { report } = await runFill(document, { resume: zh, files }, { idFor });
+    for (const [id, shown] of planned) {
+      const row = report.fields.find((f) => f.fieldId === id);
+      expect(row?.value, id).toBe(shown);
+    }
+    expect(value('s2')).toBe('浙江大学');
   });
 });

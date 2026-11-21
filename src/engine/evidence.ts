@@ -79,10 +79,16 @@ function labelTextOf(label: Element, control: Element): string {
 }
 
 /** Text of an element ignoring form controls, widgets, buttons and scripts inside it. */
+/**
+ * A line of advice a label carries under the field's name, no part of the question: Feishu's 起止时间, then
+ * 无准确的毕业时间可填写预计毕业时间.
+ */
+const LABEL_ADVICE = '.customResumeForm-fieldName-desc';
+
 export function textWithoutControls(el: Element | DocumentFragment): string {
   const clone = el.cloneNode(true) as Element | DocumentFragment;
   clone
-    .querySelectorAll(`input, select, textarea, option, button, script, style, svg, [contenteditable], ${LIBRARY_ROOT_SELECTOR}`)
+    .querySelectorAll(`input, select, textarea, option, button, script, style, svg, [contenteditable], ${LIBRARY_ROOT_SELECTOR}, ${LABEL_ADVICE}`)
     .forEach((n) => n.remove());
   return clone.textContent ?? '';
 }

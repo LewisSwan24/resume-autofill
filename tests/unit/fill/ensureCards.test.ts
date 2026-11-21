@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureCards, findAddButtons } from '../../../src/fill/ensureCards';
 import { createSampleProfile } from '../../../src/schema';
 import { BEISEN_FORM } from '../../shared/beisenForm';
+import { FEISHU_DESKTOP_ENTRIES } from '../../shared/feishuDesktopForm';
 import { mperiod, mschool, mselect } from '../../shared/feishuMobileForm';
 
 const zh = createSampleProfile().resumes.find((r) => r.id === 'sample-zh')!;
@@ -112,6 +113,21 @@ describe('findAddButtons', () => {
   it('leaves alone the same words where nothing shows them as clickable', () => {
     document.body.innerHTML = `<h2>项目经历</h2><div><label>项目名称<input></label><label>项目描述<textarea></textarea></label></div>${plainAdd('添加', false)}<p style="cursor:pointer">添加的内容请写在下面</p>`;
     expect(findAddButtons(document)).toEqual([]);
+  });
+
+  // Feishu's desktop form sets no pointer on the 添加 of a section that has no entry yet; only its class says what it
+  // is (createFormSection-addBtn). Captured 21 Nov 2026.
+  it('finds the add words of an empty section by a class that names them an add button', () => {
+    document.body.innerHTML = FEISHU_DESKTOP_ENTRIES;
+    expect(findAddButtons(document).map((b) => [b.text, b.section])).toContainEqual(['添加', 'internship']);
+  });
+
+  // Each empty section is its title and its 添加, one after another: a button takes its own section's title, never the
+  // one of the empty section before it.
+  it('gives the add button of each empty section its own section, and none to a section no resume has', () => {
+    document.body.innerHTML = FEISHU_DESKTOP_ENTRIES;
+    const empty = findAddButtons(document).filter((b) => b.el.closest('.createFormSection-container-empty'));
+    expect(empty.map((b) => b.section)).toEqual(['internship', 'projects', null, 'awards']);
   });
 
   // Feishu's mobile form: the section title holds its name and a "+ 添加" drawn as a span, and a filled section ends

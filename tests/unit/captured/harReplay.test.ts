@@ -12,6 +12,7 @@ const post = (url: string, body: unknown): RecordedRequest => ({
   url,
   postData: typeof body === 'string' ? body : JSON.stringify(body),
 });
+const answered = (request: RecordedRequest, answer: string): RecordedRequest => ({ ...request, answer });
 
 describe('sameDocument', () => {
   it('matches a request with the page address it was asked for, whatever route follows the #', () => {
@@ -68,6 +69,25 @@ describe('stableTwin', () => {
   it('gives no answer when two recorded entries would both fit', () => {
     const recorded = [get('https://api.example.test/list?q=a&_=1700000000000'), get('https://api.example.test/list?q=a&_=1700000000500')];
     expect(stableTwin(get('https://api.example.test/list?q=a&_=1800000000000'), recorded)).toBeNull();
+    // Different answers are a real choice, so it stays unanswered.
+    const differ = [answered(recorded[0]!, '{"data":true}'), answered(recorded[1]!, '{"data":false}')];
+    expect(stableTwin(get('https://api.example.test/list?q=a&_=1800000000000'), differ)).toBeNull();
+  });
+
+  it('answers from the first when every entry that fits was answered the same', () => {
+    // Feishu asks whether you are logged in three times, each with its own random number, and hears the same each time.
+    const status = 'https://jobs.example.test/api/v1/user/mobile/login_status';
+    const ok = '{"code":0,"data":true}';
+    const recorded = [answered(get(`${status}?random=307331`), ok), answered(get(`${status}?random=337475`), ok)];
+    expect(stableTwin(get(`${status}?random=718271`), recorded)).toEqual(recorded[0]);
+  });
+
+  it("sets aside ByteDance's per-request signature", () => {
+    const posts = 'https://jobs.example.test/api/v1/job/posts/1?portal_type=6&with_recommend=false';
+    const recorded = [get(`${posts}&_signature=i1QLPQAAAAA76DgqZLVwwItUCyAAOBi`)];
+    expect(stableTwin(get(`${posts}&_signature=_02B4Z6wo00f01otherSignature`), recorded)).toEqual(recorded[0]);
+    // Only the signature: another portal type is another question.
+    expect(stableTwin(get(`${posts.replace('portal_type=6', 'portal_type=2')}&_signature=x`), recorded)).toBeNull();
   });
 
   it("answers Moka's form-component lookup, whose cluster the page reads from an answer no recording holds", () => {

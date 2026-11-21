@@ -17,6 +17,8 @@ export interface RecordedRequest {
   method: string;
   url: string;
   postData: string | null;
+  /** What the recording answered: status and body. Only read to tell whether two candidates differ. */
+  answer?: string | undefined;
 }
 
 /** True when a request asks for the document a page address names. The part after # never reaches the server. */
@@ -43,6 +45,8 @@ const VOLATILE: Record<string, (value: unknown) => boolean> = {
   nonce: () => true,
   rand: () => true,
   random: () => true,
+  // ByteDance's anti-crawler signature (Feishu recruiting): recomputed for every request.
+  _signature: () => true,
 };
 
 // Values a page took from an answer no recording holds, per lookup. Kept as narrow as one path.
@@ -94,8 +98,9 @@ const exactly = (a: RecordedRequest, b: RecordedRequest): boolean =>
   a.method === b.method && a.url === b.url && (a.method !== 'POST' || !a.postData || !b.postData || a.postData === b.postData);
 
 /**
- * The recorded request to answer this one with, when the recording has no exact match and exactly one entry
- * matches on every field that is not set aside. Null leaves the request to the recording as it is.
+ * The recorded request to answer this one with, when the recording has no exact match and the entries that match
+ * on every field not set aside are one, or several that were all answered alike (a status asked for again with a
+ * new random number). Null leaves the request to the recording as it is.
  */
 export function stableTwin(request: RecordedRequest, recorded: RecordedRequest[]): RecordedRequest | null {
   if (recorded.some((r) => exactly(r, request))) return null;
@@ -103,20 +108,32 @@ export function stableTwin(request: RecordedRequest, recorded: RecordedRequest[]
   if (key === null) return null;
   const fits = recorded.filter((r) => r.method === request.method && stableKey(r) === key);
   const distinct = new Map(fits.map((r) => [`${r.url}\n${r.postData ?? ''}`, r]));
-  return distinct.size === 1 ? [...distinct.values()][0]! : null;
+  const twins = [...distinct.values()];
+  if (twins.length === 1) return twins[0]!;
+  const alike = twins.every((t) => t.answer !== undefined && t.answer === twins[0]!.answer);
+  return twins.length > 1 && alike ? twins[0]! : null;
 }
 
 interface HarFile {
-  log: { entries: { request: { method: string; url: string; postData?: { text?: string; _file?: string } } }[] };
+  log: {
+    entries: {
+      request: { method: string; url: string; postData?: { text?: string; _file?: string } };
+      response?: { status?: number; content?: { text?: string; _file?: string } };
+    }[];
+  };
 }
 
-/** Every request a HAR recorded, POST bodies read from their attached files. */
+/**
+ * Every request a HAR recorded, POST bodies read from their attached files. The answer is the status and the body,
+ * or the body's attached file, which is named after its own content.
+ */
 export function recordedRequests(harPath: string): RecordedRequest[] {
   const har = JSON.parse(readFileSync(harPath, 'utf8')) as HarFile;
-  return har.log.entries.map(({ request }) => {
+  return har.log.entries.map(({ request, response }) => {
     const post = request.postData;
     const postData = post?._file ? readFileSync(path.join(path.dirname(harPath), post._file), 'utf8') : post?.text || null;
-    return { method: request.method, url: request.url, postData };
+    const body = response?.content?._file ?? response?.content?.text ?? '';
+    return { method: request.method, url: request.url, postData, answer: `${response?.status ?? 0} ${body}` };
   });
 }
 

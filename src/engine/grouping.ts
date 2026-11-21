@@ -126,6 +126,18 @@ function headingOf(s: Element, parent: Element): { title: string; heading: Eleme
     const title = headingText(s, MAX_CLASS_HEADING);
     return title ? { title, heading: s } : null;
   }
+  // A column beside the fields that holds the title with other things, such as a line of advice under it (Feishu's
+  // createFormSection-left). The titled part heads them only when its words name a part of a resume.
+  if (fieldCount(parent) >= 2) {
+    const titled = Array.from(s.querySelectorAll('[class]')).find((e) => {
+      const c = e.getAttribute('class') ?? '';
+      return CLASS_HEADING.test(c) && !CLASS_NOT_HEADING.test(c);
+    });
+    const title = titled ? headingText(titled, MAX_PLAIN_HEADING) : null;
+    // A whole section with no entry yet is a title and its 添加: that heads only its own button, not what follows.
+    const rest = title ? cleanEvidenceText(textWithoutControls(s), Number.MAX_SAFE_INTEGER).replace(title, '') : '';
+    if (titled && title && matchSection(title) && !isAddButtonText(rest)) return { title, heading: titled };
+  }
   // Classes that are only build hashes say nothing, but a few bare words naming a part of a resume still head it.
   if (s.querySelectorAll('*').length <= MAX_PLAIN_HEADING_PARTS && fieldCount(parent) >= 2) {
     const title = headingText(s, MAX_PLAIN_HEADING);

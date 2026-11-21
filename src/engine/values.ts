@@ -594,6 +594,21 @@ function regionText(region: Region, locale: Locale): string {
   return locale === 'zh-CN' ? path.join('') : [...path].reverse().join(', ');
 }
 
+/** The format a question gives in brackets after it: 目前所在地（填写格式：XX省XX市）. */
+const FORMAT_HINT = /[（(]\s*(?:填写|书写)?格式(?:为)?\s*[:：]([^)）]*)[)）]/;
+
+/**
+ * A place as a text box asks for it. A format in brackets that stops at a level (XX省XX市, xx省) says how far down
+ * to write; without one, the whole place goes in.
+ */
+function regionTextAsked(region: Region, locale: Locale, askedAs: string | undefined): string {
+  const format = FORMAT_HINT.exec(askedAs ?? '')?.[1];
+  if (locale !== 'zh-CN' || !format || /[区县]/.test(format)) return regionText(region, locale);
+  const levels = /市/.test(format) ? [region.province, region.city] : /省/.test(format) ? [region.province] : null;
+  const parts = levels?.map((p) => p?.trim() ?? '').filter(Boolean) ?? [];
+  return parts.length > 0 ? parts.join('') : regionText(region, locale);
+}
+
 /**
  * Translate a resolved value into what a driver should do with `control`; null when the control cannot
  * take this kind of value (e.g. a file for a text box).
@@ -711,7 +726,7 @@ export function toIntent(
         };
         return { kind: 'choice', display: first!.query, query: own.query, match, ...(wider.length > 0 ? { wider } : {}) };
       }
-      return { kind: 'text', text: regionText(region, locale) };
+      return { kind: 'text', text: regionTextAsked(region, locale, opts.askedAs) };
     }
     case 'date': {
       if (typeof raw !== 'string' || !isTextLike(control)) return null;

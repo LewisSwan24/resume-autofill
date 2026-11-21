@@ -71,6 +71,8 @@ export function assign(
   const scoreSubjects = new Map<string, Set<string>>();
   for (const { index, cand, scope } of claims) {
     if (assigned.has(index)) continue;
+    // Its own key went to another control: a key of another part of the form is no second answer.
+    if (cand.elsewhere && cand !== scores[index]!.candidates[0]) continue;
     let keys = taken.get(scope);
     if (!keys) taken.set(scope, (keys = new Set()));
     if (cand.fieldKey === SCORE_KEY) {

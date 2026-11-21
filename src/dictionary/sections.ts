@@ -42,7 +42,7 @@ export const SECTION_SYNONYMS: Record<SectionKey, string[]> = {
     'Leadership and activities', 'Volunteering', 'Student activities',
   ],
   awards: [
-    '获奖情况', '获奖经历', '奖项荣誉', '荣誉奖励', '奖励荣誉', '所获荣誉', '荣誉奖项', '奖学金情况',
+    '获奖情况', '获奖经历', '获奖', '奖项荣誉', '荣誉奖励', '奖励荣誉', '所获荣誉', '荣誉奖项', '奖学金情况',
     'Awards', 'Honours', 'Honors', 'Honours and awards', 'Awards and achievements', 'Achievements',
     'Scholarships and awards',
   ],

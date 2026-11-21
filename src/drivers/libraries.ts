@@ -76,6 +76,10 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'feishu', kind: 'date', root: '.throne-biz-date-range-picker-wrapper' },
   { lib: 'feishu', kind: 'date', root: '.ud__picker' },
   { lib: 'feishu', kind: 'select', root: '.ud__select' },
+  // On a computer, the atsx- generation campus portals run (antd 3 under its own prefix): one box for lists, places
+  // and schools, and a span of months picked from panels.
+  { lib: 'feishu', kind: 'date', root: '.atsx-date-picker-period-month' },
+  { lib: 'feishu', kind: 'select', root: '.atsx-select' },
   // On a phone (/index/m/): no inputs at all, a tap opens a drawer. The phone number is plain text from the login.
   { lib: 'feishu', kind: 'date', root: '.atsx-mperiod' },
   { lib: 'feishu', kind: 'select', root: '.atsx-mselect' },
@@ -255,7 +259,7 @@ function isMokaSpan(el: Element): boolean {
 export const isDateRangeRoot = (el: Element): boolean => el.matches('.ant-picker-range, .el-range-editor') ||
   // Two lists for each end. Ticking the 至今 box beside them takes the end's two off the page.
   (el.matches('.month-range-select') && isMokaSpan(el)) ||
-  el.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod') ||
+  el.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod, .atsx-date-picker-period-month') ||
   (el.matches('.old-style-hack') && el.querySelector('.mobile-text-input.end-date') !== null);
 
 export function isUnsupportedLibraryRoot(el: Element): UnsupportedWidget | undefined {
@@ -294,7 +298,7 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
   }
   // Year and month is all either of Moka's date widgets asks.
   if (widget.lib === 'moka') return 'month';
-  if (root.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod')) return 'month';
+  if (root.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod, .atsx-date-picker-period-month')) return 'month';
   // Beisen's box opens a day calendar or a month panel, and only opening it tells which: ask for the day.
   if (widget.lib === 'beisen') return 'day';
   if (widget.lib === 'element') {

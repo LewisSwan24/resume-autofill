@@ -41,8 +41,9 @@ export interface CapturedField {
   /** Only the running page shows what this box is, by a value a snapshot does not keep. Replays still check it. */
   liveOnlyKey?: true;
   /**
-   * A list that takes several, holding the resume's answers it offers while others are not on it. The ticks stay,
-   * and the report row must say needs_review so the applicant hears of the rest.
+   * Holds part of the answer: a list that takes several, with the resume's answers it offers ticked while others
+   * are not on it, or a span with no word for "still going", holding only its start. What went in stays, and the
+   * report row must say needs_review so the applicant hears of the rest.
    */
   partial?: true;
   /**
@@ -92,6 +93,11 @@ export interface CapturedExpected {
   __knownGapsMax: number;
   /** Must not change, and may not be reported filled. */
   __leaveEmpty?: Record<string, LeaveEmpty>;
+  /**
+   * An input the page keeps for itself, out of sight, and changes on its own as the form is edited (Feishu counts
+   * its edits in one). What it holds is the page's business, so its changes are not the fill's.
+   */
+  __pageOwn?: Record<string, LeaveEmpty>;
   /** A banner the applicant answers first, which covers the FAB. Clicked in the replay only, where nothing leaves. */
   __banner?: string;
   /**
@@ -251,6 +257,7 @@ export function verdictSelectors(expected: CapturedExpected): string[] {
     ...Object.values(expected.__knownGaps ?? {}).flatMap(of),
     ...Object.values(expected.__review ?? {}).flatMap((r) => (r.added ? [] : [r.selector])),
     ...Object.values(expected.__leaveEmpty ?? {}).map((r) => r.selector),
+    ...Object.values(expected.__pageOwn ?? {}).map((r) => r.selector),
   ];
 }
 
@@ -366,7 +373,7 @@ export function scoreSample(
 
   // A field the page rebuilt under a new id was covered under its old one, which no control holds any more.
   const gone = (key: string): boolean => !(key in after.snapshot);
-  const covered = new Set(Object.keys(checked).flatMap((label) => [...(before.coverage[label] ?? []).filter(gone), ...(after.coverage[label] ?? [])]));
+  const covered = new Set([...Object.keys(checked), ...Object.keys(expected.__pageOwn ?? {})].flatMap((label) => [...(before.coverage[label] ?? []).filter(gone), ...(after.coverage[label] ?? [])]));
   const extras = withoutRenumbering(
     changedControls(before.snapshot, after.snapshot).filter((c) => !covered.has(c.key)),
     before.snapshot,

@@ -15,6 +15,10 @@ describe('normalizeLabel', () => {
     ['请输入', '请输入邮箱', '邮箱'],
     ['请选择', '请选择学历', '学历'],
     ['请填写', '请填写籍贯', '籍贯'],
+    // Feishu asks for a place as text and says how to write it in brackets after the name.
+    ['format in brackets', '籍贯（填写格式：xx省xx市）', '籍贯'],
+    ['format in brackets, upper case', '目前所在地（填写格式：XX省XX市）', '目前所在地'],
+    ['format given as', '出生年月（格式为：YYYY-MM）', '出生年月'],
     ['colon + brackets', 'Phone: [mobile]', 'phone mobile'],
     ['collapses whitespace', '  First   name \t ', 'first name'],
     ['spaces between CJK chars are dropped', '姓    名', '姓名'],

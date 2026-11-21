@@ -174,6 +174,8 @@ export interface ScoredCandidate {
   weight: number;
   /** Confidence before the cap at 1: keeps strong candidates ordered (bonuses can lift several above 1). */
   score: number;
+  /** A key of another part of the form than the one the control is in (a school's city under 基本信息). */
+  elsewhere?: true;
 }
 
 export interface FieldScores {
@@ -192,6 +194,14 @@ const ASKED_WITH_THE_NAME = new Set<FieldKey>(['education.degree', 'education.en
 
 const WHOSE_IS_UNSAID = /^联系人(?:信息)?$/;
 const BARE_PLACE = /^所在地点?$/;
+
+/** A key of a part of the form other than `section`, that no word in a label could bring here. */
+function belongsElsewhere(def: FieldKeyDef, section: SectionKey | null): boolean {
+  if (!section || def.sections.length === 0 || def.sections.includes(section)) return false;
+  if (section === 'basics' && ASKED_WITH_THE_NAME.has(def.key)) return false;
+  const module = def.key.split('.')[0];
+  return module !== 'basics' && module !== 'contact';
+}
 
 function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null): number {
   if (!section) return raw;
@@ -273,7 +283,7 @@ export function scoreField(ctx: FieldContext, section: SectionKey | null): Field
     if (fieldKey === 'education.supervisor' && section !== 'education') continue;
     const someoneElses = def.sections.length > 0 && def.sections.every((s) => ABOUT_SOMEONE_ELSE.has(s));
     const score = round3(sectionAdjust(def, Math.min(1, 1 - miss), section) * (askedOfYou && someoneElses ? YOURS_FACTOR : 1));
-    if (score >= MIN_CANDIDATE) candidates.push({ fieldKey, confidence: Math.min(1, score), weight, score });
+    if (score >= MIN_CANDIDATE) candidates.push({ fieldKey, confidence: Math.min(1, score), weight, score, ...(belongsElsewhere(def, section) ? { elsewhere: true as const } : {}) });
   }
   candidates.sort((a, b) => b.score - a.score || b.weight - a.weight);
   if (ctx.control.dateRange) return { neverFill: false, candidates: rangeCandidates(candidates, section) };

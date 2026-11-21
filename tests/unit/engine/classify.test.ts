@@ -121,6 +121,11 @@ describe('global assignment', () => {
     expect(s.contexts.map((c) => c.group?.index)).toEqual([0, 0, 1, 1]);
   });
 
+  it('does not fall back to a key of another section: a second place under 基本信息 is not a school', () => {
+    const s = scan(`<h3>基本信息</h3>${text('目前所在地', 'a')}${row('所在地点', '<select id="b"><option>深圳</option></select>', 'b')}`);
+    expect(keys(s)).toEqual(['basics.currentLocation', null]);
+  });
+
   it('falls back to the next candidate when the best key is taken', () => {
     // Both fields are labelled like a phone; the second is only a weak match for the other key.
     const s = scan(`<h3>基本信息</h3>${text('手机号码', 'a')}${text('手机号码(含区号)', 'b')}`);

@@ -19,6 +19,7 @@ export function locatorsOf(expected: CapturedExpected): Locators {
   for (const [label, g] of Object.entries(expected.__knownGaps ?? {})) out[label] = g.selector;
   for (const [label, r] of Object.entries(expected.__review ?? {})) out[label] = r.shown ? `${SHOWN_PREFIX}${r.selector}` : r.selector;
   for (const [label, r] of Object.entries(expected.__leaveEmpty ?? {})) out[label] = r.selector;
+  for (const [label, r] of Object.entries(expected.__pageOwn ?? {})) out[label] = r.selector;
   for (const [label, e] of Object.entries(expected.__entries ?? {})) out[label] = `${ENTRIES_PREFIX}${e.selector}`;
   return out;
 }

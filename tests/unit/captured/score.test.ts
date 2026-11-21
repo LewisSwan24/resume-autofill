@@ -97,6 +97,14 @@ describe('scoreSample', () => {
     expect(out.join()).toMatch(/unexpected change text#new/);
   });
 
+  it('lets the page change an input it keeps for itself, and nothing else beside it', () => {
+    const e = expected({ __pageOwn: { 'Change count': { selector: '#other', reason: 'the page counts its own edits' } } });
+    expect(problems(e, filled({ snapshot: { 'text#other': '7' }, coverage: { 'Change count': ['text#other'] } }))).toEqual([]);
+    const out = problems(e, filled({ snapshot: { 'text#other': '7', 'text#new': 'x' }, coverage: { 'Change count': ['text#other'] } }));
+    expect(out.join()).toMatch(/unexpected change text#new/);
+    expect(verdictSelectors(e)).toContain('#other');
+  });
+
   it('treats a filled known gap as an unexpected change, so it must move to fields', () => {
     const e = expected({ __knownGaps: { Other: { selector: '#other', reason: 'no driver' } }, __knownGapsMax: 1 });
     const out = problems(e, filled({ snapshot: { 'text#other': 'x' }, coverage: { Other: ['text#other'] } }));

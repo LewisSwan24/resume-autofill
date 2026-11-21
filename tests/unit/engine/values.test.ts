@@ -243,6 +243,15 @@ describe('toIntent', () => {
     expect(pick('Canberra 新南威爾斯州澳洲', 'Canberra 澳大利亞首都特區澳洲')).toBe('Canberra 澳大利亞首都特區澳洲');
   });
 
+  it('region in a text box: the format a question gives in brackets says how far down to write', () => {
+    const region = { province: '广东省', city: '深圳市', district: '南山区' };
+    const text = (askedAs?: string) => toIntent(def('basics.currentLocation'), region, control('text'), 'zh-CN', askedAs ? { askedAs } : {});
+    expect(text('目前所在地（填写格式：XX省XX市）')).toEqual({ kind: 'text', text: '广东省深圳市' });
+    expect(text('现居住地（格式：xx省）')).toEqual({ kind: 'text', text: '广东省' });
+    expect(text('现居住地（格式：省市区）')).toEqual({ kind: 'text', text: '广东省深圳市南山区' });
+    expect(text('目前所在地')).toEqual({ kind: 'text', text: '广东省深圳市南山区' });
+  });
+
   it('region on a list without the place: "Other" when no level of the address is on it either', () => {
     const region = { country: 'Australia', province: 'ACT', city: 'Canberra' };
     const pick = (...labels: string[]) => picked(intent('basics.currentLocation', region, control('select'), 'en-AU'), opts(...labels));

@@ -44,14 +44,17 @@ const nameWords = (name: string): string[] => name.split(/[-_\s]+|(?<=[a-z0-9])(
  * names the element as an add or a button. Words alone are as likely a tip or a heading.
  */
 function drawnAsButton(e: HTMLElement, words: string): boolean {
-  if (/^[+＋]/.test(words) || e.querySelector(ICON)) return true;
-  const named = `${typeof e.className === 'string' ? e.className : ''} ${e.id}`;
-  return nameWords(named).some((w) => NAMED_ADD.has(w));
+  return /^[+＋]/.test(words) || e.querySelector(ICON) !== null || named(e, NAMED_ADD);
 }
 
+/** Words of a class or id that say the element is a button, whatever it does: createFormSection-addBtn. */
+const NAMED_BUTTON = new Set(['btn', 'button']);
+const named = (e: HTMLElement, words: Set<string>): boolean =>
+  nameWords(`${typeof e.className === 'string' ? e.className : ''} ${e.id}`).some((w) => words.has(w));
+
 /**
- * Add buttons that are not buttons: words that add an entry, on an element the pointer shows as clickable (on a
- * touch-first page, one drawn as a button) and that holds nothing but those words (and an icon). The element holding
+ * Add buttons that are not buttons: words that add an entry, on an element the pointer shows as clickable or whose
+ * class names it a button (on a touch-first page, one drawn as a button) and that holds nothing but those words (and an icon). The element holding
  * the words is the one returned, once per button: the pointer is inherited and does not say which wrapper listens,
  * and a click only travels up, so it starts there.
  */
@@ -74,7 +77,9 @@ export function plainAddButtons(root: Node): HTMLElement[] {
     let e: HTMLElement | null = start;
     for (let i = 0; e && i < MAX_WRAPPERS && !clickable; e = e.parentElement, i++) {
       if (cleanEvidenceText(e.textContent ?? '') !== words || e.querySelector('input, select, textarea')) break;
-      clickable = touch ? drawnAsButton(e, words) : win.getComputedStyle(e).cursor === 'pointer';
+      // On a computer the pointer says it, or a name that calls it a button: Feishu sets no pointer on the 添加 of
+      // a section with no entry yet. An add in the name alone (createFormSection-addText) is as likely a label.
+      clickable = touch ? drawnAsButton(e, words) : win.getComputedStyle(e).cursor === 'pointer' || named(e, NAMED_BUTTON);
     }
     if (clickable) found.add(start);
   }

@@ -9,6 +9,7 @@ import { FILL_THRESHOLD } from '../../../src/engine/classify';
 import { scanDocument } from '../../../src/engine/scan';
 import { findStepAction, stepFingerprint } from '../../../src/fill/nextStep';
 import { BEISEN_FORM } from '../../shared/beisenForm';
+import { FEISHU_DESKTOP_ENTRIES } from '../../shared/feishuDesktopForm';
 import { FEISHU_FORM } from '../../shared/feishuForm';
 import { FEISHU_MOBILE_FORM } from '../../shared/feishuMobileForm';
 import { MOKA_FORM, MOKA_MARKER, MOKA_SUBMIT, mokaMobileSteps, mokaResumeUpload } from '../../shared/mokaForm';
@@ -161,6 +162,22 @@ describe('Feishu', () => {
   it('is found on a company domain by its form, desktop and phone', () => {
     expect(idAt(OWN_DOMAIN, FEISHU_FORM)).toBe('feishu');
     expect(idAt(OWN_DOMAIN, FEISHU_MOBILE_FORM)).toBe('feishu');
+  });
+
+  it('on a computer, reads a field by its name and not the advice under it, each in its own section', () => {
+    document.body.innerHTML = FEISHU_DESKTOP_ENTRIES;
+    const scan = scanDocument(document);
+    const at = (id: string) => {
+      const i = scan.contexts.findIndex((c) => c.control.el.closest('.atsx-form-item[data-cy]')?.getAttribute('data-cy') === id);
+      return { ...scan.classifications[i]!, label: scan.contexts[i]!.evidence[0]?.text, sectionTitle: scan.contexts[i]!.sectionTitle };
+    };
+    // 起止时间, then 无准确的毕业时间可填写预计毕业时间 under it: the question is the first.
+    expect(at('education[0].period').label).toBe('起止时间');
+    expect(at('education[0].period').fieldKey).toBe('education.period');
+    expect(at('career[0].period').sectionTitle).toBe('工作经历');
+    expect(at('career[0].period').fieldKey).toBe('work.period');
+    expect(at('career[0].desc').fieldKey).toBe('work.description');
+    expect(at('career[0].period').confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
   });
 
   it('leaves ByteDance its own address', () => {

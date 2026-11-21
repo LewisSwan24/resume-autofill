@@ -334,6 +334,26 @@ describe('a report that says something else than the page', () => {
     });
   });
 
+  describe("a search with no row in the resume's words, holding the nearest one it offers", () => {
+    const picked = expected({ fields: { ...expected().fields, Email: { selector: '#email', expect: 'a@b.example', picked: true } } });
+    const rowsWith = (outcome: FieldReport['outcome']) =>
+      report([
+        { label: 'Email', outcome, observed: 'a@b.example' },
+        { label: 'Phone', outcome: 'filled', observed: '0412345678' },
+        { label: 'Resume', outcome: 'filled', observed: 'cv.pdf' },
+      ]);
+
+    it('is right when it is reported for review, so the applicant checks the name the site picked', () => {
+      const score = scoreSample(sample(picked), 'harness', emptyPage, filled(), rowsWith('needs_review'));
+      expect(score.correct).toBe(3);
+      expect(scoreProblems(score, picked)).toEqual([]);
+    });
+
+    it("is a false report when it says filled, as if the resume's own words were there", () => {
+      expect(scoreSample(sample(picked), 'harness', emptyPage, filled(), rowsWith('filled')).falselyFailed).toEqual(['Email: reported filled, not needs_review']);
+    });
+  });
+
   it('does not call a wrong value a false report: the report is right to fail it', () => {
     const r = report([
       { label: 'Email', outcome: 'action_failed' },

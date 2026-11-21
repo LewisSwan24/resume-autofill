@@ -41,6 +41,8 @@ export type RunState =
       handedOver: HandedOver;
       countAtFill: number;
       framesAtFill: number;
+      /** The step the main frame named when the fill finished: a different one later means a new page of the form. */
+      stepAtFill?: string | null;
       undo: UndoResult | null;
       /** Frames that got the payload but sent no report (timed out or the report was dropped): they may have changed. */
       unanswered: number;
@@ -235,6 +237,7 @@ export async function executeRun(
     handedOver: { ...handedOver(pick.resume, sentPlans, fileInfos), otherSites: hostsOf(sentPlans) },
     countAtFill: live.reduce((sum, f) => sum + f.count, 0),
     framesAtFill: live.length,
+    stepAtFill: live.find((f) => f.main)?.step ?? null,
     undo: null,
     unanswered: filled.length - parts.length,
     fallback: pick.fallback,

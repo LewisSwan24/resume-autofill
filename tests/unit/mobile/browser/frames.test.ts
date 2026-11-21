@@ -41,6 +41,11 @@ describe('frame registry (inbound checks)', () => {
     expect(s.frames[0]).toMatchObject({ count: 7, iframes: 1, scanned: true });
   });
 
+  it('a scan keeps the step the main frame names, even when its count is unchanged', () => {
+    const s = feed(initialFrames(1), msg(0, hello()), msg(0, { ...scan(6), step: '基本信息' }), msg(0, { ...scan(6), step: '教育经历' }));
+    expect(s.frames[0]).toMatchObject({ count: 6, step: '教育经历' });
+  });
+
   it('drops a message whose origin differs from the registered one, or whose main flag changed', () => {
     const s = feed(initialFrames(1), msg(0, hello()));
     expect(checkInbound(s, msg(0, scan(3), { origin: 'https://evil.example.com' })).message).toBeNull();

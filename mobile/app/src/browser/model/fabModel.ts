@@ -56,8 +56,13 @@ export function fabModel(input: FabInput): FabView | null {
   }
 
   const count = live.reduce((sum, f) => sum + f.count, 0);
+  const ready = () =>
+    view('ready', 'magic', AUTOFILL, { key: 'm.br.fab.count', params: { n: count } }, 'fill', [{ key: 'm.br.fab.a11y', params: { n: count } }]);
   // After undo the values are gone from the page: offer the fill again; the report stays on the toolbar.
   if (run.phase === 'done' && !run.undo) {
+    // A multi-page form moved on without loading a new page: the next step may hold fewer fields than the last.
+    const step = live.find((f) => f.main)?.step ?? null;
+    if (count > 0 && step && run.stepAtFill && step !== run.stepAtFill) return ready();
     const grown = count - run.countAtFill;
     if (grown > 0 || live.length > run.framesAtFill) {
       const n = Math.max(0, grown);
@@ -68,9 +73,7 @@ export function fabModel(input: FabInput): FabView | null {
     return view('done', 'report', { key: 'm.br.fab.report' }, { key: 'm.br.fab.reportSub', params: { filled, review } }, 'report');
   }
 
-  if (count > 0) {
-    return view('ready', 'magic', AUTOFILL, { key: 'm.br.fab.count', params: { n: count } }, 'fill', [{ key: 'm.br.fab.a11y', params: { n: count } }]);
-  }
+  if (count > 0) return ready();
   if (input.settling || !live.some((f) => f.scanned)) return view('scanning', 'magic', AUTOFILL, { key: 'm.br.fab.scanning' }, 'fill');
   return view('none', 'magic', AUTOFILL, { key: 'm.br.fab.none' }, 'fill');
 }

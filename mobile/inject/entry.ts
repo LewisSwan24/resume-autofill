@@ -95,20 +95,26 @@ function start(bridge: Bridge, doc: Document, win: Window): void {
 
   let lastRun: FillRun | null = null;
   let remembered: { runId: string; journal: UndoJournal; growth: FillRun['growth'] } | null = null;
-  let lastScan: { count: number; iframes: number } | null = null;
+  let lastScan: { count: number; iframes: number; step: string | null | undefined } | null = null;
   let obstacles: ObstacleWatcher | null = null;
   let handlers: ReturnType<typeof createFrameHandlers> | null = null;
   /** Top frame only: auto-advance reads the step and presses Next here. */
   let steps: StepHandlers | null = null;
 
   const iframeCount = () => Math.min(MAX_FRAMES, countChildFrames(doc));
+  /** Which step a multi-page form shows, so the app can offer the fill again on the next one. */
+  const showingStep = (): string | null => {
+    const step = resolveAdapter(doc)?.stepSignature?.(doc) ?? stepTitle(doc);
+    return step ? step.slice(0, 200) : null;
+  };
   const scan = () => {
     try {
       const count = Math.min(MAX_SCAN_COUNT, scanDocument(doc, idFor).fillableCount);
       const iframes = iframeCount();
-      if (lastScan && lastScan.count === count && lastScan.iframes === iframes) return;
-      lastScan = { count, iframes };
-      post({ v, kind: 'scan', count, iframes });
+      const step = win === win.top ? showingStep() : undefined;
+      if (lastScan && lastScan.count === count && lastScan.iframes === iframes && lastScan.step === step) return;
+      lastScan = { count, iframes, step };
+      post(step === undefined ? { v, kind: 'scan', count, iframes } : { v, kind: 'scan', count, iframes, step });
     } catch {
       /* a page we cannot scan must never break the page itself */
     }

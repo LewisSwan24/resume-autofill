@@ -91,7 +91,7 @@ describe('page entry', () => {
     const b = await boot();
     const [hello, scan] = b.msgs();
     expect(hello).toEqual({ v: 1, kind: 'hello', iframes: 2 });
-    expect(scan).toEqual({ v: 1, kind: 'scan', count: scanDocument(document).fillableCount, iframes: 2 });
+    expect(scan).toEqual({ v: 1, kind: 'scan', count: scanDocument(document).fillableCount, iframes: 2, step: null });
     expect(scan!.count).toBeGreaterThan(0);
   });
 
@@ -228,6 +228,14 @@ describe('page entry – steps and sensitive fields', () => {
     b.send({ v: 1, kind: 'press', reqId: 'p1' });
     expect(await b.reply('p1')).toEqual({ v: 1, kind: 'pressed', reqId: 'p1', pressed: true });
     await vi.waitFor(() => expect(clicks).toHaveBeenCalledTimes(1));
+  });
+
+  it('names the showing step in its scans, and scans again when the step changes', async () => {
+    setPage(STEP('下一步'));
+    const b = await boot();
+    expect(b.msgs().find((m) => m.kind === 'scan')).toMatchObject({ step: '教育经历' });
+    document.querySelector('.ant-steps-item-title')!.textContent = '实习经历';
+    await vi.waitFor(() => expect(b.msgs().filter((m) => m.kind === 'scan').at(-1)).toMatchObject({ step: '实习经历' }));
   });
 
   it('never presses a button that sends the application', async () => {

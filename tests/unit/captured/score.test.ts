@@ -97,12 +97,18 @@ describe('scoreSample', () => {
     expect(out.join()).toMatch(/unexpected change text#new/);
   });
 
+  it('a control to leave alone that comes with a card the fill adds, still empty, was left alone', () => {
+    const e = expected({ __leaveEmpty: { Link: { selector: '#link', reason: 'no link' } } });
+    expect(problems(e, filled({ readings: { Link: '' } }))).toEqual([]);
+    expect(problems(e, filled({ readings: { Link: 'x' } })).join()).toMatch(/should stay empty: Link/);
+  });
+
   it('lets the page change an input it keeps for itself, and nothing else beside it', () => {
     const e = expected({ __pageOwn: { 'Change count': { selector: '#other', reason: 'the page counts its own edits' } } });
     expect(problems(e, filled({ snapshot: { 'text#other': '7' }, coverage: { 'Change count': ['text#other'] } }))).toEqual([]);
     const out = problems(e, filled({ snapshot: { 'text#other': '7', 'text#new': 'x' }, coverage: { 'Change count': ['text#other'] } }));
     expect(out.join()).toMatch(/unexpected change text#new/);
-    expect(verdictSelectors(e)).toContain('#other');
+    expect(verdictSelectors(e)).not.toContain('#other');
   });
 
   it('treats a filled known gap as an unexpected change, so it must move to fields', () => {

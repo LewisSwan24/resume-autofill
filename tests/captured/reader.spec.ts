@@ -251,3 +251,14 @@ test('reads boxes that only show an answer as their text, a start and an end as 
   expect(after.readings.span).toBe('2020-09 ~ 2024-06');
   expect(changedControls(before.snapshot, after.snapshot)).toHaveLength(2);
 });
+
+test('a box that only shows an answer reads as empty while all it shows is its placeholder', async ({ page }) => {
+  await page.setContent('<!doctype html><body><div id="pick"><div class="text"><div class="atsx-mselect-placeholder">请选择</div></div></div></body>');
+  const expected = { __resume: 'zh-CN', __knownGapsMax: 0, fields: { pick: { selector: '#pick', shown: true as const } } };
+  const locators = locatorsOf(expected);
+  const before = await inspect(page, locators);
+  expect(before.readings.pick).toBe('');
+  expect(before.coverage.pick).toHaveLength(1);
+  await page.evaluate(() => (document.querySelector('#pick .text')!.innerHTML = '<div class="value">保密</div>'));
+  expect((await inspect(page, locators)).readings.pick).toBe('保密');
+});

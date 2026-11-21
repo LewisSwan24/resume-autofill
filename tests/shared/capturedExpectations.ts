@@ -94,8 +94,10 @@ export interface CapturedExpected {
   /** Must not change, and may not be reported filled. */
   __leaveEmpty?: Record<string, LeaveEmpty>;
   /**
-   * An input the page keeps for itself, out of sight, and changes on its own as the form is edited (Feishu counts
-   * its edits in one). What it holds is the page's business, so its changes are not the fill's.
+   * An input the page keeps for itself and changes on its own as the form is edited: Feishu counts its edits in a
+   * hidden one, and a drawer's search box keeps what was typed to search. What it holds is the page's business, so
+   * its changes are not the fill's. No field of the form, it needs no verdict, and every box the selector finds is
+   * covered.
    */
   __pageOwn?: Record<string, LeaveEmpty>;
   /** A banner the applicant answers first, which covers the FAB. Clicked in the replay only, where nothing leaves. */
@@ -257,7 +259,6 @@ export function verdictSelectors(expected: CapturedExpected): string[] {
     ...Object.values(expected.__knownGaps ?? {}).flatMap(of),
     ...Object.values(expected.__review ?? {}).flatMap((r) => (r.added ? [] : [r.selector])),
     ...Object.values(expected.__leaveEmpty ?? {}).map((r) => r.selector),
-    ...Object.values(expected.__pageOwn ?? {}).map((r) => r.selector),
   ];
 }
 
@@ -403,7 +404,10 @@ export function scoreSample(
 
   const leaving = Object.keys(expected.__leaveEmpty ?? {});
   const touched = leaving.filter((label) => {
-    const changed = JSON.stringify(after.readings[label] ?? null) !== JSON.stringify(before.readings[label] ?? null);
+    const was = before.readings[label] ?? null;
+    const now = after.readings[label] ?? null;
+    // A card the fill adds brings its own controls: one still empty there was left alone.
+    const changed = !(isEmptyReading(was) && isEmptyReading(now)) && JSON.stringify(now) !== JSON.stringify(was);
     return changed || rowsOf(report, label).some((r) => r.outcome === 'filled');
   });
 

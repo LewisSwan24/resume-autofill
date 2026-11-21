@@ -82,6 +82,7 @@ export const LIBRARY_WIDGETS: LibraryWidget[] = [
   { lib: 'feishu', kind: 'select', root: '.atsx-select' },
   // On a phone (/index/m/): no inputs at all, a tap opens a drawer. The phone number is plain text from the login.
   { lib: 'feishu', kind: 'date', root: '.atsx-mperiod' },
+  { lib: 'feishu', kind: 'date', root: '.atsx-mdatepicker' },
   { lib: 'feishu', kind: 'select', root: '.atsx-mselect' },
   { lib: 'feishu', kind: 'select', root: '.atsx-m-input-select-warp' },
   { lib: 'feishu', kind: 'select', root: '.atsx-mSelectTreeInput' },
@@ -298,7 +299,7 @@ export function detectDateGranularity(root: Element, widget: Pick<LibraryWidget,
   }
   // Year and month is all either of Moka's date widgets asks.
   if (widget.lib === 'moka') return 'month';
-  if (root.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod, .atsx-date-picker-period-month')) return 'month';
+  if (root.matches('.throne-biz-date-range-picker-wrapper, .atsx-mperiod, .atsx-date-picker-period-month, .atsx-mdatepicker')) return 'month';
   // Beisen's box opens a day calendar or a month panel, and only opening it tells which: ask for the day.
   if (widget.lib === 'beisen') return 'day';
   if (widget.lib === 'element') {

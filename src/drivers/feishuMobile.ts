@@ -1,5 +1,5 @@
 // Feishu recruiting forms on a phone (/index/m/.../apply, the atsx- parts). Nothing there has an input: a tap opens a
-// drawer at the end of <body>. Lists and month spans are rmc-picker wheels that count only once the drawer's 确定 is
+// drawer at the end of <body>. Lists, months and month spans are rmc-picker wheels that count only once the drawer's 确定 is
 // pressed; a school is a search box whose option, once tapped, is the answer. Only the inner part of a row listens:
 // a tap on the outer .resumeSelect opens nothing. An answer already there is left as it is.
 import type { Control, OptionInfo } from '../engine/types';
@@ -149,6 +149,44 @@ async function fillPeriod(control: Control, intent: FillIntent, ctx: DriverConte
   return confirm(drawer, ctx, () => readPeriod(control), want);
 }
 
+// ---- one month, or one year ----------------------------------------------------------------------------------------
+
+const MONTH_DRAWER = '.atsx-mdatepicker-popup-content';
+const readMonth = (control: Control): string | null => shown(control.el.querySelector('.atsx-mdatepicker-text'));
+/** The date, as far as the box shows it: a box that takes only a year (获奖时间) shows the year alone. */
+const holdsDate = (text: string | null, when: DatePart): boolean => {
+  const year = /^(\d{4})年?$/.exec((text ?? '').trim());
+  if (year) return Number(year[1]) === when.year;
+  const m = /(\d{4})\D+(\d{1,2})/.exec(text ?? '');
+  return !!m && Number(m[1]) === when.year && Number(m[2]) === when.month;
+};
+
+async function setYear(drawer: HTMLElement, year: number, ctx: DriverContext): Promise<boolean> {
+  const wheel = drawer.querySelector<HTMLElement>('[class*="year-picker"]') ?? drawer.querySelector<HTMLElement>('.rmc-picker');
+  const y = wheel ? wheelTexts(wheel).findIndex((t) => Number(t) === year) : -1;
+  return !!wheel && y >= 0 && turnWheel(wheel, y, { signal: ctx.signal });
+}
+
+async function fillMonth(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
+  const current = readMonth(control);
+  if (intent.kind !== 'date') return failed(`a ${intent.kind} answer on a month`, current);
+  const want = monthOf(intent);
+  if (holdsDate(current, intent)) return { ok: true, observed: current };
+  const drawer = await opened(control.el.querySelector('.atsx-mdatepicker-content') ?? control.el, MONTH_DRAWER, ctx);
+  if (!drawer) return failed('the date did not open', current);
+  const ok = drawer.querySelector('[class*="header-ok"]');
+  // Some ask only for the year: the drawer then has no month wheel.
+  const yearOnly = !drawer.querySelector('[class*="month-picker"]');
+  if (!ok || !(await (yearOnly ? setYear(drawer, intent.year, ctx) : setMonth(drawer, intent, ctx)))) {
+    await dismiss(drawer, ctx);
+    return failed(`the wheels would not turn to ${yearOnly ? intent.year : want}`, current);
+  }
+  simulateClick(ok);
+  const taken = await waitFor(() => holdsDate(readMonth(control), intent) || null, { timeout: SETTLES_MS, signal: ctx.signal, root: ctx.doc });
+  if (!taken) await dismiss(drawer, ctx);
+  return taken ? { ok: true, observed: readMonth(control) } : failed(`the form did not take ${want}`, readMonth(control));
+}
+
 // ---- a school: search in a drawer ----------------------------------------------------------------------------------
 
 const SEARCH_DRAWER = '.atsx-m-input-select-input';
@@ -255,6 +293,7 @@ const on = (root: string) => (c: Control) => c.el.matches(root);
 export const feishuMobileDrivers: Driver[] = [
   { id: 'feishu-m-list', lib: 'feishu', kinds: ['select'], match: on('.atsx-mselect'), fill: (c, i, ctx) => guarded(() => fillList(c, i, ctx), () => readList(c)), read: readList },
   { id: 'feishu-m-period', lib: 'feishu', kinds: ['date'], match: on('.atsx-mperiod'), fill: (c, i, ctx) => guarded(() => fillPeriod(c, i, ctx), () => readPeriod(c)), read: readPeriod },
+  { id: 'feishu-m-month', lib: 'feishu', kinds: ['date'], match: on('.atsx-mdatepicker'), fill: (c, i, ctx) => guarded(() => fillMonth(c, i, ctx), () => readMonth(c)), read: readMonth },
   { id: 'feishu-m-search', lib: 'feishu', kinds: ['select'], match: on('.atsx-m-input-select-warp'), fill: (c, i, ctx) => guarded(() => fillSearch(c, i, ctx), () => readSearch(c)), read: readSearch },
   { id: 'feishu-m-tree', lib: 'feishu', kinds: ['select'], match: on('.atsx-mSelectTreeInput'), fill: (c, i, ctx) => guarded(() => fillTree(c, i, ctx), () => readTree(c)), read: readTree },
 ];

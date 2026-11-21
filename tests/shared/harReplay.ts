@@ -19,6 +19,8 @@ export interface RecordedRequest {
   postData: string | null;
   /** What the recording answered: status and body. Only read to tell whether two candidates differ. */
   answer?: string | undefined;
+  /** A page's own document, as a browser loads one. */
+  document?: true;
 }
 
 /** True when a request asks for the document a page address names. The part after # never reaches the server. */
@@ -114,9 +116,28 @@ export function stableTwin(request: RecordedRequest, recorded: RecordedRequest[]
   return twins.length > 1 && alike ? twins[0]! : null;
 }
 
+/**
+ * The document to answer a page with that the recording never loaded: one the applicant reached from another page
+ * without loading a new one, as an app that draws every route itself does (Feishu on a phone). The app shows the
+ * route its address names, so the one document the recording holds for that site serves. Two, and none does.
+ */
+export function pageShell(url: string, recorded: RecordedRequest[]): RecordedRequest | null {
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    return null;
+  }
+  const docs = recorded.filter((r) => r.document && r.method === 'GET' && new URL(r.url).origin === origin);
+  if (docs.some((d) => sameDocument(d.url, url))) return null;
+  const distinct = new Set(docs.map((d) => d.url));
+  return distinct.size === 1 ? docs[0]! : null;
+}
+
 interface HarFile {
   log: {
     entries: {
+      _resourceType?: string;
       request: { method: string; url: string; postData?: { text?: string; _file?: string } };
       response?: { status?: number; content?: { text?: string; _file?: string } };
     }[];
@@ -129,11 +150,11 @@ interface HarFile {
  */
 export function recordedRequests(harPath: string): RecordedRequest[] {
   const har = JSON.parse(readFileSync(harPath, 'utf8')) as HarFile;
-  return har.log.entries.map(({ request, response }) => {
+  return har.log.entries.map(({ request, response, _resourceType }) => {
     const post = request.postData;
     const postData = post?._file ? readFileSync(path.join(path.dirname(harPath), post._file), 'utf8') : post?.text || null;
     const body = response?.content?._file ?? response?.content?.text ?? '';
-    return { method: request.method, url: request.url, postData, answer: `${response?.status ?? 0} ${body}` };
+    return { method: request.method, url: request.url, postData, answer: `${response?.status ?? 0} ${body}`, ...(_resourceType === 'document' ? { document: true as const } : {}) };
   });
 }
 
@@ -146,6 +167,8 @@ export async function replayFromHar(context: BrowserContext, harPath: string, ur
   const recorded = recordedRequests(harPath);
   await context.route(url, (route) => {
     const request = route.request();
+    const shell = request.isNavigationRequest() ? pageShell(request.url(), recorded) : null;
+    if (shell) return route.fallback({ url: shell.url });
     const twin = stableTwin({ method: request.method(), url: request.url(), postData: request.postData() }, recorded);
     if (!twin) return route.fallback();
     return route.fallback({ url: twin.url, ...(twin.postData !== null ? { postData: twin.postData } : {}) });

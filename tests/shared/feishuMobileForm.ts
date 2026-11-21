@@ -27,6 +27,12 @@ export const mperiod = (from = '', to = '') =>
       : '<div class="atsx-mperiod-placeholder">请选择</div>'
   }</div></div></div><div class="resumeDatePeriod-icon"></div></div>`;
 
+/** One month (出生日期), or one year (获奖时间: its drawer has no month wheel). `shown` as YYYY-MM or YYYY. */
+export const mdate = (shown = '', onlyYear = false) =>
+  `<div class="resumeDatePicker__352d1a"><div class="atsx-mdatepicker"${onlyYear ? ' data-only-year="1"' : ''}><div class="atsx-mdatepicker-content"><div class="atsx-mdatepicker-text">${
+    shown ? `<div class="atsx-mdatepicker-value">${shown}</div>` : '<div class="atsx-mdatepicker-placeholder">请选择</div>'
+  }</div></div></div><div class="resumeDatePicker-icon"></div></div>`;
+
 /** A school: search box in a drawer. `known` is what the site's search knows. */
 export const mschool = (shown = '', known: string[] = []) =>
   `<div class="atsx-m-input-select-warp" data-options="${known.join('|')}">${
@@ -145,6 +151,8 @@ export function behave(doc: Document, now: [number, number] = [2026, 11]): Mobil
     if (list) return openList(list);
     const period = t.closest('.atsx-mperiod-content')?.closest<HTMLElement>('.atsx-mperiod');
     if (period) return openPeriod(period);
+    const month = t.closest('.atsx-mdatepicker-content')?.closest<HTMLElement>('.atsx-mdatepicker');
+    if (month) return openMonth(month);
     const school = t.closest<HTMLElement>('.atsx-m-input-select-warp');
     if (school) return openSchool(school);
     const tree = t.closest<HTMLElement>('.atsx-mSelectTreeInput');
@@ -220,6 +228,26 @@ export function behave(doc: Document, now: [number, number] = [2026, 11]): Mobil
       shut(d);
     });
     d.querySelector('.atsx-mperiod-popup-header-dismiss')!.addEventListener('click', () => shut(d));
+  }
+
+  function openMonth(root: HTMLElement) {
+    page.opened.push('month');
+    const d = drawer(
+      doc,
+      'atsx-mdatepicker-popup',
+      `<div class="atsx-mdatepicker-popup-content"><div class="atsx-mdatepicker-popup-header"><span class="atsx-mdatepicker-popup-header-dismiss atsx-mdatepicker-popup-header-operate">取消</span><span class="atsx-mdatepicker-popup-header-ok atsx-mdatepicker-popup-header-operate">确定</span></div><div class="atsx-mdatepicker-popup-main"><div class="rmc-multi-picker"></div></div></div>`,
+    );
+    const onlyYear = root.dataset.onlyYear === '1';
+    const year = wheel(doc, YEARS, YEARS.indexOf(String(now[0])), `atsx-mdatepicker-popup-year-picker showYearCaption${onlyYear ? ' onlyYear' : ''}`);
+    const month = wheel(doc, MONTHS, now[1] - 1, 'atsx-mdatepicker-popup-month-picker centerMonth');
+    d.querySelector('.rmc-multi-picker')!.append(...(onlyYear ? [year.el] : [year.el, month.el]));
+    d.querySelector('.atsx-mdatepicker-popup-header-ok')!.addEventListener('click', () => {
+      const shown = onlyYear ? year.items[year.index] : `${year.items[year.index]}-${month.items[month.index]!.padStart(2, '0')}`;
+      root.querySelector('.atsx-mdatepicker-text')!.innerHTML = `<div class="atsx-mdatepicker-value">${shown}</div>`;
+      shut(d);
+    });
+    d.querySelector('.atsx-mdatepicker-popup-header-dismiss')!.addEventListener('click', () => shut(d));
+    d.querySelector('.atsx-drawer-close')!.addEventListener('click', () => shut(d));
   }
 
   function openSchool(root: HTMLElement) {

@@ -6,7 +6,7 @@ import { getDriver } from '../../../src/drivers/registry';
 import { registerAllDrivers } from '../../../src/drivers';
 import type { Control } from '../../../src/engine/types';
 import type { FillIntent } from '../../../src/drivers/types';
-import { behave, FEISHU_MOBILE_FORM, mcity, mperiod, mschool, mselect, type MobilePage } from '../../shared/feishuMobileForm';
+import { behave, FEISHU_MOBILE_FORM, mcity, mdate, mperiod, mschool, mselect, type MobilePage } from '../../shared/feishuMobileForm';
 import { byLabel, choice, ctx1, mount } from './helpers';
 
 registerAllDrivers();
@@ -112,6 +112,34 @@ describe('a span of months', () => {
     const control = only(mperiod());
     const result = await fill(control, { kind: 'dateFrom', display: '', start: ym(2025, 2) });
     expect(result).toMatchObject({ ok: false, outcome: 'needs_review' });
+    expect(page.opened).toEqual([]);
+  });
+});
+
+describe('one month', () => {
+  it('is a date field of months', () => {
+    const control = only(mdate());
+    expect(control).toMatchObject({ kind: 'date', lib: 'feishu', dateGranularity: 'month' });
+    expect(control.dateRange).toBeFalsy();
+  });
+
+  it('turns the year, then the month, then confirms', async () => {
+    const control = only(mdate());
+    const result = await fill(control, { kind: 'date', display: '2002-03-15', year: 2002, month: 3, day: 15 });
+    expect(result).toMatchObject({ ok: true, observed: '2002-03' });
+    expect(openDrawers()).toBe(0);
+  });
+
+  it('a drawer with only a year wheel takes the year of the date', async () => {
+    const control = only(mdate('', true));
+    const result = await fill(control, { kind: 'date', display: '2022-10', year: 2022, month: 10 });
+    expect(result).toMatchObject({ ok: true, observed: '2022' });
+    expect(openDrawers()).toBe(0);
+  });
+
+  it('the month already there is left alone', async () => {
+    const control = only(mdate('2002-03'));
+    expect(await fill(control, { kind: 'date', display: '2002-03', year: 2002, month: 3 })).toMatchObject({ ok: true });
     expect(page.opened).toEqual([]);
   });
 });

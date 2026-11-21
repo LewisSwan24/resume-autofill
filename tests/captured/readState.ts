@@ -16,16 +16,23 @@ const SHOWN_PREFIX = 'shown:';
 export function locatorsOf(expected: CapturedExpected): Locators {
   const out: Locators = {};
   for (const [label, f] of Object.entries(expected.fields)) out[label] = f.exists ? `${EXISTS_PREFIX}${f.selector}` : f.shown ? `${SHOWN_PREFIX}${f.selector}` : f.selector;
-  for (const [label, g] of Object.entries(expected.__knownGaps ?? {})) out[label] = g.selector;
+  for (const [label, g] of Object.entries(expected.__knownGaps ?? {})) out[label] = g.shown ? `${SHOWN_PREFIX}${g.selector}` : g.selector;
   for (const [label, r] of Object.entries(expected.__review ?? {})) out[label] = r.shown ? `${SHOWN_PREFIX}${r.selector}` : r.selector;
   for (const [label, r] of Object.entries(expected.__leaveEmpty ?? {})) out[label] = r.selector;
-  for (const [label, r] of Object.entries(expected.__pageOwn ?? {})) out[label] = r.selector;
+  // Read as shown boxes so that every one the selector finds is covered, not only the first.
+  for (const [label, r] of Object.entries(expected.__pageOwn ?? {})) out[label] = `${SHOWN_PREFIX}${r.selector}`;
   for (const [label, e] of Object.entries(expected.__entries ?? {})) out[label] = `${ENTRIES_PREFIX}${e.selector}`;
   return out;
 }
 
 export function inspectInPage(locators: Locators): Inspection {
   const squash = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
+  // A box that shows its hint until something is chosen (请选择 on Feishu's phone pickers) marks the hint a placeholder.
+  const shownText = (el: Element): string => {
+    const copy = el.cloneNode(true) as Element;
+    copy.querySelectorAll('[class*="placeholder"]').forEach((p) => p.remove());
+    return squash(copy.textContent);
+  };
 
   const roots: ParentNode[] = [document];
   const walkRoots = (root: ParentNode): void => {
@@ -74,7 +81,7 @@ export function inspectInPage(locators: Locators): Inspection {
     if (type === 'button') return squash(el.textContent);
     // An editable box that writes its hint as its own text, marked as a placeholder, is empty.
     if (el.hasAttribute('contenteditable')) return el.classList.contains('placeholder') ? '' : squash(el.textContent);
-    if (shownBoxes.has(el)) return squash(el.textContent);
+    if (shownBoxes.has(el)) return shownText(el);
     // A search-and-pick box keeps its choices as pills beside it: the text in it is not an answer.
     const pills = el.closest('[data-automation-id="multiSelectContainer"]');
     if (pills) return [...pills.querySelectorAll('[data-automation-id="selectedItem"] [data-automation-id="promptOption"]')].map((p) => squash(p.textContent)).join(', ');
@@ -155,7 +162,7 @@ export function inspectInPage(locators: Locators): Inspection {
       // A start and an end shown in two boxes read as one span.
       const boxes = queryAll(selector.slice('shown:'.length));
       coverage[label] = boxes.flatMap((el) => keys.get(el) ?? []);
-      readings[label] = boxes.length === 0 ? null : boxes.every((b) => !squash(b.textContent)) ? '' : boxes.map((b) => squash(b.textContent)).join(' ~ ');
+      readings[label] = boxes.length === 0 ? null : boxes.every((b) => !shownText(b)) ? '' : boxes.map(shownText).join(' ~ ');
       continue;
     }
     const els = queryAll(selector).filter(isControl);

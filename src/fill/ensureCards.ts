@@ -2,6 +2,7 @@
 // by clicking the section's "add" button. Never clicks anything that is not an add button.
 import { isAddButtonText, isDeleteText, matchSection } from '../dictionary';
 import { ADD_BUTTON_SELECTOR, plainAddButtons } from '../engine/addButtons';
+import { discover } from '../engine/discover';
 import { cleanEvidenceText } from '../engine/evidence';
 import { findSection } from '../engine/grouping';
 import { planFill } from '../engine/plan';
@@ -199,7 +200,8 @@ export async function ensureCards(
   const timeout = opts.timeoutMs ?? 2000;
   const maxAdds = opts.maxAdds ?? 12;
   const results: SectionGrowth[] = [];
-  const fieldCount = () => doc.querySelectorAll(FIELD_SELECTOR).length;
+  // Every control the engine sees: a card on a phone can be pickers alone, with no input behind any of them.
+  const fieldCount = () => discover(doc).length;
 
   const initial = sectionStates(doc, resume, opts.idFor).filter((s) => s.need > s.have && !opts.skip?.has(s.section));
   for (const first of initial) {

@@ -4,7 +4,7 @@
 // differs from the recorded one only in a field the recording could not fix (a timestamp, or a value the page
 // read from an answer the recording never held) went unanswered. Neither may ever answer from a different entry.
 import { describe, expect, it } from 'vitest';
-import { sameDocument, stableTwin, type RecordedRequest } from '../../shared/harReplay';
+import { pageShell, sameDocument, stableTwin, type RecordedRequest } from '../../shared/harReplay';
 
 const get = (url: string): RecordedRequest => ({ method: 'GET', url, postData: null });
 const post = (url: string, body: unknown): RecordedRequest => ({
@@ -98,5 +98,25 @@ describe('stableTwin', () => {
     expect(stableTwin(get(`${path}?cluster=prod&name=apply-form&project=recruitment-mobile`), recorded)).toBeNull();
     // The cluster is only set aside on that one lookup.
     expect(stableTwin(get('https://app.mokahr.com/api/other?cluster=prod'), [get('https://app.mokahr.com/api/other?cluster=live-cluster')])).toBeNull();
+  });
+});
+
+// A form the applicant reached from the job page without loading a new one (Feishu on a phone): the recording holds
+// that page's document only, and the app shows whichever route the address names.
+describe('pageShell', () => {
+  const doc = (url: string): RecordedRequest => ({ ...get(url), document: true });
+  const recorded = [doc('https://jobs.example.test/campus/m/position/1/detail'), get('https://cdn.example.test/app.js'), get('https://jobs.example.test/api/config')];
+
+  it('answers a page the recording never loaded with the document it holds for that site', () => {
+    expect(pageShell('https://jobs.example.test/campus/m/resume/1/apply?jobId=1', recorded)?.url).toBe('https://jobs.example.test/campus/m/position/1/detail');
+  });
+
+  it('leaves a document the recording holds, and a site it holds none for, alone', () => {
+    expect(pageShell('https://jobs.example.test/campus/m/position/1/detail', recorded)).toBeNull();
+    expect(pageShell('https://other.example.test/campus/m/resume/1/apply', recorded)).toBeNull();
+  });
+
+  it('gives no answer when the recording holds two documents for the site', () => {
+    expect(pageShell('https://jobs.example.test/campus/m/resume/1/apply', [...recorded, doc('https://jobs.example.test/campus/m/position/2/detail')])).toBeNull();
   });
 });

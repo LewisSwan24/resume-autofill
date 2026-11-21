@@ -246,6 +246,21 @@ describe('findAddButtons', () => {
       const [growth] = await ensureCards(document, zh, { timeoutMs: 200 });
       expect(growth).toMatchObject({ section: 'projects', need, have: need, status: 'ok' });
     });
+
+    it('opens a section whose card is only pickers, with no input behind any of them', async () => {
+      touchPage(true);
+      document.body.innerHTML = mobileSection('语言能力', 'language');
+      const section = document.querySelector('.resumeEditForm-language')!;
+      const pickerRow = (title: string) =>
+        `<div class="atsx-row atsx-form-item"><div class="atsx-col atsx-form-item-label"><label>${title}</label></div><div class="atsx-col atsx-form-item-control-wrapper">${mselect('', ['英语', '日语'])}</div></div>`;
+      section.addEventListener('click', (e) => {
+        if (!(e.target as Element).closest('.createFormSection-add__wrapper')) return;
+        section.querySelector('.createFormSection-add__wrapper')!.remove();
+        section.insertAdjacentHTML('beforeend', `<div class="resumeEditForm-item">${pickerRow('语言')}${pickerRow('精通程度')}</div>`);
+      });
+      const [growth] = await ensureCards(document, zh, { timeoutMs: 200 });
+      expect(growth).toMatchObject({ section: 'languages', need: zh.languages.length, added: 1, status: 'ok' });
+    });
   });
 
   it('without a touch screen, plain add words still need the pointer', () => {

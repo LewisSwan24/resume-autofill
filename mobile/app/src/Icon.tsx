@@ -65,6 +65,10 @@ import arrowCounterclockwise from 'bootstrap-icons/icons/arrow-counterclockwise.
 import dashCircle from 'bootstrap-icons/icons/dash-circle.svg?raw';
 import boxArrowInDown from 'bootstrap-icons/icons/box-arrow-in-down.svg?raw';
 import magic from 'bootstrap-icons/icons/magic.svg?raw';
+import chevronLeft from 'bootstrap-icons/icons/chevron-left.svg?raw';
+import stopCircle from 'bootstrap-icons/icons/stop-circle.svg?raw';
+import shieldLock from 'bootstrap-icons/icons/shield-lock.svg?raw';
+import laptop from 'bootstrap-icons/icons/laptop.svg?raw';
 import arrowRight from 'bootstrap-icons/icons/arrow-right.svg?raw';
 import arrowClockwise from 'bootstrap-icons/icons/arrow-clockwise.svg?raw';
 import slashCircle from 'bootstrap-icons/icons/slash-circle.svg?raw';
@@ -182,6 +186,12 @@ const ICONS = {
   'signpost-split': signpostSplit,
   // The resume keyboard: the Settings row, the setup screen and the WeChat hint.
   'keyboard': keyboardIcon,
+  // Auto-advance (stop it; the locate bar's previous row), and sensitive fields (the setting, a held-back row, the
+  // extension on the computer that shares the setting).
+  'chevron-left': chevronLeft,
+  'stop-circle': stopCircle,
+  'shield-lock': shieldLock,
+  laptop,
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;

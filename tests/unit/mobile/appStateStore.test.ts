@@ -24,6 +24,7 @@ const V2_DEFAULTS = {
   reminders: { time: '09:00', dayBefore: true, dayOf: true, defaultOn: false },
   clipboard: { offer: true, lastStamp: null, dismissed: [] },
   keyboard: { show: true, hidden: [] },
+  advanceSites: [],
 };
 
 /** Every field set: a record with deadline, notes and history; non-default reminders and clipboard. */
@@ -84,6 +85,13 @@ describe('app state store', () => {
     expect(defaultAppState()).toEqual(V2_DEFAULTS);
     expect(await createMemoryAppStateStore({ version: 2 }).load()).toEqual(V2_DEFAULTS);
     expect(defaultAppState({ onboardingDone: true })).toEqual({ ...V2_DEFAULTS, onboardingDone: true });
+  });
+
+  it('remembers the sites agreed to auto-advance; a broken list reads as none, never as a broken state', async () => {
+    const sites = ['https://jobs.example.com', 'https://hr.example.org'];
+    expect((await createMemoryAppStateStore({ version: 2, advanceSites: sites }).load())?.advanceSites).toEqual(sites);
+    const broken = await createMemoryAppStateStore({ version: 2, onboardingDone: true, advanceSites: 'everywhere' } as never).load();
+    expect(broken).toMatchObject({ onboardingDone: true, advanceSites: [] });
   });
 
   it('a full v2 state round-trips through every backend', async () => {

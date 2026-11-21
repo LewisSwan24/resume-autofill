@@ -165,3 +165,29 @@ export function stepFingerprint(doc: Document, adapterStep: string | null): stri
     .map((el) => `${el.tagName}:${el.getAttribute('name') || el.id || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''}`);
   return `fields:${ids.length}:${hash(ids.join('|'))}`;
 }
+
+/** Where step bars mark the step that is showing: ARIA first, then Ant Design and Element, then a generic class. */
+const CURRENT_STEP = [
+  '[aria-current="step"]',
+  '.ant-steps-item-process .ant-steps-item-title',
+  '.ant-steps-item-active .ant-steps-item-title',
+  '.el-step.is-process .el-step__title',
+  '.el-step__title.is-process',
+  '[class*="step" i][class*="current" i]',
+  '[class*="step" i][class*="active" i]',
+];
+/** Longer than this, the "current" text is a paragraph, not a step's name. */
+const MAX_STEP_TITLE = 24;
+
+/** The name the page gives the step it is showing ("教育经历"), or null when it shows none it marks. */
+export function stepTitle(doc: Document): string | null {
+  for (const selector of CURRENT_STEP) {
+    for (const el of Array.from(doc.querySelectorAll<HTMLElement>(selector))) {
+      if (!isVisible(el)) continue;
+      // A leading step number ("2", "03 ") is the bar's, not the name's.
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim().replace(/^\d{1,2}[\s.、:：]*/, '').trim();
+      if (text && text.length <= MAX_STEP_TITLE) return text;
+    }
+  }
+  return null;
+}

@@ -71,7 +71,8 @@ function offenders(files: string[]): string[] {
       f === 'src/content/index.ts' ||
       f.startsWith('src/messaging/') ||
       f.startsWith('src/storage/') ||
-      (f.startsWith('src/background/') && f !== 'src/background/subset.ts' && f !== 'src/background/merge.ts'),
+      // The auto-advance loop is pure (its only imports are types), so the fill browser runs it unchanged.
+      (f.startsWith('src/background/') && !['src/background/subset.ts', 'src/background/merge.ts', 'src/background/autoAdvance.ts'].includes(f)),
   );
 }
 

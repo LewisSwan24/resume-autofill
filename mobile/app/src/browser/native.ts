@@ -6,6 +6,8 @@ import { registerPlugin } from '@capacitor/core';
 export interface Insets {
   top: number;
   bottom: number;
+  /** Room on the right: the report docked beside the page in landscape. Absent or 0 otherwise. */
+  end?: number;
 }
 export interface NativeTheme {
   bg: number;

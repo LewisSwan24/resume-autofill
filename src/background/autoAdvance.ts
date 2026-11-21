@@ -1,7 +1,7 @@
 // Auto-advance through a multi-step application: press the page's own Next button, wait for the next step, fill
 // it, and repeat. It stops, and hands the form back, at the last step (only a send button left), at anything
 // that needs the user, or when asked. It never presses a button that sends the application.
-import type { FillRequestResponse } from '../messaging';
+import type { FillRequestResponse } from '../messaging/protocol';
 import type { StepAction, PageBlocker } from '../fill/nextStep';
 import type { AdvanceState, AdvanceStop } from './wizardSession';
 

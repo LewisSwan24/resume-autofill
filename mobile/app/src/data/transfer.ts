@@ -10,6 +10,7 @@ import {
   pruneMissingAttachments,
 } from '../../../../src/editor';
 import { ProfileSchema, type Locale, type Profile, type Resume } from '../../../../src/schema';
+import { newerSensitiveChoice } from '../../../../src/sync/merge';
 import { isModuleFilled } from '../home/summary';
 import type { AppState } from '../store/appStateStore';
 import { sameResumeContent } from '../store/profileStore';
@@ -135,7 +136,8 @@ const randomId = () =>
 /**
  * Add the incoming resumes to the phone's: new ids appended, identical same-id ones skipped, differing same-id ones
  * appended as a copy (new id, title + `copySuffix`). Links among appended resumes are remapped; links to a resume
- * that is neither imported nor on the phone are dropped. Settings and the active resume stay the phone's.
+ * that is neither imported nor on the phone are dropped. Settings and the active resume stay the phone's, except the
+ * sensitive-field choice: that one is shared by every device, and the one made last wins (as in sync).
  */
 export function mergeInto(
   current: Profile,
@@ -179,6 +181,7 @@ export function mergeInto(
   const activeOnPhone = current.resumes.some((r) => r.id === current.activeResumeId) ? current.activeResumeId : null;
   const profile = ProfileSchema.parse({
     ...current,
+    settings: { ...current.settings, ...newerSensitiveChoice(current.settings, incoming.settings) },
     resumes: [...current.resumes, ...linked],
     activeResumeId: activeOnPhone ?? linked[0]?.id ?? current.resumes[0]?.id ?? null,
   });

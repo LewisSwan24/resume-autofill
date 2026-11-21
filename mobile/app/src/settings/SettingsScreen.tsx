@@ -19,6 +19,8 @@ import { ClearSiteDataSheet } from './ClearSiteDataSheet';
 import { DeleteAllSheet } from './DeleteAllSheet';
 import { ExportSheet, type SaveDocument } from './ExportSheet';
 import { FILL_LANGUAGE_LABELS, FillLanguageSheet } from './FillLanguageSheet';
+import { SENSITIVE_LABELS, SensitiveFieldsSheet } from './SensitiveFieldsSheet';
+import type { SensitiveFieldMode } from '../../../../src/schema/sensitive';
 import { LanguageSwitch } from './LanguageSwitch';
 import { OpenLinksSheet } from './OpenLinksSheet';
 import { PrivacyScreen } from './PrivacyScreen';
@@ -33,6 +35,8 @@ export interface SettingsScreenProps {
   onPage: (page: SettingsPage) => void;
   language: Language;
   onLanguage: (language: Language) => void;
+  /** profile.settings.sensitiveFields changed here (stamped with the time, so sync keeps the newer choice). */
+  onSensitiveFields?: (mode: SensitiveFieldMode) => void;
   appState: AppState;
   updateAppState: (change: (s: AppState) => AppState) => Promise<boolean>;
   /** Saves pending edits and returns the stored profile (what export writes). */
@@ -76,7 +80,7 @@ function reminderValueKey(r: AppState['reminders']): string {
   return 'm.remind.valueNone';
 }
 
-type OpenSheet = 'fill' | 'export' | 'sync' | 'templates' | 'siteData' | 'wipe' | 'about' | 'links' | 'reminders' | null;
+type OpenSheet = 'fill' | 'sensitive' | 'export' | 'sync' | 'templates' | 'siteData' | 'wipe' | 'about' | 'links' | 'reminders' | null;
 
 /** A setting that is on or off: a checkbox with role="switch", named by its label and described by its hint.
  *  Exported for the resume keyboard's setup page. */
@@ -192,6 +196,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
           value={t(FILL_LANGUAGE_LABELS[appState.fillLanguage])}
           onClick={() => setSheet('fill')}
         />
+        {profile && props.onSensitiveFields ? (
+          <Row
+            icon="shield-lock"
+            label={t('m.sensitive.row')}
+            value={t('m.sensitive.value', { mode: t(SENSITIVE_LABELS[profile.settings.sensitiveFields]) })}
+            onClick={() => setSheet('sensitive')}
+          />
+        ) : null}
         <Row
           icon="bell"
           label={t('m.remind.title')}
@@ -233,6 +245,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
         <Row icon="info-circle" label={t('m.settings.aboutApp')} onClick={() => setSheet('about')} />
       </ul>
 
+      {profile && props.onSensitiveFields ? (
+        <SensitiveFieldsSheet
+          open={sheet === 'sensitive'}
+          value={profile.settings.sensitiveFields}
+          onChoose={props.onSensitiveFields}
+          onClose={close}
+        />
+      ) : null}
       <FillLanguageSheet
         open={sheet === 'fill'}
         value={appState.fillLanguage}

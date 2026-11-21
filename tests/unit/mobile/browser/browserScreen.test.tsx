@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMemo, useSyncExternalStore } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { BrowserScreen } from '../../../../mobile/app/src/browser/BrowserScreen';
+import { BrowserScreen, type BrowserScreenProps } from '../../../../mobile/app/src/browser/BrowserScreen';
 import { createBrowserSession, type BrowserSession } from '../../../../mobile/app/src/browser/model/session';
 import { createFakeFillBrowser, type FakeFillBrowser } from '../../../../mobile/app/src/browser/native';
 import { mt } from '../../../../mobile/app/src/i18n';
@@ -70,20 +70,25 @@ interface Rig {
   setShown(shown: boolean): void;
 }
 
-function Harness({ session, native, profile, onClose, onGoToResume, shown = true }: { session: BrowserSession; native: FakeFillBrowser; profile: Profile; onClose: () => void; onGoToResume: () => void; shown?: boolean }) {
+type Extra = Partial<Pick<BrowserScreenProps, 'advanceSites' | 'onAdvanceSite' | 'sensitiveFields' | 'onSensitiveFields'>>;
+
+function Harness({ session, native, profile, onClose, onGoToResume, shown = true, extra = {} }: { session: BrowserSession; native: FakeFillBrowser; profile: Profile; onClose: () => void; onGoToResume: () => void; shown?: boolean; extra?: Extra }) {
   const state = useSyncExternalStore(session.subscribe, session.getState);
   const backStack = useMemo(() => createBackStack(), []);
   const files = useMemo(() => ({ info: async (id: string) => FILES[id]?.info ?? null }), []);
   return (
     <BackStackContext.Provider value={backStack}>
       {shown ? (
-        <BrowserScreen open={{ session, state, native }} profile={profile} files={files} onClose={onClose} onGoToResume={onGoToResume} showToast={() => undefined} />
+        <BrowserScreen open={{ session, state, native }} profile={profile} files={files} onClose={onClose} onGoToResume={onGoToResume} showToast={() => undefined} {...extra} />
       ) : null}
     </BackStackContext.Provider>
   );
 }
 
-async function renderBrowser(opts: { url?: string; profile?: Profile; demo?: boolean; silentFill?: boolean } = {}): Promise<Rig> {
+async function renderBrowser(
+  opts: { url?: string; profile?: Profile; demo?: boolean; silentFill?: boolean; rows?: FieldReport[]; step?: 'next' | 'final'; press?: 'final_step' | 'needs_you'; extra?: Extra } = {},
+): Promise<Rig> {
+  const rows = opts.rows ?? REPORT_ROWS;
   const native = createFakeFillBrowser();
   const commands: Rig['commands'] = [];
   const url = opts.url ?? HTTPS;
@@ -98,7 +103,21 @@ async function renderBrowser(opts: { url?: string; profile?: Profile; demo?: boo
       cmd.kind === 'needs'
         ? { v: 1, kind: 'needs', reqId: cmd.reqId, needs: { fieldKeys: ['contact.email', 'contact.phone'], repeatSections: [], attachmentKeys: [] } }
         : cmd.kind === 'fill'
-          ? { v: 1, kind: 'report', reqId: cmd.reqId, runId: cmd.runId, report: { url, startedAt: 1, finishedAt: 2, fields: REPORT_ROWS, counts: countOutcomes(REPORT_ROWS) } }
+          ? {
+              v: 1,
+              kind: 'report',
+              reqId: cmd.reqId,
+              runId: cmd.runId,
+              report: cmd.only
+                ? { url, startedAt: 1, finishedAt: 2, fields: rows.filter((f) => cmd.only!.includes(f.fieldId)).map((f) => ({ ...f, outcome: 'filled', note: 'sensitive_filled' })), counts: countOutcomes([]) }
+                : { url, startedAt: 1, finishedAt: 2, fields: rows, counts: countOutcomes(rows) },
+            }
+          : cmd.kind === 'step'
+            ? opts.step
+              ? { v: 1, kind: 'step', reqId: cmd.reqId, state: { url, fingerprint: 'f1', action: opts.step, blocker: null, userInputAt: 0, title: '基本信息' } }
+              : null
+          : cmd.kind === 'press'
+            ? { v: 1, kind: 'pressed', reqId: cmd.reqId, pressed: false, reason: opts.press ?? 'final_step' }
           : cmd.kind === 'focus'
             ? { v: 1, kind: 'focused', reqId: cmd.reqId, ok: true }
             : cmd.kind === 'undo'
@@ -118,10 +137,10 @@ async function renderBrowser(opts: { url?: string; profile?: Profile; demo?: boo
   });
   const onGoToResume = vi.fn();
   const onClose = vi.fn();
-  const view = render(<Harness session={session} native={native} profile={profile} onClose={onClose} onGoToResume={onGoToResume} />);
+  const view = render(<Harness session={session} native={native} profile={profile} onClose={onClose} onGoToResume={onGoToResume} extra={opts.extra} />);
   await waitFor(() => expect(native.callsOf('open')).toHaveLength(1), WAIT);
   const setShown = (shown: boolean) =>
-    view.rerender(<Harness session={session} native={native} profile={profile} onClose={onClose} onGoToResume={onGoToResume} shown={shown} />);
+    view.rerender(<Harness session={session} native={native} profile={profile} onClose={onClose} onGoToResume={onGoToResume} shown={shown} extra={opts.extra} />);
   return { native, session, commands, onGoToResume, onClose, setShown };
 }
 
@@ -336,7 +355,9 @@ describe('BrowserScreen: filling', () => {
     expect(within(sheet).getByText('教育经历')).toBeTruthy();
     fireEvent.click(within(sheet).getByRole('button', { name: '在网页上找到「性别」' }));
     await waitFor(() => expect(r.commands.filter((c) => c.cmd.kind === 'focus').map((c) => [c.frame, (c.cmd as { fieldId: string }).fieldId])).toEqual([[1, 'f2']]), WAIT);
-    fireEvent.click(within(tabs).getByRole('tab', { name: '已填 2' }));
+    // Locating folds the sheet into a bar; 列表 brings the tabs back.
+    fireEvent.click(within(sheet).getByRole('button', { name: '列表' }));
+    fireEvent.click(within(sheet).getByRole('tab', { name: '已填 2' }));
     expect(within(sheet).getByText('填入：张三')).toBeTruthy();
     // The toolbar now has the report, with the rows waiting for the person.
     expect(screen.getByRole('button', { name: '填写报告，待你看 2 项' })).toBeTruthy();
@@ -699,5 +720,113 @@ describe('BrowserScreen – edge cases', () => {
     fireEvent.click(within(ask).getByRole('button', { name: '继续填写' }));
     await screen.findByRole('dialog', { name: '填写报告' }, WAIT);
     expect(r.commands.filter((c) => c.cmd.kind === 'fill')).toHaveLength(1);
+  });
+});
+
+describe('BrowserScreen: report by reason, locate bar, sensitive fields, auto-advance', () => {
+  const ROWS: FieldReport[] = [
+    { ...row('n1', '姓名', 'filled', '张三'), section: 'basics' },
+    { ...row('s1', '学校', 'needs_review', '星河理工'), section: 'education', entry: 0, note: 'picked_other_name', observed: '星河理工' },
+    { ...row('id', '证件号码', 'needs_review'), section: 'basics', fieldKey: 'basics.idNumber', note: 'sensitive_held' },
+    { ...row('o1', '期望城市', 'no_option'), section: 'jobIntention' },
+    { ...row('d1', 'QQ', 'no_data'), section: 'basics' },
+    { ...row('d2', '专业排名', 'no_data'), section: 'education', entry: 0 },
+    { ...row('d3', 'GPA', 'no_data'), section: 'education', entry: 1 },
+  ];
+
+  it('待你看 is split by reason; a row says its entry and why; a picked name is shown', async () => {
+    const r = await renderBrowser({ rows: ROWS });
+    const sheet = await runFill(r);
+    const heads = within(sheet).getAllByRole('heading', { level: 3 }).map((h) => h.textContent?.trim());
+    expect(heads).toEqual(['待确认2', '没有匹配的选项1']);
+    expect(within(sheet).getByText('教育经历 · 第 1 条')).toBeTruthy();
+    expect(within(sheet).getByText('选了「星河理工」，和简历写法不同')).toBeTruthy();
+  });
+
+  it('a located row folds the report into a bar that walks the tab: previous, next, where it is, back to the list', async () => {
+    const r = await renderBrowser({ rows: ROWS });
+    const sheet = await runFill(r);
+    fireEvent.click(within(sheet).getByRole('tab', { name: '跳过 3' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: '在网页上找到「专业排名」' }));
+    const bar = await screen.findByTestId('m-locate-bar');
+    expect(within(bar).getByText('第 2 个，共 3 个跳过的格子')).toBeTruthy();
+    fireEvent.click(within(bar).getByRole('button', { name: '下一个' }));
+    await waitFor(() => expect(within(bar).getByText('第 3 个，共 3 个跳过的格子')).toBeTruthy(), WAIT);
+    expect((within(bar).getByRole('button', { name: '下一个' }) as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(r.commands.filter((c) => c.cmd.kind === 'focus').map((c) => (c.cmd as { fieldId: string }).fieldId)).toEqual(['d2', 'd3']), WAIT);
+    fireEvent.click(within(bar).getByRole('button', { name: '列表' }));
+    expect(within(sheet).getByRole('tab', { name: '跳过 3' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(sheet).getByRole('button', { name: '去简历里补上' }));
+    expect(r.onGoToResume).toHaveBeenCalledTimes(1);
+  });
+
+  it('a held-back id number offers 「这次填上」, which fills only that field, and 「改设置」', async () => {
+    const onSensitiveFields = vi.fn();
+    const r = await renderBrowser({ rows: ROWS, extra: { onSensitiveFields, sensitiveFields: 'remind' } });
+    const sheet = await runFill(r);
+    expect(within(sheet).getByText('只提醒，没有写入')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: '这次填上' }));
+    await waitFor(() => expect(r.commands.filter((c) => c.cmd.kind === 'fill')).toHaveLength(2), WAIT);
+    const one = r.commands.filter((c) => c.cmd.kind === 'fill')[1]!.cmd as { only?: string[]; sensitiveFields?: string };
+    expect([one.only, one.sensitiveFields]).toEqual([['id'], 'fill']);
+    await waitFor(() => expect(within(sheet).getByRole('tab', { name: '已填 2' })).toBeTruthy(), WAIT);
+
+    fireEvent.click(within(sheet).getByRole('tab', { name: '待你看 2' }));
+    expect(within(sheet).queryByRole('button', { name: '这次填上' })).toBeNull();
+  });
+
+  it('「改设置」 opens the choice over the page; choosing calls back with the mode', async () => {
+    const onSensitiveFields = vi.fn();
+    const r = await renderBrowser({ rows: ROWS, extra: { onSensitiveFields, sensitiveFields: 'remind' } });
+    const sheet = await runFill(r);
+    fireEvent.click(within(sheet).getByRole('button', { name: '改设置' }));
+    const choice = await screen.findByRole('dialog', { name: '敏感字段怎么填' });
+    fireEvent.click(within(choice).getByRole('radio', { name: /直接填/ }));
+    expect(onSensitiveFields).toHaveBeenCalledWith('fill');
+  });
+
+  it('a page with a Next button is offered auto-advance; a new site asks first, and 开始 remembers the site', async () => {
+    const onAdvanceSite = vi.fn();
+    const r = await renderBrowser({ step: 'next', extra: { advanceSites: [], onAdvanceSite } });
+    const sheet = await runFill(r);
+    const offer = await within(sheet).findByTestId('m-advance-offer', {}, WAIT);
+    expect(offer.textContent).toContain('这是多页表单，现在是第 1 步：基本信息。');
+    fireEvent.click(within(offer).getByRole('button', { name: '自动前进到最后一页' }));
+    const confirm = await screen.findByRole('dialog', { name: '自动前进到最后一页？' });
+    expect(confirm.getAttribute('aria-modal')).toBe('true');
+    fireEvent.click(within(confirm).getByRole('button', { name: '开始' }));
+    expect(onAdvanceSite).toHaveBeenCalledWith(ORIGIN);
+    await waitFor(() => expect(r.commands.some((c) => c.cmd.kind === 'press')).toBe(true), WAIT);
+  });
+
+  it('on a site agreed before it starts at once, and the report comes back with why it stopped', async () => {
+    const r = await renderBrowser({ step: 'next', extra: { advanceSites: [ORIGIN] } });
+    const sheet = await runFill(r);
+    fireEvent.click(await within(sheet).findByRole('button', { name: '自动前进到最后一页' }, WAIT));
+    expect(screen.queryByRole('dialog', { name: '自动前进到最后一页？' })).toBeNull();
+    const stopped = await screen.findByTestId('m-advance-stop', {}, WAIT);
+    expect(stopped.textContent).toContain('已到最后一页。请逐页核对，确认无误后自己提交。');
+  });
+
+  it('a stop that needs the person shows only what to do; 看这一页的结果 opens the full report and stays open', async () => {
+    const r = await renderBrowser({ step: 'next', press: 'needs_you', extra: { advanceSites: [ORIGIN] } });
+    const sheet = await runFill(r);
+    fireEvent.click(await within(sheet).findByRole('button', { name: '自动前进到最后一页' }, WAIT));
+    const stopped = await screen.findByTestId('m-advance-stopped', {}, WAIT);
+    expect(stopped.textContent).toContain('第 1 步 · 已前进 0 步');
+    expect(screen.getByRole('dialog', { name: '已停下' })).toBeTruthy();
+    fireEvent.click(within(stopped).getByRole('button', { name: '看这一页的结果' }));
+    // The page rescans (the screen renders again): the full report stays open.
+    act(() => r.native.emit('message', { frame: 1, generation: 1, origin: ORIGIN, main: true, data: JSON.stringify({ v: 1, kind: 'scan', count: 9, iframes: 0 }) }));
+    const full = await screen.findByRole('dialog', { name: '填写报告' });
+    expect(within(full).getByRole('tablist')).toBeTruthy();
+    expect(within(full).getByRole('button', { name: '处理好了，继续' })).toBeTruthy();
+  });
+
+  it('the last page offers nothing', async () => {
+    const r = await renderBrowser({ step: 'final' });
+    const sheet = await runFill(r);
+    await waitFor(() => expect(r.commands.some((c) => c.cmd.kind === 'step')).toBe(true), WAIT);
+    expect(within(sheet).queryByTestId('m-advance-offer')).toBeNull();
   });
 });

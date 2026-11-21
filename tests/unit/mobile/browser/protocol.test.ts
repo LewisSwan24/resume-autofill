@@ -35,6 +35,13 @@ const valid: Record<string, unknown> = {
   },
   error: { v: 1, kind: 'error', reqId: 'r5', code: 'fill_failed' },
   bye: { v: 1, kind: 'bye' },
+  step: {
+    v: 1,
+    kind: 'step',
+    reqId: 'r6',
+    state: { url: 'https://jobs.example.com/apply#2', fingerprint: 'fields:3:abc', action: 'next', blocker: null, userInputAt: 0, title: '教育经历' },
+  },
+  pressed: { v: 1, kind: 'pressed', reqId: 'r7', pressed: false, reason: 'final_step' },
 };
 
 describe('decodePageMessage', () => {
@@ -72,6 +79,13 @@ describe('decodePageMessage', () => {
     const filled = { ...row(2), outcome: 'filled', note: 'sensitive_filled' };
     const out = decodePageMessage(JSON.stringify({ ...(valid.report as object), report: report([held, filled]) }));
     expect(out?.kind === 'report' && out.report.fields.map((f) => f.note)).toEqual(['sensitive_held', 'sensitive_filled']);
+  });
+
+  it('drops a step whose action or blocker it does not know, and a pressed with an unknown reason', () => {
+    const step = valid.step as { state: object };
+    expect(decodePageMessage(JSON.stringify({ ...step, state: { ...step.state, action: 'jump' } }))).toBeNull();
+    expect(decodePageMessage(JSON.stringify({ ...step, state: { ...step.state, blocker: 'later' } }))).toBeNull();
+    expect(decodePageMessage(JSON.stringify({ ...(valid.pressed as object), reason: 'whatever' }))).toBeNull();
   });
 
   it('keeps only known needs keys and drops a message with an unknown field key', () => {
@@ -117,7 +131,15 @@ describe('decodeAppCommand', () => {
     focus: { v: 1, kind: 'focus', reqId: 'q3', fieldId: 'c1' },
     undo: { v: 1, kind: 'undo', reqId: 'q4', runId: 'run1' },
     clear: { v: 1, kind: 'clear' },
+    step: { v: 1, kind: 'step', reqId: 'q5' },
+    press: { v: 1, kind: 'press', reqId: 'q6' },
   };
+
+  it('a fill may say to write sensitive fields and to fill only some fields', () => {
+    const cmd = decodeAppCommand(JSON.stringify({ ...(commands.fill as object), sensitiveFields: 'fill', only: ['c1'] }));
+    expect(cmd?.kind === 'fill' && [cmd.sensitiveFields, cmd.only]).toEqual(['fill', ['c1']]);
+    expect(decodeAppCommand(JSON.stringify({ ...(commands.fill as object), sensitiveFields: 'always' }))).toBeNull();
+  });
 
   for (const [kind, cmd] of Object.entries(commands)) {
     it(`accepts ${kind}`, () => {

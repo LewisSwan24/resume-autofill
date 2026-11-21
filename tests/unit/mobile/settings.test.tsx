@@ -43,6 +43,7 @@ interface Fakes {
   clipboardAvailable?: boolean;
   browserRole?: FakeBrowserRole | null;
   keyboard?: KeyboardProps | null;
+  onSensitiveFields?: SettingsScreenProps['onSensitiveFields'];
 }
 
 let store: AppStateStore;
@@ -101,6 +102,7 @@ async function renderSettings(f: Fakes = {}) {
       clipboardAvailable={f.clipboardAvailable}
       browserRole={f.browserRole ?? null}
       keyboard={f.keyboard ?? null}
+      onSensitiveFields={f.onSensitiveFields}
     />,
   );
   await screen.findByRole('heading', { level: 1, name: f.title ?? '设置' });
@@ -157,6 +159,24 @@ describe('Settings: general', () => {
     await renderSettings();
     fireEvent.click(screen.getByRole('button', { name: /^从文件导入/ }));
     expect(spies.onImport).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Settings: sensitive fields', () => {
+  it('the row shows the choice (default 只提醒); the sheet explains both and hands back the new one', async () => {
+    const onSensitiveFields = vi.fn();
+    await renderSettings({ onSensitiveFields });
+    fireEvent.click(screen.getByRole('button', { name: /^敏感字段只提醒 · 证件号码/ }));
+    const sheet = screen.getByRole('dialog', { name: '敏感字段怎么填' });
+    expect(within(sheet).getByRole('radio', { name: /^只提醒/ }).getAttribute('aria-checked')).toBe('true');
+    expect(sheet.textContent).toContain('电脑上的扩展用同一个设置，同步或导入后两边一致。');
+    fireEvent.click(within(sheet).getByRole('radio', { name: /^直接填/ }));
+    expect(onSensitiveFields).toHaveBeenCalledWith('fill');
+  });
+
+  it('without a profile there is nothing to set, so no row', async () => {
+    await renderSettings({ profile: null, onSensitiveFields: vi.fn() });
+    expect(screen.queryByRole('button', { name: /^敏感字段/ })).toBeNull();
   });
 });
 

@@ -79,6 +79,7 @@ public class FillBrowserPlugin extends Plugin {
         }
         float top = (float) insets.optDouble("top", 0);
         float bottom = (float) insets.optDouble("bottom", 0);
+        float end = (float) Math.max(0, insets.optDouble("end", 0));
         int[] colors = theme(theme);
         ui(() -> {
             destroyHost();
@@ -89,7 +90,7 @@ public class FillBrowserPlugin extends Plugin {
                 return;
             }
             host = new FillBrowserHost(activity, this, uiView, colors);
-            host.setInsets(top, bottom);
+            host.setInsets(top, bottom, end);
             host.attach();
             host.load(url);
             JSObject out = new JSObject();
@@ -123,12 +124,13 @@ public class FillBrowserPlugin extends Plugin {
     public void setInsets(PluginCall call) {
         Double top = call.getDouble("top");
         Double bottom = call.getDouble("bottom");
-        if (top == null || bottom == null || top < 0 || bottom < 0) {
+        Double end = call.getDouble("end", 0.0);
+        if (top == null || bottom == null || end == null || top < 0 || bottom < 0 || end < 0) {
             call.reject(BAD_ARGS);
             return;
         }
         withHost(call, h -> {
-            h.setInsets(top.floatValue(), bottom.floatValue());
+            h.setInsets(top.floatValue(), bottom.floatValue(), end.floatValue());
             call.resolve();
         });
     }

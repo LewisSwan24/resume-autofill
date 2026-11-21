@@ -210,3 +210,68 @@ describe('page entry', () => {
     expect(b.msgs().at(-1)).toEqual({ v: 1, kind: 'bye' });
   });
 });
+
+describe('page entry – steps and sensitive fields', () => {
+  const STEP = (button: string) => `
+    <div class="ant-steps"><div class="ant-steps-item ant-steps-item-process"><div class="ant-steps-item-title">教育经历</div></div></div>
+    <form><label for="name">姓名</label><input id="name"><button type="button" id="go">${button}</button></form>`;
+
+  it('says which step is showing, with its title, and presses only a Next button', async () => {
+    setPage(STEP('下一步'));
+    const b = await boot();
+    const clicks = vi.fn();
+    document.getElementById('go')!.addEventListener('click', clicks);
+    b.send({ v: 1, kind: 'step', reqId: 's1' });
+    const step = (await b.reply('s1')) as unknown as { state: Record<string, unknown> };
+    expect(step.state).toMatchObject({ url: location.href, action: 'next', blocker: null, userInputAt: 0, title: '教育经历' });
+    expect(typeof step.state.fingerprint).toBe('string');
+    b.send({ v: 1, kind: 'press', reqId: 'p1' });
+    expect(await b.reply('p1')).toEqual({ v: 1, kind: 'pressed', reqId: 'p1', pressed: true });
+    await vi.waitFor(() => expect(clicks).toHaveBeenCalledTimes(1));
+  });
+
+  it('never presses a button that sends the application', async () => {
+    setPage(STEP('提交申请'));
+    const b = await boot();
+    const clicks = vi.fn();
+    document.getElementById('go')!.addEventListener('click', clicks);
+    b.send({ v: 1, kind: 'press', reqId: 'p2' });
+    expect(await b.reply('p2')).toEqual({ v: 1, kind: 'pressed', reqId: 'p2', pressed: false, reason: 'final_step' });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(clicks).not.toHaveBeenCalled();
+  });
+
+  const ID_FORM = `<form><label for="name">姓名</label><input id="name"><label for="idn">身份证号</label><input id="idn"></form>`;
+  const withId = ResumeSchema.parse({ ...resume, basics: { ...resume.basics, idNumber: '110101200001010000' } });
+
+  it('writes the id number only when the fill says 「直接填」, and can fill one field alone', async () => {
+    setPage(ID_FORM);
+    const b = await boot();
+    const name = document.getElementById('name') as HTMLInputElement;
+    const idn = document.getElementById('idn') as HTMLInputElement;
+    const subset = buildResumeSubset(withId, computeFrameNeeds(document), { sensitiveFields: 'fill' });
+
+    b.send({ v: 1, kind: 'fill', reqId: 'i1', runId: 'run1', origin: 'https://jobs.example.com', resume: subset, files: {} });
+    const held = (await b.reply('i1')) as unknown as { report: { fields: { fieldId: string; note?: string }[] } };
+    expect(idn.value).toBe('');
+    const row = held.report.fields.find((f) => f.note === 'sensitive_held')!;
+    expect(row).toBeDefined();
+
+    name.value = '';
+    b.send({ v: 1, kind: 'fill', reqId: 'i2', runId: 'run2', origin: 'https://jobs.example.com', resume: subset, files: {}, sensitiveFields: 'fill', only: [row.fieldId] });
+    const one = (await b.reply('i2')) as unknown as { report: { fields: { fieldId: string; outcome: string; note?: string }[] } };
+    expect(idn.value).toBe('110101200001010000');
+    expect(name.value).toBe('');
+    expect(one.report.fields.map((f) => [f.fieldId, f.outcome, f.note])).toEqual([[row.fieldId, 'filled', 'sensitive_filled']]);
+  });
+
+  it('a report carries which entry each row belongs to and what became of each entry', async () => {
+    setPage();
+    const b = await boot();
+    const subset = buildResumeSubset(resume, computeFrameNeeds(document));
+    b.send({ v: 1, kind: 'fill', reqId: 'e1', runId: 'run1', origin: 'https://jobs.example.com', resume: subset, files: {} });
+    const m = (await b.reply('e1')) as unknown as { report: { fields: { section: string | null; entry?: number }[]; entries?: { section: string; index: number }[] } };
+    expect(m.report.fields.filter((f) => f.section === 'education').every((f) => f.entry === 0)).toBe(true);
+    expect(m.report.entries?.some((e) => e.section === 'education' && e.index === 0)).toBe(true);
+  });
+});

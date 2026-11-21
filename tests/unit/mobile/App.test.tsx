@@ -353,6 +353,16 @@ describe('Profile page – language, back key and pause', () => {
     await waitFor(async () => expect((await store.load()).settings.uiLanguage).toBe('en'), WAIT);
   });
 
+  it('the sensitive-field choice is stored with the time it was made, so sync and import keep the newer one', async () => {
+    await renderApp();
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^敏感字段只提醒/ }, WAIT));
+    const before = Date.now();
+    fireEvent.click(within(screen.getByRole('dialog', { name: '敏感字段怎么填' })).getByRole('radio', { name: /^直接填/ }));
+    await waitFor(async () => expect((await store.load()).settings.sensitiveFields).toBe('fill'), WAIT);
+    expect((await store.load()).settings.sensitiveFieldsUpdatedAt).toBeGreaterThanOrEqual(before);
+  });
+
   it('back closes a sheet first, then leaves a module, then goes home, then lets the system handle it', async () => {
     await renderApp();
     openModule(MODULES.find((m) => m.module === 'languages')!);

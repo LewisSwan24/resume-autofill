@@ -515,3 +515,73 @@ describe('frames of other sites', () => {
     expect(r.session.getState().run.phase).toBe('idle');
   });
 });
+
+describe('sensitive fields', () => {
+  const withMode = (mode: 'fill' | 'remind'): Profile =>
+    ProfileSchema.parse({ schemaVersion: 1, resumes: [resume], activeResumeId: 'r1', settings: { sensitiveFields: mode } });
+  const heldRow: FieldReport = {
+    fieldId: 'id1', label: '证件号码', fieldKey: 'basics.idNumber', section: 'basics', outcome: 'needs_review', confidence: 1, note: 'sensitive_held',
+  };
+
+  it('「直接填」 sends the id number and says so to the page; 「只提醒」 sends neither', async () => {
+    for (const mode of ['fill', 'remind'] as const) {
+      const r = await rig();
+      r.profile.current = withMode(mode);
+      r.checkIn(0);
+      r.pages.set(0, page(needs({ fieldKeys: ['basics.idNumber'] })));
+      await r.session.fill();
+      await flush();
+      const fill = kinds(r, 'fill')[0]!.cmd as Extract<AppCommand, { kind: 'fill' }>;
+      expect(fill.resume.basics.idNumber).toBe(mode === 'fill' ? '110101200001010000' : '');
+      expect(fill.sensitiveFields).toBe(mode === 'fill' ? 'fill' : undefined);
+    }
+  });
+
+  it('「这次填上」 fills that one field, sends only the id number, and updates its row in the same report', async () => {
+    const r = await rig();
+    r.checkIn(0);
+    r.pages.set(0, (cmd) => {
+      if (cmd.kind === 'needs') return { v: 1, kind: 'needs', reqId: cmd.reqId, needs: needs({ fieldKeys: ['basics.familyName', 'basics.idNumber'] }) };
+      if (cmd.kind === 'fill') {
+        const fields: FieldReport[] = cmd.only
+          ? [{ ...heldRow, outcome: 'filled', note: 'sensitive_filled', value: '110101200001010000' }]
+          : [filledRow('c1'), heldRow];
+        return { v: 1, kind: 'report', reqId: cmd.reqId, runId: cmd.runId, report: { url: URL_, startedAt: 1, finishedAt: 2, fields, counts: countOutcomes(fields) } };
+      }
+      return null;
+    });
+    await r.session.fill();
+    await flush();
+    const before = r.session.getState().run;
+    expect(before.phase === 'done' && before.report.fields[1]!.note).toBe('sensitive_held');
+
+    const result = r.session.fillOne('0:id1');
+    await flush();
+    expect(await result).toBe('ok');
+    const one = kinds(r, 'fill')[1]!.cmd as Extract<AppCommand, { kind: 'fill' }>;
+    expect(one.only).toEqual(['id1']);
+    expect(one.sensitiveFields).toBe('fill');
+    expect(one.resume.basics.idNumber).toBe('110101200001010000');
+    expect(one.resume.basics.familyName).toBe('');
+    const after = r.session.getState().run;
+    expect(after.phase).toBe('done');
+    if (after.phase === 'done' && before.phase === 'done') {
+      expect(after.runId).toBe(before.runId);
+      expect(after.report.fields.map((f) => [f.fieldId, f.outcome, f.note])).toEqual([
+        ['c1', 'filled', undefined],
+        ['id1', 'filled', 'sensitive_filled'],
+      ]);
+      expect(after.report.counts.filled).toBe(2);
+    }
+  });
+
+  it('「这次填上」 on a frame that is gone answers gone and changes nothing', async () => {
+    const r = await rig();
+    r.checkIn(0);
+    r.pages.set(0, page(needs({ fieldKeys: ['basics.idNumber'] })));
+    await r.session.fill();
+    await flush();
+    expect(await r.session.fillOne('7:id1')).toBe('gone');
+    expect(kinds(r, 'fill')).toHaveLength(1);
+  });
+});

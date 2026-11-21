@@ -2,21 +2,26 @@
 // as one IIFE (engine.js). It reuses the extension's engine unchanged (scan, needs, runFill, highlights, focus) and
 // talks to the app only through `rafBridge` (a WebMessageListener object). Every command is checked with the bridge
 // schemas; nothing is assigned to window, no UI is added except the engine's outlines, and nothing is logged.
+import { resolveAdapter } from '../../src/adapters/resolve';
 import { createFrameHandlers } from '../../src/content/handlers';
 import { idFor } from '../../src/content/ids';
+import { createStepHandlers, type StepHandlers } from '../../src/content/steps';
 import { createScanWatcher } from '../../src/content/watcher';
 import { registerAllDrivers } from '../../src/drivers';
 import { scanDocument } from '../../src/engine/scan';
 import type { FieldReport, FillReport } from '../../src/engine/types';
 import { clearHighlights } from '../../src/fill/highlight';
+import { stepTitle } from '../../src/fill/nextStep';
 import { runFill, type FillRun } from '../../src/fill/runFill';
 import {
   MAX_CANDIDATES,
+  MAX_ENTRY_INDEX,
   MAX_FRAMES,
   MAX_LABEL,
   MAX_REPORT_ROWS,
   MAX_SCAN_COUNT,
   MAX_VALUE,
+  PRESS_STOPS,
   PROTOCOL_VERSION,
   decodeAppCommand,
   encode,
@@ -58,9 +63,25 @@ function toWire(report: FillReport): FillReport {
       }));
     }
     if (f.note) out.note = f.note;
+    if (typeof f.entry === 'number' && f.entry >= 0 && f.entry <= MAX_ENTRY_INDEX) out.entry = f.entry;
     return out;
   });
-  return { url: cut(report.url, 2048), startedAt: report.startedAt, finishedAt: report.finishedAt, fields, counts: report.counts };
+  const entries = (report.entries ?? [])
+    .filter((e) => e.index >= 0 && e.index <= MAX_ENTRY_INDEX)
+    .slice(0, MAX_REPORT_ROWS)
+    .map((e) => ({
+      ...e,
+      ...(e.label !== undefined ? { label: cut(e.label, MAX_LABEL) } : {}),
+      ...(e.button !== undefined ? { button: cut(e.button, MAX_LABEL) } : {}),
+    }));
+  return {
+    url: cut(report.url, 2048),
+    startedAt: report.startedAt,
+    finishedAt: report.finishedAt,
+    fields,
+    counts: report.counts,
+    ...(entries.length > 0 ? { entries } : {}),
+  };
 }
 
 function start(bridge: Bridge, doc: Document, win: Window): void {
@@ -77,6 +98,8 @@ function start(bridge: Bridge, doc: Document, win: Window): void {
   let lastScan: { count: number; iframes: number } | null = null;
   let obstacles: ObstacleWatcher | null = null;
   let handlers: ReturnType<typeof createFrameHandlers> | null = null;
+  /** Top frame only: auto-advance reads the step and presses Next here. */
+  let steps: StepHandlers | null = null;
 
   const iframeCount = () => Math.min(MAX_FRAMES, countChildFrames(doc));
   const scan = () => {
@@ -121,11 +144,21 @@ function start(bridge: Bridge, doc: Document, win: Window): void {
           post({ v, kind: 'error', reqId: command.reqId, code: 'wrong_origin' });
           return;
         }
+        const sensitive = command.sensitiveFields ? { sensitiveFields: command.sensitiveFields } : {};
         try {
+          if (command.only) {
+            // 「这次填上」: one field, the rest left alone. The full fill's undo stays the one to go back to.
+            const only = new Set(command.only);
+            const excludedFieldIds = scanDocument(doc, idFor).contexts.map((c) => c.control.id).filter((id) => !only.has(id));
+            const report = await h.fill({ resume: command.resume, files: command.files, filter: { excludedFieldIds }, ...sensitive });
+            const fields = report.fields.filter((f) => only.has(f.fieldId));
+            post({ v, kind: 'report', reqId: command.reqId, runId: command.runId, report: toWire({ ...report, fields, entries: [] }) });
+            return;
+          }
           const journal = createUndoJournal(doc);
           journal.snapshot();
           lastRun = null;
-          const report = await h.fill({ resume: command.resume, files: command.files });
+          const report = await h.fill({ resume: command.resume, files: command.files, ...sensitive });
           const finished = lastRun as FillRun | null;
           journal.afterFill(finished?.controls ?? new Map(), report.fields);
           remembered = { runId: command.runId, journal, growth: finished?.growth ?? [] };
@@ -172,6 +205,28 @@ function start(bridge: Bridge, doc: Document, win: Window): void {
       case 'clear':
         clearHighlights();
         return;
+      case 'step': {
+        if (!steps) return;
+        try {
+          post({ v, kind: 'step', reqId: command.reqId, state: { ...steps.stepState(), title: cut(stepTitle(doc) ?? '', MAX_LABEL) || null } });
+        } catch {
+          /* no answer: the app reads that as a page it cannot read */
+        }
+        return;
+      }
+      case 'press': {
+        if (!steps) return;
+        let result: { pressed: boolean; reason?: (typeof PRESS_STOPS)[number] };
+        try {
+          const r = steps.pressNext();
+          const reason = r.reason && (PRESS_STOPS as readonly string[]).includes(r.reason) ? (r.reason as (typeof PRESS_STOPS)[number]) : undefined;
+          result = { pressed: r.pressed, ...(reason ? { reason } : {}) };
+        } catch {
+          result = { pressed: false };
+        }
+        post({ v, kind: 'pressed', reqId: command.reqId, ...result });
+        return;
+      }
     }
   }
 
@@ -203,6 +258,10 @@ function start(bridge: Bridge, doc: Document, win: Window): void {
     scan();
     watcher.start();
     if (win === win.top) {
+      steps = createStepHandlers(doc, {
+        adapterStep: () => resolveAdapter(doc)?.stepSignature?.(doc) ?? null,
+        adapterNext: () => resolveAdapter(doc)?.nextButton,
+      });
       try {
         obstacles = startObstacleWatcher(win, (report) => post({ v, kind: 'obstacles', ...report }));
       } catch {

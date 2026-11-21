@@ -118,3 +118,21 @@ describe('handedOver', () => {
     expect(h.total).toBeGreaterThan(3);
   });
 });
+
+describe('planFrames – sensitive fields', () => {
+  const idNeeds = new Map([[0, needs({ fieldKeys: ['basics.familyName', 'basics.idNumber'] })]]);
+
+  it('「直接填」 hands the id number over; the default keeps it back', () => {
+    expect(planFrames(resume, idNeeds, { sensitiveFields: 'fill' })[0]!.resume.basics.idNumber).toBe('110101200001010000');
+    expect(planFrames(resume, idNeeds, { sensitiveFields: 'remind' })[0]!.resume.basics.idNumber).toBe('');
+    expect(planFrames(resume, idNeeds)[0]!.resume.basics.idNumber).toBe('');
+  });
+
+  it('the hand-over list names the id number only when it was sent', () => {
+    const labelsOf = (h: ReturnType<typeof handedOver>) => h.fields.flatMap((f) => f.labels);
+    const kept = handedOver(resume, planFrames(resume, idNeeds), {});
+    const sent = handedOver(resume, planFrames(resume, idNeeds, { sensitiveFields: 'fill' }), {});
+    expect(labelsOf(kept).some((l) => l.includes('idNumber'))).toBe(false);
+    expect(labelsOf(sent).some((l) => l.includes('idNumber'))).toBe(true);
+  });
+});

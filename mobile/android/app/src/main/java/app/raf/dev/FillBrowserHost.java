@@ -64,6 +64,8 @@ final class FillBrowserHost extends FrameLayout {
 
     private float insetTopDp;
     private float insetBottomDp;
+    /** Room on the right for the report docked beside the page (landscape); 0 otherwise. */
+    private float insetEndDp;
     private int imeOverlapPx;
     private boolean keyboardVisible;
     private int keyboardHeightDp = -1;
@@ -384,9 +386,10 @@ final class FillBrowserHost extends FrameLayout {
         setVisibility(visible ? VISIBLE : INVISIBLE);
     }
 
-    void setInsets(float topDp, float bottomDp) {
+    void setInsets(float topDp, float bottomDp, float endDp) {
         insetTopDp = topDp;
         insetBottomDp = bottomDp;
+        insetEndDp = endDp;
         applyMargins();
     }
 
@@ -404,13 +407,13 @@ final class FillBrowserHost extends FrameLayout {
                     Float xDp, Float yDp) {
         // theme order: bg, surface, text, line, accent, scrim
         fab.bind(icon, text, subtext, a11y, switchSideLabel, colors[1], colors[3], colors[2], colors[4]);
-        fab.setArea(0, Math.round(insetTopDp * density), getWidth(), areaHeightPx());
+        fab.setArea(0, Math.round(insetTopDp * density), areaWidthPx(), areaHeightPx());
         float[] size = fab.measureDp();
         if (xDp != null && yDp != null) {
             fabX = xDp;
             fabY = yDp;
         } else if (fabX == null || fabY == null) {
-            fabX = Math.max(0f, getWidth() / density - size[0] - 16f);
+            fabX = Math.max(0f, areaWidthPx() / density - size[0] - 16f);
             fabY = Math.max(0f, areaHeightPx() / density - size[1] - 16f);
         }
         fab.setVisibility(VISIBLE);
@@ -478,16 +481,35 @@ final class FillBrowserHost extends FrameLayout {
         return Math.max(0, getHeight() - topPx() - bottomPx());
     }
 
+    private int endPx() {
+        return Math.round(insetEndDp * density);
+    }
+
+    /** Width of the page area: the whole view, less the report docked on the right in landscape. */
+    private int areaWidthPx() {
+        return Math.max(0, getWidth() - endPx());
+    }
+
     private void applyMargins() {
         int top = topPx();
         int bottom = bottomPx();
-        for (View child : new View[] {page, blocker, scrim}) {
+        int end = endPx();
+        for (View child : new View[] {page, blocker}) {
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) child.getLayoutParams();
-            if (lp.topMargin != top || lp.bottomMargin != bottom) {
+            if (lp.topMargin != top || lp.bottomMargin != bottom || lp.rightMargin != end) {
                 lp.topMargin = top;
                 lp.bottomMargin = bottom;
+                lp.rightMargin = end;
                 child.setLayoutParams(lp);
             }
+        }
+        // The scrim dims the page only; a modal sheet beside it stays clear.
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) scrim.getLayoutParams();
+        if (lp.topMargin != top || lp.bottomMargin != bottom || lp.rightMargin != end) {
+            lp.topMargin = top;
+            lp.bottomMargin = bottom;
+            lp.rightMargin = end;
+            scrim.setLayoutParams(lp);
         }
     }
 
@@ -495,9 +517,9 @@ final class FillBrowserHost extends FrameLayout {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         int areaHeight = areaHeightPx();
-        fab.setArea(0, topPx(), getWidth(), areaHeight);
+        fab.setArea(0, topPx(), areaWidthPx(), areaHeight);
         if (fabShown && fabX != null && fabY != null) fab.placeAt(fabX, fabY);
-        int widthDp = Math.round(getWidth() / density);
+        int widthDp = Math.round(areaWidthPx() / density);
         int heightDp = Math.round(areaHeight / density);
         if (widthDp != areaWidthDp || heightDp != areaHeightDp) {
             areaWidthDp = widthDp;

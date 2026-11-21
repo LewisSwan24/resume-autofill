@@ -83,8 +83,8 @@ export function checkInbound(state: FramesState, e: NativeEvents['message']): Ch
   }
   // 5. everything else only from a registered, compatible frame with the same origin and main flag
   if (!known || known.incompatible || known.origin !== e.origin || known.main !== e.main) return drop(state);
-  // 7. obstacles only from the main frame
-  if (message.kind === 'obstacles' && !known.main) return drop(state);
+  // 7. obstacles and steps only from the main frame
+  if ((message.kind === 'obstacles' || message.kind === 'step' || message.kind === 'pressed') && !known.main) return drop(state);
 
   if (message.kind === 'scan') {
     if (known.scanned && known.count === message.count && known.iframes === message.iframes) return { state, message, frame: known };
@@ -109,14 +109,16 @@ export function unreachableCount(state: FramesState): number {
 
 // ---------------------------------------------------------------- outstanding requests
 
-export type RequestKind = 'needs' | 'fill' | 'focus' | 'undo';
-type Reply = PageMessageOf<'needs' | 'report' | 'focused' | 'undone' | 'error'>;
+export type RequestKind = 'needs' | 'fill' | 'focus' | 'undo' | 'step' | 'press';
+type Reply = PageMessageOf<'needs' | 'report' | 'focused' | 'undone' | 'error' | 'step' | 'pressed'>;
 
 const ANSWERS: Readonly<Record<RequestKind, readonly Reply['kind'][]>> = {
   needs: ['needs', 'error'],
   fill: ['report', 'error'],
   focus: ['focused', 'error'],
   undo: ['undone', 'error'],
+  step: ['step'],
+  press: ['pressed'],
 };
 
 export interface ReplyBook {

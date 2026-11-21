@@ -201,7 +201,7 @@ export async function deleteOrphanFiles(storage: Pick<SyncStorageAdapter, 'delet
  * Whether a fill writes identity numbers is one choice for every device: the one made last wins. A device that never
  * made it has no time on it, so any choice made elsewhere replaces its default.
  */
-function newerSensitiveChoice(local: Settings, incoming: Settings): Partial<Settings> {
+export function newerSensitiveChoice(local: Settings, incoming: Settings): Partial<Settings> {
   const at = incoming.sensitiveFieldsUpdatedAt;
   if (at === undefined || at <= (local.sensitiveFieldsUpdatedAt ?? -1)) return {};
   return { sensitiveFields: incoming.sensitiveFields, sensitiveFieldsUpdatedAt: at };

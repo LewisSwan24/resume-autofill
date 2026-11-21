@@ -30,10 +30,13 @@ import { displayHost } from './displayHost';
 import { fabModel, joinA11y, type EngineState, type FabView, type Msg } from './fabModel';
 import { MARGIN, anchorFromDrop, placeFab, toAreaBoxes, type Anchor, type Box, type Size } from './fabPlacement';
 import { pickResume, type ResumeChoice } from './fillPlan';
-import { askFrame, executeRun, executeUndo, isRunActive, type RunContext, type RunState } from './fillRun';
+import { askFrame, executeFillOne, executeRun, executeUndo, isRunActive, type RunContext, type RunState } from './fillRun';
 import { checkInbound, createReplyBook, removeFrame, unreachableCount, type FrameEntry } from './frames';
 import { buildReportModel, type ReportModel } from './reportModel';
 import { decideExternal, type ExternalDecision } from './urlPolicy';
+import { ADVANCE_DEFAULTS, runAutoAdvance, stopAutoAdvance, type PressResult, type StepState } from '../../../../../src/background/autoAdvance';
+import type { FillRequestResponse } from '../../../../../src/messaging/protocol';
+import { recordStep, stepNumber, summarizeStep, type AdvanceView, type WizardState } from './advance';
 
 export type { ResumeChoice } from './fillPlan';
 export type { RunState, UndoResult } from './fillRun';
@@ -94,6 +97,12 @@ export interface SessionState {
   /** The FAB found no room over the page: the toolbar shows a 「一键填写」 button instead. */
   fabDocked: boolean;
   toast: SessionToast | null;
+  /** Auto-advance on this page: running, or how it last stopped; null before it ever ran. */
+  advance: AdvanceView | null;
+  /** The steps of a multi-step form filled on this site, for the summary when auto-advance stops. */
+  wizard: WizardState | null;
+  /** The page shows a Next button after a fill: the report offers auto-advance from this step. */
+  stepOffer: { step: number; title: string | null } | null;
 }
 
 export interface BrowserSessionDeps {
@@ -135,7 +144,13 @@ export interface BrowserSession {
   /** Answer to the confirmSites question: true fills the other sites' frames too. */
   confirmSites(go: boolean): void;
   focus(rowKey: string): Promise<'ok' | 'gone'>;
+  /** 「这次填上」: write the sensitive field of this row once, whatever the setting says. */
+  fillOne(rowKey: string): Promise<'ok' | 'gone' | 'failed'>;
   undo(): Promise<void>;
+  /** Auto-advance from this step to the last page; the UI has asked the person first (once per site). */
+  startAdvance(): void;
+  /** Stop auto-advance before its next step. */
+  stopAdvance(): void;
   /** Drives setPageCover scrim and FAB hiding. */
   setSheet(s: { open: boolean; modal: boolean }): void;
   moveFab(drop: { x: number; y: number }): void;
@@ -183,6 +198,9 @@ export function initialSessionState(target: BrowserTarget): SessionState {
     hidden: false,
     fabDocked: false,
     toast: null,
+    advance: null,
+    wizard: null,
+    stepOffer: null,
   };
 }
 
@@ -242,6 +260,7 @@ export function reduceNativeEvent(state: SessionState, event: NativeEvent): Sess
           engine: state.engine === 'unsupported' ? 'unsupported' : 'waiting',
           run,
           notice: googleNotice(e.url),
+          stepOffer: null,
         };
       }
       if (e.phase === 'started') return { ...state, ...nav, loading: true, notice: googleNotice(e.url) };
@@ -334,6 +353,18 @@ let idCounter = 0;
 const defaultId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `r${Date.now().toString(36)}${(++idCounter).toString(36)}`;
 
+function originOf(url: string): string | null {
+  try {
+    const o = new URL(url).origin;
+    return o === 'null' ? null : o;
+  } catch {
+    return null;
+  }
+}
+
+/** runAutoAdvance keys its runs by tab: each session is its own "tab". */
+let nextAdvanceTab = 1;
+
 export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
   const native = deps.native;
   const newId = deps.newId ?? defaultId;
@@ -392,7 +423,7 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
   // ---- FAB
 
   function currentFab(): FabView | null {
-    if (state.hidden) return null;
+    if (state.hidden || state.advance?.running) return null;
     return fabModel({ engine: state.engine, frames: state.frames, run: state.run, settling });
   }
 
@@ -478,6 +509,78 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
     }, timeouts.hello);
   }
 
+  // ---- steps of a multi-step form, and auto-advance
+
+  /** Per run: the step read after it finished (the summary line and the offer). */
+  const stepChecks = new Map<string, Promise<void>>();
+  const advanceTab = nextAdvanceTab++;
+  let advanceBase = 0;
+
+  function mainFrame(): FrameEntry | undefined {
+    return state.frames.find((f) => f.main && !f.incompatible);
+  }
+
+  async function askStep(): Promise<(StepState & { title: string | null }) | null> {
+    const main = mainFrame();
+    if (!main) return null;
+    const answer = await askFrame(runCtx, main.frame, state.generation, 'step', (reqId) => ({ v, kind: 'step', reqId }), timeouts.focus);
+    return answer?.kind === 'step' ? answer.state : null;
+  }
+
+  /** After a fill: which step this is, what it got, and whether the page offers a Next to advance with. */
+  async function checkStep(run: Extract<RunState, { phase: 'done' }>): Promise<void> {
+    const step = await askStep().catch(() => null);
+    const now = state.run;
+    if (!step || now.phase !== 'done' || now.runId !== run.runId) return;
+    const origin = originOf(state.url);
+    if (!origin) return;
+    const wizard = recordStep(state.wizard, origin, summarizeStep(run.report, step.fingerprint, step.title));
+    const offer = step.action === 'next' && !state.advance?.running ? { step: stepNumber(wizard, step.fingerprint), title: step.title } : null;
+    patch({ wizard, stepOffer: offer });
+  }
+
+  /** Fill the step auto-advance has just reached, and wait until its report and step line are in. */
+  async function fillForAdvance(origin: string): Promise<FillRequestResponse> {
+    if (originOf(state.url) !== origin) return { ok: false, error: 'origin_changed' };
+    const started = startRun();
+    if (started !== 'started') return { ok: false, error: 'fill_failed' };
+    await until(() => !isRunActive(state.run));
+    const run = state.run;
+    if (run.phase === 'done') {
+      await stepChecks.get(run.runId);
+      return { ok: true };
+    }
+    if (run.phase === 'failed' && run.code === 'no_frames') return { ok: false, error: 'no_frames' };
+    return { ok: false, error: 'fill_failed' };
+  }
+
+  function until(done: () => boolean): Promise<void> {
+    return new Promise((resolve) => {
+      if (done() || disposed) {
+        resolve();
+        return;
+      }
+      const off = session.subscribe(() => {
+        if (!done() && !disposed) return;
+        off();
+        resolve();
+      });
+    });
+  }
+
+  function startRun(): 'started' | 'no_resume' | 'unavailable' | 'busy' {
+    if (state.engine === 'unsupported') return 'unavailable';
+    if (isRunActive(state.run)) return 'busy';
+    const ctx = deps.getFillContext();
+    const pick = pickResume(originOf(state.url) ?? '', state.choice, ctx.profile, ctx.fillLanguage);
+    if ('empty' in pick) return 'no_resume';
+    const sensitiveFields = ctx.profile?.settings.sensitiveFields === 'fill' ? ('fill' as const) : undefined;
+    void executeRun(runCtx, { ...pick, ...(sensitiveFields ? { sensitiveFields } : {}) }).catch(() => {
+      if (isRunActive(state.run)) patch({ run: { phase: 'failed', code: 'failed' } });
+    });
+    return 'started';
+  }
+
   // ---- run context
 
   const runCtx: RunContext = {
@@ -494,7 +597,10 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
       return { info: file.info, data: { name: file.info.name, type, dataUrl: `data:${type};base64,${toBase64(file.bytes)}` } };
     },
     getRun: () => state.run,
-    setRun: (run) => patch({ run }),
+    setRun: (run) => {
+      patch({ run });
+      if (run.phase === 'done' && !run.undo && !stepChecks.has(run.runId)) stepChecks.set(run.runId, checkStep(run));
+    },
     confirmLarge: () =>
       new Promise<boolean>((resolve) => {
         largeAnswer = resolve;
@@ -631,6 +737,8 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
     },
 
     reloadOrStop() {
+      // A reload starts the form over: what earlier steps got, and how the last auto-advance stopped, no longer hold.
+      if (!state.loading && !state.advance?.running) patch({ wizard: null, advance: null, stepOffer: null });
       native.navigate({ action: state.loading ? 'stop' : 'reload' }).catch(ignore);
     },
 
@@ -644,21 +752,11 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
     },
 
     async fill() {
-      if (state.engine === 'unsupported') return 'unavailable';
-      if (isRunActive(state.run)) return 'busy';
-      const ctx = deps.getFillContext();
-      let origin = '';
-      try {
-        origin = new URL(state.url).origin;
-      } catch {
-        origin = '';
-      }
-      const pick = pickResume(origin, state.choice, ctx.profile, ctx.fillLanguage);
-      if ('empty' in pick) return 'no_resume';
-      void executeRun(runCtx, pick).catch(() => {
-        if (isRunActive(state.run)) patch({ run: { phase: 'failed', code: 'failed' } });
-      });
-      return 'started';
+      if (state.advance?.running) return 'busy';
+      const started = startRun();
+      // A fill by hand starts afresh: the last auto-advance stop belongs to the run that ended.
+      if (started === 'started' && state.advance) patch({ advance: null });
+      return started;
     },
 
     confirmLarge(go) {
@@ -678,8 +776,54 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
       return answer?.kind === 'focused' && answer.ok ? 'ok' : 'gone';
     },
 
+    async fillOne(rowKey) {
+      const ctx = deps.getFillContext();
+      const pick = pickResume(originOf(state.url) ?? '', state.choice, ctx.profile, ctx.fillLanguage);
+      if ('empty' in pick || pick.sample) return 'gone';
+      return executeFillOne(runCtx, rowKey, pick.resume).catch(() => 'failed' as const);
+    },
+
     async undo() {
       await executeUndo(runCtx);
+    },
+
+    startAdvance() {
+      if (state.advance?.running || isRunActive(state.run)) return;
+      const origin = originOf(state.url);
+      if (!origin) return;
+      // Going on after a stop on the same form keeps counting; another site starts again.
+      advanceBase = state.advance && state.wizard?.origin === origin ? state.advance.steps : 0;
+      patch({ advance: { running: true, steps: advanceBase }, stepOffer: null });
+      void runAutoAdvance(advanceTab, {
+        ...ADVANCE_DEFAULTS,
+        readStep: async () => {
+          const step = await askStep();
+          if (!step) return null;
+          const { title: _title, ...rest } = step;
+          return rest;
+        },
+        pressNext: async (): Promise<PressResult> => {
+          const main = mainFrame();
+          if (!main) return { pressed: false };
+          const answer = await askFrame(runCtx, main.frame, state.generation, 'press', (reqId) => ({ v, kind: 'press', reqId }), timeouts.focus);
+          if (answer?.kind !== 'pressed') return { pressed: false };
+          return answer.reason ? { pressed: answer.pressed, reason: answer.reason } : { pressed: answer.pressed };
+        },
+        fill: (_tab, at) => fillForAdvance(at),
+        sessionOrigin: async () => (originOf(state.url) === origin ? origin : null),
+        publish: async (_tab, a) => {
+          const view: AdvanceView = { running: a.running, steps: advanceBase + a.steps, ...(a.stopReason ? { stopReason: a.stopReason } : {}) };
+          patch({ advance: view, ...(a.running ? { stepOffer: null } : {}) });
+        },
+        now: deps.now ?? (() => Date.now()),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      }).catch(() => {
+        if (state.advance?.running) patch({ advance: { running: false, steps: state.advance.steps, stopReason: 'no_page' } });
+      });
+    },
+
+    stopAdvance() {
+      stopAutoAdvance(advanceTab);
     },
 
     setSheet(s) {
@@ -758,6 +902,7 @@ export function createBrowserSession(deps: BrowserSessionDeps): BrowserSession {
 
     async dispose() {
       if (disposed) return;
+      stopAutoAdvance(advanceTab);
       clearHello();
       book.cancelAll();
       resolveLarge(false);

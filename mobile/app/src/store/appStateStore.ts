@@ -15,6 +15,8 @@ export const HISTORY_MAX = 20;
 export const DISMISSED_MAX = 20;
 /** Legacy, v1 only. */
 export const RECENT_PAGES_MAX = 30;
+/** Same cap as browser/model/advance.ts rememberSite. */
+export const ADVANCE_SITES_MAX = 100;
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const YMD = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -95,6 +97,8 @@ export const AppStateSchema = z.object({
   reminders: ReminderSettingsSchema.prefault({}),
   clipboard: ClipboardSettingsSchema.prefault({}),
   keyboard: KeyboardSettingsSchema.prefault({}),
+  /** Sites (origins) where the person agreed to auto-advance in the fill browser: asked once per site. */
+  advanceSites: z.array(z.string().max(2048)).max(ADVANCE_SITES_MAX).default([]).catch([]),
 });
 
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;

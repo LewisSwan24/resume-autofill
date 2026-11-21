@@ -7,6 +7,7 @@ import { REPEAT_SECTIONS, isAttachmentKey, parseFrameNeeds, type FrameNeeds } fr
 import { OUTCOMES } from '../../src/engine/types';
 import { getFieldKeyDef, type SectionKey } from '../../src/schema/fieldKeys';
 import { ResumeSchema } from '../../src/schema/resume';
+import { SENSITIVE_FIELD_MODES } from '../../src/schema/sensitive';
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_PAGE_MESSAGE_CHARS = 512_000;
@@ -94,6 +95,20 @@ export const FillReportShape = z.strictObject({
   entries: z.array(EntryProgressShape).max(MAX_REPORT_ROWS).optional(),
 });
 
+/** What the top frame says about the step it shows (auto-advance; src/background/autoAdvance.ts StepState). */
+const StepStateShape = z.strictObject({
+  url: z.string().max(2048),
+  fingerprint: z.string().max(200),
+  action: z.enum(['next', 'disabled', 'final', 'ambiguous', 'none']),
+  blocker: z.enum(['needs_you', 'verification']).nullable(),
+  userInputAt: z.number().min(0),
+  /** The name the page gives this step; null when it marks none. */
+  title: z.string().max(MAX_LABEL).nullable(),
+});
+
+/** Why a Next was not pressed: the stops the page itself can tell (a subset of AdvanceStop). */
+export const PRESS_STOPS = ['needs_you', 'verification', 'final_step', 'no_next', 'ambiguous'] as const;
+
 const viewport = z.strictObject({
   width: z.number().positive(),
   height: z.number().positive(),
@@ -125,6 +140,8 @@ export const PageMessageSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...base, kind: z.literal('obstacles'), boxes: z.array(box).max(MAX_OBSTACLES), viewport }),
   z.strictObject({ ...base, kind: z.literal('error'), reqId, code: z.enum(['fill_failed', 'undo_failed', 'bad_payload', 'wrong_origin']) }),
   z.strictObject({ ...base, kind: z.literal('bye') }),
+  z.strictObject({ ...base, kind: z.literal('step'), reqId, state: StepStateShape }),
+  z.strictObject({ ...base, kind: z.literal('pressed'), reqId, pressed: z.boolean(), reason: z.enum(PRESS_STOPS).optional() }),
 ]);
 
 export const FileDataShape = z.strictObject({
@@ -144,10 +161,18 @@ export const AppCommandSchema = z.discriminatedUnion('kind', [
     origin: z.string().max(2048),
     resume: ResumeSchema,
     files: z.record(z.string().max(64), FileDataShape).refine((f) => Object.keys(f).length <= MAX_FILES),
+    /** settings.sensitiveFields; absent means the default, remind. */
+    sensitiveFields: z.enum(SENSITIVE_FIELD_MODES).optional(),
+    /** Fill only these fields (「这次填上」); the page keeps the last full fill's undo. */
+    only: z.array(fieldId).min(1).max(MAX_REPORT_ROWS).optional(),
   }),
   z.strictObject({ ...base, kind: z.literal('focus'), reqId, fieldId: z.string().max(64) }),
   z.strictObject({ ...base, kind: z.literal('undo'), reqId, runId: reqId }),
   z.strictObject({ ...base, kind: z.literal('clear') }),
+  /** Top frame only: which step is showing. */
+  z.strictObject({ ...base, kind: z.literal('step'), reqId }),
+  /** Top frame only: press the page's own Next button, never one that sends the application. */
+  z.strictObject({ ...base, kind: z.literal('press'), reqId }),
 ]);
 
 export type PageMessage = z.output<typeof PageMessageSchema>;

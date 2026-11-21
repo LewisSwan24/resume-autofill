@@ -15,6 +15,7 @@ import {
 } from '../../../../../src/engine/fieldDeps';
 import { FIELD_KEYS, type SectionKey } from '../../../../../src/schema/fieldKeys';
 import type { Profile, Resume } from '../../../../../src/schema/resume';
+import type { SensitiveFieldMode } from '../../../../../src/schema/sensitive';
 import { isModuleFilled, resolveFillResume } from '../../home/summary';
 import type { FillLanguage } from '../../store/appStateStore';
 import type { FileInfo } from '../../store/fileStore';
@@ -51,15 +52,19 @@ export function attachmentIds(resume: Resume, keys: readonly AttachmentKey[] = A
   return keys.map((k) => resume.attachments[ATTACHMENT_PROP[k]]).filter((id): id is string => !!id);
 }
 
-/** One plan per frame with something to fill, in the map's order. */
-export function planFrames(resume: Resume, needsByFrame: ReadonlyMap<number, FrameNeeds>): FramePlan[] {
+/** One plan per frame with something to fill, in the map's order. Identity numbers go only when settings say 「直接填」. */
+export function planFrames(
+  resume: Resume,
+  needsByFrame: ReadonlyMap<number, FrameNeeds>,
+  opts: { sensitiveFields?: SensitiveFieldMode } = {},
+): FramePlan[] {
   const plans: FramePlan[] = [];
   for (const [frame, needs] of needsByFrame) {
     if (isEmptyNeeds(needs)) continue;
     plans.push({
       frame,
       needs,
-      resume: buildResumeSubset(resume, needs),
+      resume: buildResumeSubset(resume, needs, opts.sensitiveFields ? { sensitiveFields: opts.sensitiveFields } : {}),
       fileIds: [...new Set(attachmentIds(resume, needs.attachmentKeys))],
     });
   }
@@ -123,7 +128,8 @@ export function handedOver(resume: Resume, plans: readonly FramePlan[], files: R
   for (const plan of plans) {
     const keys = expandFieldKeys(plan.needs.fieldKeys.filter((k) => !isAttachmentKey(k)));
     for (const key of keys) {
-      if (key === 'basics.idNumber') continue; // never handed over (buildResumeSubset blanks it)
+      // Handed over only on 「直接填」: buildResumeSubset blanks it otherwise.
+      if (key === 'basics.idNumber' && !plan.resume.basics.idNumber) continue;
       if (wholeModules.has(key.slice(0, key.indexOf('.')))) continue;
       const { moduleLabelKey, labelKey } = labelsOf(key);
       const labels = byModule.get(moduleLabelKey) ?? [];

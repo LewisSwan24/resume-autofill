@@ -8,6 +8,8 @@ import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useSta
 import { referencedFileIds, setActive, type ModuleMeta } from '../../../src/editor';
 import { resolveLanguage, setLanguage, useLanguage, type Language } from '../../../src/i18n';
 import type { Locale } from '../../../src/schema';
+import type { SensitiveFieldMode } from '../../../src/schema/sensitive';
+import { rememberSite } from './browser/model/advance';
 import { BrowserScreen, type BrowserScreenHandle } from './browser/BrowserScreen';
 import { DEMO_ORIGIN, DEMO_URL } from './browser/model/constants';
 import { displayHost } from './browser/model/displayHost';
@@ -418,6 +420,20 @@ function AppContent({
     if (!ok) showToast({ text: tRef.current('m.saveStateFailed') });
     return ok;
   }, [updateAppState, showToast]);
+
+  const chooseSensitive = useCallback(
+    (mode: SensitiveFieldMode) => {
+      const current = profileRef.current;
+      if (!current || current.settings.sensitiveFields === mode) return;
+      // The time goes with the choice, so sync and import keep the one made last on any device.
+      edit((p) => ({ ...p, settings: { ...p.settings, sensitiveFields: mode, sensitiveFieldsUpdatedAt: Date.now() } }), { immediate: true });
+    },
+    [edit],
+  );
+  const rememberAdvanceSite = useCallback(
+    (origin: string) => void updateAppState((s) => ({ ...s, advanceSites: rememberSite(s.advanceSites, origin) })),
+    [updateAppState],
+  );
 
   const chooseLanguage = useCallback(
     (next: Language) => {
@@ -848,6 +864,10 @@ function AppContent({
         showToast={appToast}
         browserRole={platform?.browserRole ?? null}
         onKeyboardSetup={keyboardNative ? keyboardSetup : undefined}
+        advanceSites={appState?.advanceSites ?? []}
+        onAdvanceSite={rememberAdvanceSite}
+        sensitiveFields={profile?.settings.sensitiveFields ?? 'remind'}
+        onSensitiveFields={profile ? chooseSensitive : undefined}
       />
     ) : null;
   const returnPill =
@@ -1024,6 +1044,7 @@ function AppContent({
           }}
           language={language}
           onLanguage={chooseLanguage}
+          onSensitiveFields={chooseSensitive}
           appState={appState}
           updateAppState={updateAppState}
           readStoredProfile={readStoredProfile}

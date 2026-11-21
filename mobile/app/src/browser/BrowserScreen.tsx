@@ -15,6 +15,10 @@ import {
   type Ref,
 } from 'react';
 import { materializeResume, type Profile, type Resume } from '../../../../src/schema';
+import type { SensitiveFieldMode } from '../../../../src/schema/sensitive';
+import { SensitiveFieldsDockedSheet } from '../settings/SensitiveFieldsSheet';
+import { AdvanceBar, AdvanceConfirmSheet } from './AdvanceSheets';
+import { needsConsent } from './model/advance';
 import { resolveFillResume } from '../home/summary';
 import { Icon } from '../Icon';
 import { useMT } from '../i18n';
@@ -30,14 +34,14 @@ import { ExternalLinkSheet } from './ExternalLinkSheet';
 import { FileChooserSheet, matchesAccept } from './FileChooserSheet';
 import { TOAST_MS } from './model/constants';
 import { fabModel } from './model/fabModel';
-import type { RunState } from './model/fillRun';
+import { isRunActive, type RunState } from './model/fillRun';
 import { buildReportModel, type ReportRow } from './model/reportModel';
 import { sampleFor } from './model/sampleResume';
 import type { Insets, NativeTheme } from './native';
 import { PageErrorView } from './PageErrorView';
 import type { BrowserRolePlugin } from '../native/browserRole';
 import { PageInfoSheet } from './PageInfoSheet';
-import { ReportSheet } from './ReportSheet';
+import { ReportSheet, type ReportAdvance } from './ReportSheet';
 import { ResumeChoiceSheet, type ResumePick } from './ResumeChoiceSheet';
 import { onSchemeChange, resolveTheme } from './themeColors';
 import { useNativeFab } from './useNativeFab';
@@ -66,9 +70,15 @@ export interface BrowserScreenProps {
   browserRole?: Pick<BrowserRolePlugin, 'openInOtherBrowser'> | null;
   /** The resume keyboard's setup screen, from the WeChat hint on the open-another-app sheet; absent without the plugin. */
   onKeyboardSetup?: () => void;
+  /** Sites where the person has agreed to auto-advance (asked once per site). */
+  advanceSites?: readonly string[];
+  onAdvanceSite?: (origin: string) => void;
+  /** settings.sensitiveFields, and a change from a held-back row's 「改设置」. */
+  sensitiveFields?: SensitiveFieldMode;
+  onSensitiveFields?: (mode: SensitiveFieldMode) => void;
 }
 
-type LocalSheet = 'report' | 'resume' | 'pageInfo' | null;
+type LocalSheet = 'report' | 'resume' | 'pageInfo' | 'advance' | 'sensitive' | null;
 
 /** Sessions already started: the screen remounts when the page comes back from the 简历 tab. */
 const started = new WeakSet<object>();
@@ -96,6 +106,10 @@ export function BrowserScreen({
   onGoToResume,
   browserRole = null,
   onKeyboardSetup,
+  advanceSites = [],
+  onAdvanceSite,
+  sensitiveFields = 'remind',
+  onSensitiveFields,
 }: BrowserScreenProps) {
   const t = useMT();
   const { session, state, native } = open;
@@ -129,22 +143,28 @@ export function BrowserScreen({
 
   // ---------------------------------------------------------------- insets of the page area
   const viewport = useRef<HTMLDivElement>(null);
+  const dockEl = useRef<HTMLDivElement>(null);
   const lastInsets = useRef<Insets | null>(null);
   const frame = useRef(0);
   const measureInsets = useCallback((): Insets | null => {
     const el = viewport.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
+    // In landscape the sheets dock beside the page (browser.css): the page gives up the room on its right.
+    const dock = dockEl.current?.getBoundingClientRect();
+    const beside = !!dock && dock.width > 0 && dock.left >= rect.right - 1;
+    const end = beside ? Math.max(0, Math.round(window.innerWidth - rect.right)) : 0;
     return {
       top: Math.max(0, Math.round(rect.top)),
       bottom: Math.max(0, Math.round(window.innerHeight - rect.bottom)),
+      ...(end > 0 ? { end } : {}),
     };
   }, []);
   const pushInsets = useCallback(() => {
     const next = measureInsets();
     if (!next) return;
     const last = lastInsets.current;
-    if (last && Math.abs(last.top - next.top) < 1 && Math.abs(last.bottom - next.bottom) < 1) return;
+    if (last && Math.abs(last.top - next.top) < 1 && Math.abs(last.bottom - next.bottom) < 1 && Math.abs((last.end ?? 0) - (next.end ?? 0)) < 1) return;
     lastInsets.current = next;
     if (started.has(session)) session.setInsets(next);
   }, [measureInsets, session]);
@@ -310,7 +330,8 @@ export function BrowserScreen({
     const before = lastRun.current;
     lastRun.current = key;
     if (run.phase === 'asking' && !before.startsWith('asking')) setLive(t('m.br.live.filling'));
-    if (run.phase === 'done' && !run.undo) {
+    // While auto-advance runs, each step's report waits: it opens once the run stops.
+    if (run.phase === 'done' && !run.undo && !session.getState().advance?.running) {
       const filled = run.report.fields.filter((f) => f.outcome === 'filled').length;
       const model = buildReportModel({
         report: run.report,
@@ -330,7 +351,62 @@ export function BrowserScreen({
       if (run.code === 'no_frames') say({ text: t('m.br.run.noFields') });
       else if (run.code === 'failed') say({ text: t('m.br.run.failed') });
     }
-  }, [run, say, t]);
+  }, [run, say, t, session]);
+
+  // Auto-advance: the report folds away while it runs and comes back, on why it stopped, when it does.
+  const advance = state.advance;
+  const wasRunning = useRef(advance?.running === true);
+  useEffect(() => {
+    const running = advance?.running === true;
+    if (running && !wasRunning.current) {
+      setSheet(null);
+      setLive(t('common.advance.running', { n: advance!.steps }));
+    }
+    if (!running && wasRunning.current && advance?.stopReason) {
+      setLive(t(`common.advance.stop.${advance.stopReason}`));
+      setExplain(null);
+      setSheet('report');
+    }
+    wasRunning.current = running;
+  }, [advance, t]);
+  const pageOrigin = useMemo(() => {
+    try {
+      const o = new URL(state.url).origin;
+      return o === 'null' ? '' : o;
+    } catch {
+      return '';
+    }
+  }, [state.url]);
+  const startAdvance = useCallback(() => {
+    if (needsConsent(advanceSites, pageOrigin)) setSheet('advance');
+    else {
+      setSheet(null);
+      session.startAdvance();
+    }
+  }, [advanceSites, pageOrigin, session]);
+  const wizardSteps = state.wizard?.origin === pageOrigin ? state.wizard.steps : [];
+  const reportAdvance: ReportAdvance | null =
+    state.stepOffer || (advance && !advance.running && advance.stopReason)
+      ? {
+          offer: advance?.running ? null : state.stepOffer,
+          stop: advance && !advance.running && advance.stopReason ? { reason: advance.stopReason, moved: advance.steps } : null,
+          steps: wizardSteps,
+          here: wizardSteps.length - 1,
+          onStart: startAdvance,
+          onResume: () => {
+            setSheet(null);
+            session.startAdvance();
+          },
+        }
+      : null;
+  const fillOne = useCallback(
+    async (row: ReportRow) => {
+      const result = await session.fillOne(row.key);
+      if (result === 'failed') say({ text: t('m.br.report.fillOnceFailed') });
+      else if (result === 'gone') say({ text: t('m.br.report.gone') });
+    },
+    [session, say, t],
+  );
 
   const reportModel = useMemo(() => {
     if (run.phase !== 'done') return null;
@@ -480,7 +556,7 @@ export function BrowserScreen({
           ) : null}
         </div>
 
-        <div className="m-br__dock">
+        <div ref={dockEl} className="m-br__dock">
           <ReportSheet
             open={localShown === 'report'}
             model={reportModel}
@@ -491,10 +567,31 @@ export function BrowserScreen({
               const id = fillResume.pick?.kind === 'profile' ? fillResume.pick.resumeId : null;
               return id ? (profile?.resumes.find((r) => r.id === id) ?? null) : null;
             })()}
+            advance={reportAdvance}
             onLocate={(row) => void locate(row)}
             onUndo={() => void session.undo()}
             onClose={() => setSheet(null)}
+            onFillOne={fillResume.sample ? undefined : (row) => void fillOne(row)}
+            onChangeSensitive={onSensitiveFields ? () => setSheet('sensitive') : undefined}
+            onGoToResume={fillResume.sample ? undefined : onGoToResume}
           />
+          <AdvanceConfirmSheet
+            open={localShown === 'advance'}
+            host={state.host.host}
+            onStart={() => {
+              onAdvanceSite?.(pageOrigin);
+              session.startAdvance();
+            }}
+            onClose={() => setSheet(null)}
+          />
+          {onSensitiveFields ? (
+            <SensitiveFieldsDockedSheet
+              open={localShown === 'sensitive'}
+              value={sensitiveFields}
+              onChoose={onSensitiveFields}
+              onClose={() => setSheet('report')}
+            />
+          ) : null}
           <ResumeChoiceSheet
             open={localShown === 'resume'}
             profile={profile}
@@ -599,7 +696,15 @@ export function BrowserScreen({
 
         {/* While the keyboard is up the page gets the room (and the FAB hides, see the session). */}
         <div inert={chromeInert} hidden={state.keyboard || undefined}>
-          {state.keyboard ? null : (
+          {state.keyboard ? null : advance?.running ? (
+            <AdvanceBar
+              moved={advance.steps}
+              // Filled steps so far, plus the one it is on its way to or filling now.
+              step={wizardSteps.length + 1}
+              filling={isRunActive(run)}
+              onStop={() => session.stopAdvance()}
+            />
+          ) : (
             <BrowserToolbar
               canGoBack={state.canGoBack}
               canGoForward={state.canGoForward}

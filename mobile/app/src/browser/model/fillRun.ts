@@ -5,13 +5,16 @@
 import { mergeFrameReports, type FramePart } from '../../../../../src/background/merge';
 import type { FileData } from '../../../../../src/drivers/types';
 import type { FrameNeeds } from '../../../../../src/engine/fieldDeps';
-import type { FillReport } from '../../../../../src/engine/types';
+import type { FieldReport, FillReport } from '../../../../../src/engine/types';
+import { countOutcomes } from '../../../../../src/fill/report';
 import type { Resume } from '../../../../../src/schema/resume';
+import type { SensitiveFieldMode } from '../../../../../src/schema/sensitive';
 import { encode, PROTOCOL_VERSION, type AppCommandInput } from '../../../../bridge/protocol';
 import type { FileInfo } from '../../store/fileStore';
 import { LARGE_NEEDS } from './constants';
 import { ownSite, siteHost } from './frameSites';
 import type { FrameEntry, ReplyBook, RequestKind } from './frames';
+import { buildResumeSubset } from '../../../../../src/background/subset';
 import { countLeaves, handedOver, planFrames, type HandedOver } from './fillPlan';
 import { withTimeout } from './withTimeout';
 
@@ -107,7 +110,11 @@ export async function askFrame(
 const v = PROTOCOL_VERSION as 1;
 
 /** Runs to the end (done, failed or idle after a refused large hand-over). Never throws. */
-export async function executeRun(ctx: RunContext, pick: { resume: Resume; sample: boolean; fallback: boolean }): Promise<void> {
+export async function executeRun(
+  ctx: RunContext,
+  pick: { resume: Resume; sample: boolean; fallback: boolean; sensitiveFields?: SensitiveFieldMode },
+): Promise<void> {
+  const sensitive = pick.sensitiveFields === 'fill' ? { sensitiveFields: 'fill' as const } : {};
   const runId = ctx.newId();
   const generation = ctx.generation();
   const alive = () => {
@@ -132,7 +139,7 @@ export async function executeRun(ctx: RunContext, pick: { resume: Resume; sample
     const a = answers[i];
     if (a?.kind === 'needs') needsByFrame.set(f.frame, a.needs);
   });
-  let plans = planFrames(pick.resume, needsByFrame);
+  let plans = planFrames(pick.resume, needsByFrame, sensitive);
   if (plans.length === 0) {
     ctx.setRun({ phase: 'failed', code: 'no_frames' });
     return;
@@ -198,7 +205,7 @@ export async function executeRun(ctx: RunContext, pick: { resume: Resume; sample
       plan.frame,
       generation,
       'fill',
-      (reqId) => ({ v, kind: 'fill', reqId, runId, origin, resume: plan.resume, files }),
+      (reqId) => ({ v, kind: 'fill', reqId, runId, origin, resume: plan.resume, files, ...sensitive }),
       ctx.timeouts.fill,
     );
     if (!alive()) return;
@@ -233,6 +240,38 @@ export async function executeRun(ctx: RunContext, pick: { resume: Resume; sample
     fallback: pick.fallback,
     sample: pick.sample,
   });
+}
+
+/**
+ * 「这次填上」: write one sensitive field the settings held back, this once, and update its row in the run's report.
+ * Only the id number leaves the app, to the frame that reported the row, and only while it is still that document.
+ */
+export async function executeFillOne(ctx: RunContext, rowKeyOf: string, resume: Resume): Promise<'ok' | 'gone' | 'failed'> {
+  const run = ctx.getRun();
+  if (run.phase !== 'done' || run.undo) return 'gone';
+  const colon = rowKeyOf.indexOf(':');
+  const frame = Number(rowKeyOf.slice(0, colon));
+  const fieldId = rowKeyOf.slice(colon + 1);
+  const row = run.report.fields.find((f) => (f.frameId ?? 0) === frame && f.fieldId === fieldId);
+  const live = ctx.frames().find((f) => f.frame === frame);
+  if (colon < 0 || !row || row.note !== 'sensitive_held' || !live) return 'gone';
+  const generation = ctx.generation();
+  const subset = buildResumeSubset(resume, { fieldKeys: ['basics.idNumber'], repeatSections: [], attachmentKeys: [] }, { sensitiveFields: 'fill' });
+  const answer = await askFrame(
+    ctx,
+    frame,
+    generation,
+    'fill',
+    (reqId) => ({ v, kind: 'fill', reqId, runId: run.runId, origin: live.origin, resume: subset, files: {}, sensitiveFields: 'fill', only: [fieldId] }),
+    ctx.timeouts.fill,
+  );
+  const now = ctx.getRun();
+  if (ctx.generation() !== generation || now.phase !== 'done' || now.runId !== run.runId) return 'gone';
+  const updated = answer?.kind === 'report' ? answer.report.fields.find((f) => f.fieldId === fieldId) : undefined;
+  if (!updated) return answer?.kind === 'error' && answer.code === 'wrong_origin' ? 'gone' : 'failed';
+  const fields = now.report.fields.map((f): FieldReport => (f === row || ((f.frameId ?? 0) === frame && f.fieldId === fieldId) ? { ...(updated as FieldReport), frameId: frame } : f));
+  ctx.setRun({ ...now, report: { ...now.report, fields, counts: countOutcomes(fields) } });
+  return 'ok';
 }
 
 /** One undo per run at a time: a second tap while the first is on its way waits for that one instead of sending again. */

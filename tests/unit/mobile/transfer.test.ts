@@ -197,6 +197,19 @@ describe('preview, replace, merge', () => {
     expect(fromEmpty.activeResumeId).toBe('i1');
   });
 
+  it("mergeInto takes the sensitive-field choice made last, on either side; one never made keeps the phone's", () => {
+    const phone = (at?: number) =>
+      profile([resume('p1')], { settings: { uiLanguage: 'zh', previewBeforeFill: false, sensitiveFields: 'remind', ...(at ? { sensitiveFieldsUpdatedAt: at } : {}) } });
+    const file = (at?: number) =>
+      profile([resume('i1')], { settings: { uiLanguage: 'en', previewBeforeFill: true, sensitiveFields: 'fill', ...(at ? { sensitiveFieldsUpdatedAt: at } : {}) } });
+    const merge = (a: Profile, b: Profile) => mergeInto(a, b, new Set(), { copySuffix: '（导入）' }).profile.settings;
+
+    expect(merge(phone(100), file(200))).toEqual({ uiLanguage: 'zh', previewBeforeFill: false, sensitiveFields: 'fill', sensitiveFieldsUpdatedAt: 200 });
+    expect(merge(phone(300), file(200)).sensitiveFields).toBe('remind');
+    expect(merge(phone(), file(200)).sensitiveFields).toBe('fill');
+    expect(merge(phone(100), file()).sensitiveFields).toBe('remind');
+  });
+
   it('mergeInto prunes attachment ids missing on the phone and uses a random id by default', () => {
     const current = profile([resume('a', { title: '不同' })]);
     const incoming = profile([filled]);

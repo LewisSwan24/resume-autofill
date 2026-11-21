@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { classifyStepButton, findStepAction, pageBlocker, stepFingerprint } from '../../../src/fill/nextStep';
+import { classifyStepButton, findStepAction, pageBlocker, stepFingerprint, stepTitle } from '../../../src/fill/nextStep';
 
 const page = (html: string): Document => {
   document.body.innerHTML = html;
@@ -166,5 +166,23 @@ describe('stepFingerprint', () => {
     const before = stepFingerprint(doc, null);
     (doc.querySelector('input') as HTMLInputElement).value = 'typed';
     expect(stepFingerprint(doc, null)).toBe(before);
+  });
+});
+
+describe('stepTitle', () => {
+  it('reads the step the page marks as current', () => {
+    expect(stepTitle(page('<ol><li>基本信息</li><li aria-current="step"><span>2</span> 教育经历</li><li>其他</li></ol>'))).toBe('教育经历');
+  });
+
+  it('reads the common step bars of Chinese portals', () => {
+    expect(
+      stepTitle(page('<div class="ant-steps"><div class="ant-steps-item ant-steps-item-finish"><div class="ant-steps-item-title">基本信息</div></div><div class="ant-steps-item ant-steps-item-process"><div class="ant-steps-item-title">实习经历</div></div></div>')),
+    ).toBe('实习经历');
+    expect(stepTitle(page('<div class="el-steps"><div class="el-step is-finish"><div class="el-step__title">一</div></div><div class="el-step is-process"><div class="el-step__title">03 其他信息</div></div></div>'))).toBe('其他信息');
+  });
+
+  it('is null with no step bar, or a "current" text too long to be a step name', () => {
+    expect(stepTitle(page('<form><h2>基本信息</h2><input></form>'))).toBeNull();
+    expect(stepTitle(page(`<div aria-current="step">${'很长的说明'.repeat(10)}</div>`))).toBeNull();
   });
 });

@@ -278,6 +278,23 @@ describe('data minimisation (frame:needs → frame:fill)', () => {
     expect(resume.basics.idNumber).toBe('');
   });
 
+  it('sends the identity number, and the choice, only when the settings say to fill sensitive fields', async () => {
+    const asks = { 0: needs({ fieldKeys: ['basics.idNumber'] }) };
+    await seedSamplesIfEmpty();
+    let sent = stubFrames(asks);
+    await runFillRequest(9, { listFrameIds: async () => [0] });
+    expect(JSON.stringify(fills(sent)[0]!.msg)).not.toContain('110101200203150019');
+    expect(fills(sent)[0]!.msg.sensitiveFields).toBeUndefined();
+
+    const profile = createSampleProfile();
+    await saveProfile({ ...profile, settings: { ...profile.settings, sensitiveFields: 'fill' } });
+    sent = stubFrames(asks);
+    await runFillRequest(9, { listFrameIds: async () => [0] });
+    const msg = fills(sent)[0]!.msg;
+    expect((msg.resume as ReturnType<typeof buildResumeSubset>).basics.idNumber).toBe('110101200203150019');
+    expect(msg.sensitiveFields).toBe('fill');
+  });
+
   it('(e) a frame with a repeated section gets every entry of that module (count preserved), nothing of the others', async () => {
     await seedSamplesIfEmpty();
     const sent = stubFrames({ 0: needs({ fieldKeys: ['education.school'], repeatSections: ['education'] }) });

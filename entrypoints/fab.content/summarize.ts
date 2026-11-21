@@ -1,7 +1,9 @@
-// Pure summary formatter for the FAB card. Deliberately drops every resume value: the card only
-// ever sees field labels and outcomes.
-import type { FillReport, Outcome } from '../../src/engine/types';
+// Pure summary formatter for the FAB card: field labels, outcomes, where each field sits (section, entry), the
+// entries of repeated sections, and the site's own option text where a search box picked another name. Resume values
+// that the page does not already show stay out, as do resume paths.
+import type { EntryProgress, FieldReport, FillReport, Outcome, SectionKey } from '../../src/engine/types';
 import { isVisible } from '../../src/engine/visibility';
+import { countEntries, type EntryCounts } from '../../src/ui/entryText';
 import { groupOf } from '../../src/ui/status';
 
 const BOXES = 'input:not([type=hidden], [type=checkbox], [type=radio], [type=file], [type=submit], [type=button], [type=reset], [type=image]), select, textarea';
@@ -20,8 +22,11 @@ export function countBoxes(doc: Document): number {
  */
 export const looksUnderRead = (read: number, boxes: number): boolean => boxes >= MIN_BOXES_TO_JUDGE && read * 4 < boxes;
 
-/** Outcomes the card lists as rows. `filled` and `no_data` are counted only (no_data has no action: one sentence), `no_control` is ignored. */
-export type SummaryOutcome = Exclude<Outcome, 'filled' | 'no_data' | 'no_control'>;
+/** Outcomes the card lists as rows. `filled` is counted only, `no_control` is ignored. */
+export type SummaryOutcome = Exclude<Outcome, 'filled' | 'no_control'>;
+
+/** The card's groups of rows, by reason, in display order. */
+export type SummaryGroupId = 'review' | 'no_option' | 'failed' | 'nodata';
 
 export interface SummaryItem {
   fieldId: string;
@@ -29,7 +34,21 @@ export interface SummaryItem {
   frameId: number;
   label: string;
   outcome: SummaryOutcome;
+  section: SectionKey | null;
+  /** 0-based entry of a repeated section, which tells apart two fields of the same name. */
+  entry?: number;
+  note?: FieldReport['note'];
+  /** The site's option a search box picked under another name than the resume's (already shown on the page). */
+  picked?: string;
 }
+
+export interface SummaryGroup {
+  id: SummaryGroupId;
+  items: SummaryItem[];
+}
+
+/** One entry of a repeated section, with its fields counted by outcome. */
+export type EntrySummary = EntryProgress & EntryCounts;
 
 export interface FillSummary {
   filled: number;
@@ -39,22 +58,40 @@ export interface FillSummary {
   unrecognized: number;
   /** no_data */
   noData: number;
-  /** Fields that need a look (review group, then unrecognized group); never filled and never no_data. */
-  items: SummaryItem[];
+  /** Fields not filled, by reason; only groups that hold a row. A card the page already held is left to its entry. */
+  groups: SummaryGroup[];
+  /** Entries of the repeated sections this fill met, in the report's order. */
+  entries: EntrySummary[];
   /** First no_data field in page order that names a resume field: where "Add them to your profile" jumps. A path, never a value. */
   firstMissing?: { fieldKey: string; source?: string };
 }
 
-/** List order by tone group: review first, then not filled (`Array#sort` is stable, so report order holds within a group). */
-const GROUP_RANK: Record<SummaryOutcome, number> = {
-  needs_review: 0,
-  no_option: 0,
-  unmatched: 1,
-  action_failed: 1,
+const GROUP_OF: Record<SummaryOutcome, SummaryGroupId> = {
+  needs_review: 'review',
+  no_option: 'no_option',
+  unmatched: 'failed',
+  action_failed: 'failed',
+  no_data: 'nodata',
 };
+const GROUP_ORDER: readonly SummaryGroupId[] = ['review', 'no_option', 'failed', 'nodata'];
+
+function itemOf(f: FieldReport): SummaryItem {
+  const item: SummaryItem = {
+    fieldId: f.fieldId,
+    frameId: f.frameId ?? 0,
+    label: f.label.trim(),
+    outcome: f.outcome as SummaryOutcome,
+    section: f.section,
+  };
+  if (f.entry !== undefined) item.entry = f.entry;
+  if (f.note) item.note = f.note;
+  if (f.note === 'picked_other_name' && f.observed) item.picked = f.observed;
+  return item;
+}
 
 export function summarize(report: FillReport): FillSummary {
-  const summary: FillSummary = { filled: 0, review: 0, unrecognized: 0, noData: 0, items: [] };
+  const summary: FillSummary = { filled: 0, review: 0, unrecognized: 0, noData: 0, groups: [], entries: [] };
+  const rows = new Map<SummaryGroupId, SummaryItem[]>();
   for (const f of report.fields) {
     const group = groupOf(f.outcome);
     if (group === 'filled') summary.filled++;
@@ -64,9 +101,13 @@ export function summarize(report: FillReport): FillSummary {
       summary.noData++;
       if (!summary.firstMissing && f.fieldKey) summary.firstMissing = f.source ? { fieldKey: f.fieldKey, source: f.source } : { fieldKey: f.fieldKey };
     }
-    if (group !== 'review' && group !== 'failed') continue; // filled / no data (counted) / no_control (ignored)
-    summary.items.push({ fieldId: f.fieldId, frameId: f.frameId ?? 0, label: f.label.trim(), outcome: f.outcome as SummaryOutcome });
+    if (f.outcome === 'filled' || f.outcome === 'no_control' || f.note === 'entry_held') continue;
+    const id = GROUP_OF[f.outcome as SummaryOutcome];
+    let list = rows.get(id);
+    if (!list) rows.set(id, (list = []));
+    list.push(itemOf(f));
   }
-  summary.items.sort((a, b) => GROUP_RANK[a.outcome] - GROUP_RANK[b.outcome]);
+  summary.groups = GROUP_ORDER.flatMap((id) => (rows.has(id) ? [{ id, items: rows.get(id)! }] : []));
+  summary.entries = countEntries(report.entries ?? [], report.fields);
   return summary;
 }

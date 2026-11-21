@@ -119,6 +119,8 @@ function impliedPaths(n: FrameNeeds): { single: Set<string>; arrayLeaf: Set<stri
     else if ((ARRAY_MODULE_NAMES as readonly string[]).includes(module)) {
       arrayLeaf.add(`${module}.${field}`);
       for (const a of ENTRY_ALIGNMENT_FIELDS[module as keyof typeof ENTRY_ALIGNMENT_FIELDS] ?? []) arrayLeaf.add(`${module}.${a}`);
+      // A language's level and score are read first from its list of tests.
+      if (module === 'languages' && (field === 'certificate' || field === 'score')) arrayLeaf.add('languages.tests');
     } else if (module === 'contact' && field in ADDRESS_PATH) single.add(ADDRESS_PATH[field]!);
     else single.add(k);
   }
@@ -141,7 +143,8 @@ function assertNoLeak(resume: Resume, n: FrameNeeds): void {
     if (NEVER_BLANK.test(path)) continue;
     if (JSON.stringify(value) === JSON.stringify(baseLeaves.get(path))) continue; // same as the empty skeleton
     if (isBlank(value)) continue;
-    const m = /^(\w+)\[\d+\]\.(\w+)$/.exec(path);
+    // A list inside an entry (a language's tests) counts as the entry leaf that holds it.
+    const m = /^(\w+)\[\d+\]\.(\w+)(?:\[\d+\]\.\w+)?$/.exec(path);
     const ok = m
       ? implied.wholeModules.has(m[1]!) || implied.arrayLeaf.has(`${m[1]}.${m[2]}`)
       : implied.single.has(path);
@@ -189,11 +192,19 @@ describe('buildResumeSubset: single modules (per leaf)', () => {
     expect(s.attachments).toEqual({});
   });
 
-  it('never carries an identity number, not even to a page that asks for one', () => {
+  it('carries no identity number by default, not even to a page that asks for one', () => {
     const s = buildResumeSubset(zh, needs({ fieldKeys: ['basics.idNumber', 'basics.idType', 'basics.fullName'] }));
     expect(s.basics.idNumber).toBe('');
     expect(JSON.stringify(s)).not.toContain(zh.basics.idNumber);
     expect(s.basics.familyName).toBe(zh.basics.familyName);
+    expect(buildResumeSubset(zh, needs({ fieldKeys: ['basics.idNumber'] }), { sensitiveFields: 'remind' }).basics.idNumber).toBe('');
+  });
+
+  it('carries the identity number to a page that asks for it once the applicant chose to fill it, and only then', () => {
+    const asked = buildResumeSubset(zh, needs({ fieldKeys: ['basics.idNumber'] }), { sensitiveFields: 'fill' });
+    expect(asked.basics.idNumber).toBe(zh.basics.idNumber);
+    const notAsked = buildResumeSubset(zh, needs({ fieldKeys: ['basics.fullName'] }), { sensitiveFields: 'fill' });
+    expect(JSON.stringify(notAsked)).not.toContain(zh.basics.idNumber);
   });
 
   it('copies address parts by key and misc strings', () => {
@@ -317,6 +328,23 @@ describe('buildResumeSubset: repeated modules', () => {
         expect(resolveValue('languages.score', s, 0, section, { askedAs })).toEqual(resolveValue('languages.score', r, 0, section, { askedAs }));
       }
     }
+  });
+
+  it('a language level or score goes with the test lists, which answer it first; a language name alone does not', () => {
+    const r = ResumeSchema.parse({
+      ...zh,
+      languages: [
+        { language: '日语', tests: [{ test: 'jlpt_n1', score: '170' }] },
+        { language: '英语', tests: [{ test: 'cet4', score: '561' }, { test: 'cet6', score: '523' }] },
+      ],
+    });
+    for (const key of ['languages.score', 'languages.certificate'] as const) {
+      const s = buildResumeSubset(r, needs({ fieldKeys: [key] }));
+      for (const askedAs of ['英语成绩', '四级成绩', '六级成绩', '日语成绩', '英语等级']) {
+        expect(resolveValue(key, s, 0, 'basics', { askedAs }), `${key} ${askedAs}`).toEqual(resolveValue(key, r, 0, 'basics', { askedAs }));
+      }
+    }
+    expect(JSON.stringify(buildResumeSubset(r, needs({ fieldKeys: ['languages.language'] })))).not.toContain('561');
   });
 
   it('card alignment sees the same entry counts as with the full resume', () => {

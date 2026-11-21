@@ -161,11 +161,11 @@ describe('what the form is given', () => {
     expect(step?.intent).toMatchObject({ kind: 'multi', items: [{ query: '英语' }] });
   });
 
-  it('an English level on a list that takes several is left to the applicant, until the ranking is settled', () => {
+  it('an English level on a list that takes several ticks every English test held', () => {
     const { at, plan } = scan();
     const { control, step } = at('英语等级');
-    expect(step).toBeUndefined();
-    expect(plan.reports.find((r) => r.fieldId === control.id)?.outcome).toBe('needs_review');
+    expect(step?.intent).toMatchObject({ kind: 'multi', items: [{ query: 'CET-6' }] });
+    expect(plan.reports.find((r) => r.fieldId === control.id)).toBeUndefined();
   });
 
   it('a block for languages other than English gets nothing from an English entry', () => {
@@ -179,7 +179,7 @@ describe('what the form is given', () => {
 
   it('a block for other languages still takes one that is not English', () => {
     const { at } = scan((r) => {
-      r.languages = [...r.languages, { language: '日语', proficiency: 'basic', certificate: 'JLPT N2', score: '' }];
+      r.languages = [...r.languages, { language: '日语', proficiency: 'basic', certificate: 'JLPT N2', score: '', tests: [] }];
     });
     expect(at('语言类型').step?.intent).toMatchObject({ kind: 'choice', query: '日语' });
   });

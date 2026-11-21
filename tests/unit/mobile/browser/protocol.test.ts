@@ -51,6 +51,29 @@ describe('decodePageMessage', () => {
     expect(out?.kind === 'report' && out.report.fields[0]?.note).toBe('entry_held');
   });
 
+  it('accepts a report that says which entry each row belongs to, what became of each entry, and a picked name', () => {
+    const picked = { ...row(1), outcome: 'needs_review', note: 'picked_other_name', entry: 0, value: '星河示例理工大学', observed: '星河理工' };
+    const entries = [
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'internship', index: 1, state: 'skipped', reason: 'add_failed', button: '添加实习经历' },
+    ];
+    const out = decodePageMessage(JSON.stringify({ ...(valid.report as object), report: { ...report([picked]), entries } }));
+    expect(out?.kind === 'report' && out.report.fields[0]).toMatchObject({ note: 'picked_other_name', entry: 0 });
+    expect(out?.kind === 'report' && out.report.entries).toEqual(entries);
+  });
+
+  it('drops a report with an entry in an unknown state', () => {
+    const entries = [{ section: 'education', index: 0, state: 'lost' }];
+    expect(decodePageMessage(JSON.stringify({ ...(valid.report as object), report: { ...report(), entries } }))).toBeNull();
+  });
+
+  it('accepts report rows for a sensitive field held back or filled by choice', () => {
+    const held = { ...row(1), outcome: 'needs_review', note: 'sensitive_held' };
+    const filled = { ...row(2), outcome: 'filled', note: 'sensitive_filled' };
+    const out = decodePageMessage(JSON.stringify({ ...(valid.report as object), report: report([held, filled]) }));
+    expect(out?.kind === 'report' && out.report.fields.map((f) => f.note)).toEqual(['sensitive_held', 'sensitive_filled']);
+  });
+
   it('keeps only known needs keys and drops a message with an unknown field key', () => {
     const bad = { ...(valid.needs as object), needs: { fieldKeys: ['basics.nope'], repeatSections: [], attachmentKeys: [] } };
     expect(decodePageMessage(JSON.stringify(bad))).toBeNull();

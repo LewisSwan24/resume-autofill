@@ -12,7 +12,7 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import type { Resume } from '../schema';
+import { languageLine, type Resume } from '../schema';
 import { resumeFullName } from './presets';
 import { formatPeriod, joinContact, labelsFor, splitBullets, type Labels, type ResumeTemplateId } from './renderHtml';
 
@@ -122,7 +122,7 @@ function sectionSkillsAndExtras(resume: Resume, l: Labels): Paragraph[] {
   if (resume.languages.length > 0) {
     out.push(
       heading(l.languages),
-      new Paragraph({ children: [new TextRun({ text: resume.languages.map((lang) => [lang.language, lang.certificate, lang.score].filter(Boolean).join(' ')).join(' · '), size: 19 })] }),
+      new Paragraph({ children: [new TextRun({ text: resume.languages.map(languageLine).join(' · '), size: 19 })] }),
     );
   }
   if (resume.awards.length > 0) {

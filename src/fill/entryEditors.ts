@@ -6,7 +6,7 @@ import type { FileData } from '../drivers/types';
 import { waitFor } from '../drivers/wait';
 import { planFill } from '../engine/plan';
 import { scanDocument } from '../engine/scan';
-import type { Control, FieldContext, FieldReport } from '../engine/types';
+import type { Control, EntryProgress, FieldContext, FieldReport } from '../engine/types';
 import { entryFieldText, sectionEntries } from '../engine/values';
 import type { Resume } from '../schema';
 import { clickAdd, type SectionGrowth } from './ensureCards';
@@ -57,6 +57,8 @@ export interface EditorsRun {
   results: FieldReport[];
   growth: SectionGrowth[];
   controls: Map<string, Control>;
+  /** What became of each entry, in the resume's order per section. */
+  entries: EntryProgress[];
 }
 
 interface RunOptions {
@@ -78,6 +80,7 @@ async function fillOpenEditor(
   resume: Resume,
   { files, idFor }: RunOptions,
   run: EditorsRun,
+  entry: number,
 ): Promise<'empty' | 'ready' | 'held'> {
   const scan = scanDocument(doc, idFor);
   const contexts: FieldContext[] = [];
@@ -92,7 +95,7 @@ async function fillOpenEditor(
   const plan = planFill(contexts, classifications, resume, files);
   const rows = [...plan.reports];
   for (const step of plan.steps) rows.push(await runStep(step, run.controls, doc));
-  run.results.push(...rows);
+  run.results.push(...rows.map((r) => ({ ...r, entry })));
   if (plan.steps.length === 0) return 'empty';
   return rows.some((r) => WANTS_THE_USER.has(r.outcome)) ? 'held' : 'ready';
 }
@@ -103,52 +106,75 @@ async function fillSection(doc: Document, editor: EntryEditor, opts: RunOptions,
   const module = editor.section === 'internship' ? 'work' : editor.section;
   const section: Section = { editor, module, locale: opts.resume.locale };
   const rows = sectionEntries(opts.resume, module as Parameters<typeof sectionEntries>[1], editor.section);
-  const entries = rows.map((r) => r.entry).filter((entry) => hasData(section, entry));
+  const usable = rows.map((r, at) => ({ entry: r.entry, at })).filter((r) => hasData(section, r.entry));
+  const entries = usable.map((r) => r.entry);
   if (entries.length === 0) return;
 
   const saved = alreadySaved(root, section, entries);
   const growth: SectionGrowth = { section: editor.section, have: saved.size, need: entries.length, added: 0, status: 'ok', label: editor.title };
   run.growth.push(growth);
 
+  // What became of each entry; those never reached take the reason the run stopped for.
+  const progress = new Map<number, Pick<EntryProgress, 'state' | 'reason'>>();
+  const nameOf = (entry: unknown) => Object.keys(editor.identity).map((field) => textOf(section, entry, field).trim()).find(Boolean);
+  const report = (reason: NonNullable<EntryProgress['reason']>) => {
+    usable.forEach((r, i) => {
+      const done = progress.get(i) ?? { state: 'skipped' as const, reason };
+      const label = nameOf(r.entry);
+      run.entries.push({ section: editor.section, index: r.at, ...done, ...(label ? { label } : {}) });
+    });
+  };
+
   // A page that puts each new entry on top shows them in resume order if the last goes in first.
   const order = entries.map((_, i) => i);
   if (editor.addsOnTop) order.reverse();
 
-  const stop = () => {
+  const stop = (reason: NonNullable<EntryProgress['reason']>, at?: number) => {
     growth.status = 'action_failed';
+    if (at !== undefined) progress.set(at, { state: 'skipped', reason });
+    report(reason);
   };
   for (const i of order) {
+    if (saved.has(i)) {
+      progress.set(i, { state: 'held' });
+      continue;
+    }
     // With no name it could not be told from a saved one next time, so it would be added on every run.
-    if (saved.has(i) || !hasName(section, entries[i])) continue;
+    if (!hasName(section, entries[i])) {
+      progress.set(i, { state: 'skipped', reason: 'no_name' });
+      continue;
+    }
     // An editor that is already open holds someone's own typing, and the page offers no second one.
     const add = root.querySelector(editor.add);
-    if (root.querySelector(editor.editor) || !clickable(add)) return stop();
+    if (root.querySelector(editor.editor) || !clickable(add)) return stop('add_failed');
     clickAdd(add);
     const open = () => root.querySelector(editor.editor);
     const opened = await waitFor(() => open()?.querySelector(EDITOR_FIELD) != null, { timeout: WAIT_MS, root: doc });
     const box = open();
-    if (!opened || !box) return stop();
+    if (!opened || !box) return stop('add_failed');
 
-    const state = await fillOpenEditor(doc, box, { ...opts.resume, [module]: [entries[i]] }, opts, run);
-    if (state === 'held') return stop();
+    const state = await fillOpenEditor(doc, box, { ...opts.resume, [module]: [entries[i]] }, opts, run, usable[i]!.at);
+    if (state === 'held') return stop('editor_held', i);
 
     const button = box.querySelector(state === 'ready' ? editor.save : editor.cancel);
     growth.label = button?.textContent?.trim() || editor.title;
-    if (!clickable(button)) return stop();
+    if (!clickable(button)) return stop('editor_held', i);
     clickAdd(button);
     const closed = await waitFor(() => open() === null, { timeout: WAIT_MS, root: doc });
     // Not closed: the page refused it, most often over a required field. It stays open for the user to finish.
-    if (!closed) return stop();
+    if (!closed) return stop('editor_held', i);
     if (state === 'ready') {
       growth.added += 1;
       growth.have += 1;
-    }
+      progress.set(i, { state: 'added' });
+    } else progress.set(i, { state: 'skipped', reason: 'nothing_to_fill' });
   }
-  if (growth.have < growth.need) stop();
+  if (growth.have < growth.need) growth.status = 'action_failed';
+  report('add_failed');
 }
 
 export async function fillEntryEditors(doc: Document, editors: readonly EntryEditor[], opts: RunOptions): Promise<EditorsRun> {
-  const run: EditorsRun = { results: [], growth: [], controls: new Map() };
+  const run: EditorsRun = { results: [], growth: [], controls: new Map(), entries: [] };
   for (const editor of editors) await fillSection(doc, editor, opts, run);
   return run;
 }

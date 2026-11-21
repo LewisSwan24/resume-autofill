@@ -12,6 +12,7 @@ import { FilterChips } from './FilterChips';
 import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
 import { EmptyState, IconButton, LoadingList, Notice, Toast } from './parts';
 import { PreviewList, type PreviewCommitPayload } from './PreviewList';
+import { EntryOverview } from './EntryOverview';
 import { ReportList } from './ReportList';
 import { ResumeSwitcher } from './ResumeSwitcher';
 import { useActiveTab } from './useActiveTab';
@@ -469,6 +470,7 @@ export default function App() {
                   </button>
                 ) : null}
               </div>
+              {report?.entries?.length ? <EntryOverview entries={report.entries} fields={report.fields} /> : null}
               <FilterChips
                 counts={counts}
                 total={fields.length}

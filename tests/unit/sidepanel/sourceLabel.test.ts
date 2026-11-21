@@ -25,6 +25,14 @@ describe('describeSource', () => {
     expect(describeSource('education[1].endDate', zh)).toBe('教育经历 2 › 结束时间');
   });
 
+  it('names a test in a language entry\'s list by its number, and the test and score of several by entry', () => {
+    expect(describeSource('languages[0].tests[1].score', en)).toBe('Languages 1 › Test 2 › Score');
+    expect(describeSource('languages[1].tests[0].test', zh)).toBe('语言能力 2 › 考试 1 › 考试');
+    // An English level ticked from several tests: the first one names it.
+    expect(describeSource('languages[0].tests[0].test+languages[2].certificate', en)).toBe('Languages 1 › Test 1 › Test');
+    expect(describeSource('languages[0].tests[0].nope', en)).toBeNull();
+  });
+
   it('handles the address, attachments and top-level resume fields', () => {
     expect(describeSource('contact.address', en)).toBe('Contact › Address');
     expect(describeSource('contact.address.city', en)).toBe('Contact › City');

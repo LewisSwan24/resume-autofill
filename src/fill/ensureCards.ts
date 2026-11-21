@@ -29,6 +29,8 @@ export interface SectionGrowth {
   status: 'ok' | 'no_button' | 'action_failed';
   /** Text of the add button (when one was used). */
   label?: string;
+  /** Stopped by the `maxAdds` cap before every entry had a card. */
+  capped?: boolean;
 }
 
 export interface EnsureCardsOptions {
@@ -45,7 +47,7 @@ const FIELD_SELECTOR = 'input, select, textarea, [contenteditable=""], [contente
 const ADD_WORDS = /^[\s+＋]*(?:继续添加|再添加|再增加|添加更多|添加|新增|增加|add\s+(?:another|more|new)|add)\s*/i;
 const SECTION_FROM_TEXT_MIN = 0.8;
 
-const REPEATED: ReadonlySet<SectionKey> = new Set<SectionKey>([
+export const REPEATED: ReadonlySet<SectionKey> = new Set<SectionKey>([
   'education', 'work', 'internship', 'projects', 'campus', 'awards', 'languages', 'certificates', 'skills',
   'family', 'referees',
 ]);
@@ -237,7 +239,10 @@ export async function ensureCards(
       if (last) {
         result.have = last.have;
         result.need = last.need;
-        if (last.have < last.need) result.status = 'action_failed';
+        if (last.have < last.need) {
+          result.status = 'action_failed';
+          result.capped = true;
+        }
       }
     }
   }

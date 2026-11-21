@@ -5,7 +5,7 @@ import type { FileData } from '../drivers/types';
 import { ATTACHMENT_PROP, isEmptyNeeds, parseFrameNeeds, type AttachmentKey, type FrameNeeds } from '../engine/fieldDeps';
 import type { FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
 import { sendToFrame, type FillRequestResponse } from '../messaging';
-import { materializeResume, type Resume, type SiteRecipe } from '../schema';
+import { materializeResume, type Resume, type SensitiveFieldMode, type SiteRecipe } from '../schema';
 import { BUILTIN_SITE_RECIPES, matchRecipesForPage } from '../recipes';
 import { isValidPresetId, type MappingPresetId } from '../templates/presets';
 import { VaultLockedError, fileToFileData, getFile, loadProfile } from '../storage';
@@ -63,6 +63,8 @@ export interface FramePayload {
   filter?: FillFilter;
   presetId?: MappingPresetId;
   recipes?: SiteRecipe[];
+  /** Sent only as 'fill': a frame told nothing reminds, which is the default. */
+  sensitiveFields?: SensitiveFieldMode;
 }
 
 const defaultSendFill = (tabId: number, frameId: number, p: FramePayload): Promise<unknown> =>
@@ -76,6 +78,7 @@ const defaultSendPreview = (tabId: number, frameId: number, p: FramePayload): Pr
     files: p.files,
     ...(p.presetId ? { presetId: p.presetId } : {}),
     ...(p.recipes ? { recipes: p.recipes } : {}),
+    ...(p.sensitiveFields ? { sensitiveFields: p.sensitiveFields } : {}),
   });
 
 const defaultSendNeeds = (tabId: number, frameId: number): Promise<unknown> =>
@@ -181,6 +184,7 @@ async function runPreviewInternal(
   presetId: MappingPresetId | undefined,
   recipes: SiteRecipe[] | undefined,
   deps: FillDeps,
+  sensitiveFields?: SensitiveFieldMode,
 ): Promise<FillRequestResponse> {
   const runId = crypto.randomUUID();
   const frameIds = await (deps.listFrameIds ?? listFrameIds)(tabId);
@@ -191,9 +195,10 @@ async function runPreviewInternal(
     async (frameId, needs) => {
       const payload: FramePayload = {
         runId,
-        resume: buildResumeSubset(resume, needs),
+        resume: buildResumeSubset(resume, needs, sensitiveFields ? { sensitiveFields } : {}),
         files: await loadAttachmentMeta(resume, needs.attachmentKeys),
         ...(presetId ? { presetId } : {}),
+        ...(sensitiveFields ? { sensitiveFields } : {}),
         ...(recipes && recipes.length > 0 ? { recipes } : {}),
       };
       if (deps.expectOrigin !== undefined && (await tabOrigin(tabId)) !== deps.expectOrigin) throw new OriginChangedError();
@@ -244,6 +249,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     const presetId = isValidPresetId(profile.settings.mappingPresetId) && profile.settings.mappingPresetId !== 'default'
       ? profile.settings.mappingPresetId
       : undefined;
+    const sensitiveFields = profile.settings.sensitiveFields === 'fill' ? ('fill' as const) : undefined;
 
     const tabInfo = await browser.tabs.get(tabId).catch(() => null);
     const tabUrl = typeof tabInfo?.url === 'string' ? tabInfo.url : '';
@@ -257,7 +263,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     const pageRecipes = tabUrl ? matchRecipesForPage(allRecipes, tabUrl) : undefined;
 
     if (profile.settings.previewBeforeFill && !deps.forceFill) {
-      return await runPreviewInternal(tabId, resume, presetId, pageRecipes, deps);
+      return await runPreviewInternal(tabId, resume, presetId, pageRecipes, deps, sensitiveFields);
     }
 
     const runId = crypto.randomUUID();
@@ -272,10 +278,11 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
         const filter = frameFilter(deps.approval, frameId);
         const payload: FramePayload = {
           runId,
-          resume: buildResumeSubset(resume, needs),
+          resume: buildResumeSubset(resume, needs, sensitiveFields ? { sensitiveFields } : {}),
           files: await loadAttachmentFiles(resume, needs.attachmentKeys),
           ...(filter ? { filter } : {}),
           ...(presetId ? { presetId } : {}),
+          ...(sensitiveFields ? { sensitiveFields } : {}),
           ...(pageRecipes && pageRecipes.length > 0 ? { recipes: pageRecipes } : {}),
         };
         return sendFill(tabId, frameId, payload);

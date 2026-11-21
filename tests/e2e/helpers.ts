@@ -239,7 +239,7 @@ export function recordAccuracy(row: AccuracyRow): AccuracyRow[] {
 
 export const rowsOf = (report: FillReport, re: RegExp): FieldReport[] => report.fields.filter((f) => re.test(f.label));
 
-/** Centre of an element in the FAB's closed shadow root, found by data-testid through the DevTools protocol. */
+/** Centre of an element in the FAB's closed shadow root, found by data-testid through the DevTools protocol, scrolled into view. */
 export async function fabPoint(page: Page, testId: string): Promise<{ x: number; y: number } | null> {
   interface Node {
     nodeId: number;
@@ -256,6 +256,8 @@ export async function fabPoint(page: Page, testId: string): Promise<{ x: number;
       const a = n.attributes ?? [];
       const i = a.indexOf('data-testid');
       if (i >= 0 && a[i + 1] === testId) {
+        // Inside the card's scrolling content it may sit below the fold.
+        await cdp.send('DOM.scrollIntoViewIfNeeded', { nodeId: n.nodeId });
         const { model } = (await cdp.send('DOM.getBoxModel', { nodeId: n.nodeId })) as { model: { border: number[] } };
         const [x1, y1, , , x3, y3] = model.border;
         return { x: (x1! + x3!) / 2, y: (y1! + y3!) / 2 };

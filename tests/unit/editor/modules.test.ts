@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ResumeSchema } from '../../../src/schema';
 import { DICTIONARIES } from '../../../src/i18n';
-import { ARRAY_MODULES, MODULES, getModule, newEntry, type FieldMeta } from '../../../src/editor';
+import { ARRAY_MODULES, MODULES, getModule, newEntry, newSubItem, type FieldMeta } from '../../../src/editor';
 import { enumLabel, enumOptions } from '../../../src/editor';
 import { ENUM_VALUES, SETTING_ENUM_VALUES } from '../../../src/schema';
 
@@ -41,8 +41,23 @@ describe('module metadata', () => {
       } else {
         expected = leafPaths((empty as unknown as Record<string, unknown>)[meta.module]);
       }
-      expect(meta.fields.map((f) => f.key).sort(), meta.module).toEqual(expected.sort());
+      // A list inside each entry is edited as a whole (its items have fields of their own, checked below).
+      const keys = [...meta.fields.map((f) => f.key), ...(meta.subLists ?? []).map((sub) => sub.key)];
+      expect(keys.sort(), meta.module).toEqual(expected.sort());
     }
+  });
+
+  it('edits every field of a test in a language entry, with labels in both dictionaries', () => {
+    const [tests] = getModule('languages').subLists ?? [];
+    expect(tests?.key).toBe('tests');
+    expect(tests!.fields.map((f) => f.key).sort()).toEqual(Object.keys(newSubItem(tests!)).sort());
+    const keys = [tests!.labelKey, tests!.helpKey, tests!.itemLabelKey, tests!.addLabelKey, tests!.removeLabelKey, ...tests!.fields.map((f) => f.labelKey)];
+    for (const lang of ['zh', 'en'] as const) {
+      const dict = DICTIONARIES[lang] as Record<string, string>;
+      for (const key of keys) expect(dict[key], `${lang}:${key}`).toBeTruthy();
+    }
+    expect(enumOptions('languageTest', 'en').map((o) => o.label)).toEqual(expect.arrayContaining(['CET-4', 'CET-6', 'IELTS', 'TOEIC', 'Other']));
+    expect(enumLabel('languageTest', 'cet6', 'zh')).toBe('CET-6（英语六级）');
   });
 
   it('repeatable flag matches array modules, with a fresh entry for each', () => {

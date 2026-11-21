@@ -147,8 +147,33 @@ export interface FieldReport {
   /** Resume path, e.g. "education[1].school". */
   source?: string;
   candidates?: { label: string; value?: string; fieldKey?: FieldKey }[];
-  /** What the outcome does not say: why this row needs the user, or that its card was the page's own entry already. */
-  note?: 'same_file_held' | 'entry_held';
+  /**
+   * What the outcome does not say: why this row needs the user, or that its card was the page's own entry already.
+   * `picked_other_name`: a search box held no option written as the resume writes it, and one under another name
+   * was picked (`observed`); the user should confirm it is the same school.
+   * `sensitive_held`: a sensitive field the settings say to leave to the applicant. `sensitive_filled`: one they
+   * said to fill, and it was.
+   */
+  note?: 'same_file_held' | 'entry_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled';
+  /** Which entry of its section (0-based, in the resume's order for that section) this field belongs to. */
+  entry?: number;
+}
+
+/**
+ * What one fill did with one entry of a repeated section. `existing`: a card the page already had took it;
+ * `added`: this fill added the card; `held`: the page already shows this entry, so it was left alone;
+ * `skipped`: no card took it, for `reason`.
+ */
+export interface EntryProgress {
+  section: SectionKey;
+  /** 0-based, in the resume's order for the section. */
+  index: number;
+  state: 'existing' | 'added' | 'skipped' | 'held';
+  reason?: 'no_button' | 'add_failed' | 'max_adds' | 'editor_held' | 'no_name' | 'nothing_to_fill';
+  /** The entry's name in the resume: its school, company, project. */
+  label?: string;
+  /** Words of the add button that was pressed, for `add_failed`. */
+  button?: string;
 }
 
 export interface FillReport {
@@ -157,6 +182,8 @@ export interface FillReport {
   finishedAt: number;
   fields: FieldReport[];
   counts: Record<Outcome, number>;
+  /** Per entry of each repeated section this fill met. */
+  entries?: EntryProgress[];
 }
 
 export interface FillFilter {

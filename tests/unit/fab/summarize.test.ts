@@ -15,8 +15,8 @@ function report(fields: FieldReport[]): FillReport {
 }
 
 describe('summarize', () => {
-  it('returns zero counts and no items for an empty report', () => {
-    expect(summarize(report([]))).toEqual({ filled: 0, review: 0, unrecognized: 0, noData: 0, items: [] });
+  it('returns zero counts, no groups and no entries for an empty report', () => {
+    expect(summarize(report([]))).toEqual({ filled: 0, review: 0, unrecognized: 0, noData: 0, groups: [], entries: [] });
   });
 
   it('groups outcomes: review = needs_review + no_option, unrecognized = unmatched + action_failed', () => {
@@ -34,7 +34,7 @@ describe('summarize', () => {
     expect(s).toMatchObject({ filled: 2, review: 2, unrecognized: 2, noData: 1 });
   });
 
-  it('lists only the fields that need a look (never filled, never no_data), review group first, stable within a group', () => {
+  it('lists every field not filled in four groups by reason, in this order, page order within a group', () => {
     const s = summarize(
       report([
         field('1', 'no_data'),
@@ -43,29 +43,40 @@ describe('summarize', () => {
         field('4', 'no_option'),
         field('5', 'needs_review'),
         field('6', 'action_failed'),
+        field('7', 'needs_review'),
+        field('8', 'no_data'),
       ]),
     );
-    expect(s.items.map((i) => i.fieldId)).toEqual(['4', '5', '3', '6']);
-    expect(s.items.map((i) => i.outcome)).toEqual(['no_option', 'needs_review', 'unmatched', 'action_failed']);
-    expect(s.noData).toBe(1); // counted for the sentence, not listed
+    expect(s.groups.map((g) => [g.id, g.items.map((i) => i.fieldId)])).toEqual([
+      ['review', ['5', '7']],
+      ['no_option', ['4']],
+      ['failed', ['3', '6']],
+      ['nodata', ['1', '8']],
+    ]);
   });
 
-  it('carries label and frame id; a missing frame id defaults to the top frame (0)', () => {
+  it('leaves out empty groups, and a card the page already held (its entry says so)', () => {
+    const s = summarize(report([field('a', 'filled'), field('b', 'no_data', { note: 'entry_held' }), field('c', 'no_option')]));
+    expect(s.groups.map((g) => g.id)).toEqual(['no_option']);
+    expect(s.noData).toBe(1);
+  });
+
+  it('carries label, frame id, section and entry; a missing frame id defaults to the top frame (0)', () => {
     const s = summarize(
       report([
-        field('x', 'needs_review', { label: '  学校  ', frameId: 3 }),
+        field('x', 'needs_review', { label: '  学校  ', frameId: 3, section: 'education', entry: 1 }),
         field('y', 'unmatched', { label: '' }),
       ]),
     );
-    expect(s.items).toEqual([
-      { fieldId: 'x', frameId: 3, label: '学校', outcome: 'needs_review' },
-      { fieldId: 'y', frameId: 0, label: '', outcome: 'unmatched' },
+    expect(s.groups.flatMap((g) => g.items)).toEqual([
+      { fieldId: 'x', frameId: 3, label: '学校', outcome: 'needs_review', section: 'education', entry: 1 },
+      { fieldId: 'y', frameId: 0, label: '', outcome: 'unmatched', section: null },
     ]);
   });
 
   it('ignores no_control (the control vanished; nothing the user can act on)', () => {
     const s = summarize(report([field('z', 'no_control'), field('w', 'filled')]));
-    expect(s).toEqual({ filled: 1, review: 0, unrecognized: 0, noData: 0, items: [] });
+    expect(s).toEqual({ filled: 1, review: 0, unrecognized: 0, noData: 0, groups: [], entries: [] });
   });
 
   it('counts from the field list, not from the (possibly stale) counts record', () => {
@@ -74,9 +85,64 @@ describe('summarize', () => {
     expect(summarize(r).filled).toBe(1);
   });
 
-  it('does not expose resume values: items only contain id, frame, label and outcome', () => {
-    const s = summarize(report([field('a', 'needs_review', { value: 'secret', observed: 'secret2', source: 'basics.email' })]));
-    expect(Object.keys(s.items[0]!).sort()).toEqual(['fieldId', 'frameId', 'label', 'outcome']);
+  it('shows the site’s option a search box picked under another name, and never the value written or its path', () => {
+    const s = summarize(
+      report([
+        field('a', 'needs_review', {
+          note: 'picked_other_name',
+          value: '星河示例理工大学',
+          observed: '星河理工',
+          source: 'education[0].school',
+        }),
+        field('b', 'needs_review', { value: 'secret', observed: 'secret2', source: 'basics.email' }),
+      ]),
+    );
+    const [picked, plain] = s.groups[0]!.items;
+    expect(picked).toMatchObject({ note: 'picked_other_name', picked: '星河理工' });
+    expect(Object.keys(plain!).sort()).toEqual(['fieldId', 'frameId', 'label', 'outcome', 'section']);
+    expect(JSON.stringify(s)).not.toContain('星河示例理工大学');
+    expect(JSON.stringify(s)).not.toContain('secret');
+  });
+});
+
+describe('summarize – entries of repeated sections', () => {
+  const edu = (fieldId: string, outcome: Outcome, entry: number) => field(fieldId, outcome, { section: 'education', entry });
+
+  it('counts each entry’s fields by outcome, in the report’s entry order', () => {
+    const r = report([
+      edu('s1', 'filled', 0),
+      edu('m1', 'filled', 0),
+      edu('r1', 'needs_review', 0),
+      edu('g1', 'no_data', 0),
+      edu('s2', 'filled', 1),
+      edu('g2', 'no_data', 1),
+      edu('x2', 'unmatched', 1),
+      field('w1', 'filled', { section: 'internship', entry: 0 }),
+    ]);
+    r.entries = [
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'education', index: 1, state: 'added', label: '云岭示例大学' },
+      { section: 'internship', index: 0, state: 'added' },
+      { section: 'internship', index: 1, state: 'skipped', reason: 'add_failed', button: '添加实习经历' },
+    ];
+    expect(summarize(r).entries).toEqual([
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学', filled: 2, review: 1, failed: 0, noData: 1 },
+      { section: 'education', index: 1, state: 'added', label: '云岭示例大学', filled: 1, review: 0, failed: 1, noData: 1 },
+      { section: 'internship', index: 0, state: 'added', filled: 1, review: 0, failed: 0, noData: 0 },
+      { section: 'internship', index: 1, state: 'skipped', reason: 'add_failed', button: '添加实习经历', filled: 0, review: 0, failed: 0, noData: 0 },
+    ]);
+  });
+
+  it('does not count a held card’s fields as missing from the resume', () => {
+    const r = report([field('s1', 'no_data', { section: 'education', entry: 0, note: 'entry_held' })]);
+    r.entries = [{ section: 'education', index: 0, state: 'held' }];
+    expect(summarize(r).entries[0]).toMatchObject({ state: 'held', noData: 0 });
+  });
+
+  it('puts a sensitive field held back by the settings in the review group, marked so the card can say it was not written', () => {
+    const s = summarize(report([field('id', 'needs_review', { fieldKey: 'basics.idNumber', note: 'sensitive_held' }), field('n', 'needs_review')]));
+    expect(s.groups.map((g) => g.id)).toEqual(['review']);
+    expect(s.groups[0]!.items.map((i) => [i.fieldId, i.note])).toEqual([['id', 'sensitive_held'], ['n', undefined]]);
   });
 });
 

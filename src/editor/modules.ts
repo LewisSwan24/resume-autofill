@@ -9,6 +9,7 @@ import {
   EducationSchema,
   FamilyMemberSchema,
   LanguageEntrySchema,
+  LanguageTestSchema,
   ProjectSchema,
   RefereeSchema,
   SkillSchema,
@@ -39,10 +40,24 @@ export type ArrayModuleName =
   | 'education' | 'work' | 'projects' | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills'
   | 'family' | 'referees' | 'customAnswers';
 
+/** A list inside each entry of a module: the tests of a language entry. Only the extension's editor shows it so far. */
+export interface SubListMeta {
+  /** Key of the array inside the entry. */
+  key: string;
+  labelKey: string;
+  helpKey: string;
+  /** Names one item: `{n}` is its number. */
+  itemLabelKey: string;
+  addLabelKey: string;
+  removeLabelKey: string;
+  fields: FieldMeta[];
+}
+
 export interface ModuleMeta {
   module: ModuleName;
   labelKey: string;
   fields: FieldMeta[];
+  subLists?: SubListMeta[];
   /** Array module: the user can add, remove and reorder entries. */
   repeatable: boolean;
   /** `about` edits top-level resume fields; `attachments` has a dedicated uploader instead of fields. */
@@ -145,9 +160,20 @@ export const MODULES: readonly ModuleMeta[] = [
     select('level', 'awardLevel', 'awardLevel'),
     text('issuer'), area('description'),
   ]),
-  mod('languages', 'array', [
-    text('language'), select('proficiency', 'proficiency'), text('certificate'), text('score'),
-  ]),
+  {
+    ...mod('languages', 'array', [
+      text('language'), select('proficiency', 'proficiency'), text('certificate'), text('score'),
+    ]),
+    subLists: [{
+      key: 'tests',
+      labelKey: 'options.field.tests',
+      helpKey: 'options.tests.help',
+      itemLabelKey: 'options.tests.item',
+      addLabelKey: 'options.tests.add',
+      removeLabelKey: 'options.tests.remove',
+      fields: [select('test', 'languageTest'), text('score'), month('date', 'testDate')],
+    }],
+  },
   mod('certificates', 'array', [
     text('name', 'certName'), month('date'), text('issuer'), text('number', 'certNumber'),
   ]),
@@ -204,4 +230,14 @@ export type EntryOf<M extends ArrayModuleName> = Resume[M][number];
 /** A fresh entry with every schema default applied. */
 export function newEntry<M extends ArrayModuleName>(module: M): EntryOf<M> {
   return ENTRY_SCHEMAS[module].parse({}) as EntryOf<M>;
+}
+
+/** Item schemas of the lists inside entries, by key. */
+const SUB_ITEM_SCHEMAS: Record<string, z.ZodType> = { tests: LanguageTestSchema };
+
+/** A fresh item of a list inside an entry, with every schema default applied. */
+export function newSubItem(sub: SubListMeta): Record<string, unknown> {
+  const schema = SUB_ITEM_SCHEMAS[sub.key];
+  if (!schema) throw new Error(`Unknown list: ${sub.key}`);
+  return schema.parse({}) as Record<string, unknown>;
 }

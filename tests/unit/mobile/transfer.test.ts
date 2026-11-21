@@ -130,10 +130,10 @@ describe('preview, replace, merge', () => {
   });
 
   it('replaceWith keeps attachment ids present on the phone and drops missing ones', () => {
-    const incoming = profile([filled], { settings: { uiLanguage: 'en', previewBeforeFill: true } });
+    const incoming = profile([filled], { settings: { uiLanguage: 'en', previewBeforeFill: true, sensitiveFields: 'remind' } });
     const result = replaceWith(incoming, new Set(['file-1']));
     expect(result.resumes[0]!.attachments).toEqual({ resumeFileId: 'file-1' });
-    expect(result.settings).toEqual({ uiLanguage: 'en', previewBeforeFill: true });
+    expect(result.settings).toEqual({ uiLanguage: 'en', previewBeforeFill: true, sensitiveFields: 'remind' });
     expect(result.activeResumeId).toBe('a');
   });
 
@@ -184,12 +184,12 @@ describe('preview, replace, merge', () => {
   it("mergeInto keeps the phone's settings and active resume; with none active, the first added one becomes active", () => {
     const current = profile([resume('p1'), resume('p2')], {
       activeResumeId: 'p2',
-      settings: { uiLanguage: 'zh', previewBeforeFill: false },
+      settings: { uiLanguage: 'zh', previewBeforeFill: false, sensitiveFields: 'remind' },
     });
-    const incoming = profile([resume('i1')], { settings: { uiLanguage: 'en', previewBeforeFill: true } });
+    const incoming = profile([resume('i1')], { settings: { uiLanguage: 'en', previewBeforeFill: true, sensitiveFields: 'remind' } });
     const merged = mergeInto(current, incoming, new Set(), { copySuffix: '（导入）' }).profile;
     expect(merged.activeResumeId).toBe('p2');
-    expect(merged.settings).toEqual({ uiLanguage: 'zh', previewBeforeFill: false });
+    expect(merged.settings).toEqual({ uiLanguage: 'zh', previewBeforeFill: false, sensitiveFields: 'remind' });
 
     const fromEmpty = mergeInto(emptyProfile(), profile([resume('i1'), resume('i2')]), new Set(), {
       copySuffix: '（导入）',

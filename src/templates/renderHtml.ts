@@ -1,5 +1,5 @@
 // Offline printable HTML resume renderer with 4 ATS/campus/compact/AU-grad templates.
-import type { Resume } from '../schema';
+import { languageLine, type Resume } from '../schema';
 import type { MessageKey } from '../i18n';
 import { resumeFullName } from './presets';
 
@@ -201,7 +201,7 @@ function renderSkills(resume: Resume, l: Labels): string {
   if (resume.languages.length > 0) {
     blocks.push(
       `<section><h2>${escHtml(l.languages)}</h2><p class="inline-list">${resume.languages
-        .map((lang) => escHtml([lang.language, lang.certificate, lang.score].filter(Boolean).join(' ')))
+        .map((lang) => escHtml(languageLine(lang)))
         .join(' · ')}</p></section>`,
     );
   }

@@ -1,6 +1,7 @@
 // Resume data model (zod v4). Every module has defaults so that
 // `ResumeSchema.parse({ id, title, locale })` yields a complete, empty resume.
 import { z } from 'zod';
+import { DEFAULT_SENSITIVE_FIELD_MODE, SENSITIVE_FIELD_MODES } from './sensitive';
 
 // ---------------------------------------------------------------- primitives
 
@@ -197,12 +198,27 @@ export const AwardSchema = z.object({
   description: text(),
 });
 
+/** Language tests by the codes the option dictionary (`languageCert`) and the fill know them by. */
+export const LANGUAGE_TESTS = [
+  'cet4', 'cet6', 'tem4', 'tem8', 'ielts', 'toefl', 'toeic', 'pte', 'duolingo', 'jlpt_n1', 'jlpt_n2', 'jlpt_n3', 'other',
+] as const;
+
+/** One sitting of a test: which test, the score, and when (optional). */
+export const LanguageTestSchema = z.object({
+  test: nullableEnum(LANGUAGE_TESTS),
+  score: text(),
+  date: date(),
+});
+
 export const LanguageEntrySchema = z.object({
   id: entryId(),
   language: text(),
   proficiency: nullableEnum(PROFICIENCIES),
+  /** Free text, as written before the test list existed. Kept: older resumes and other surfaces still read it. */
   certificate: text(),
   score: text(),
+  /** Tests sat in this language. A fill reads these before the certificate and score above. */
+  tests: z.array(LanguageTestSchema).default([]),
 });
 
 export const CertificateSchema = z.object({
@@ -381,6 +397,10 @@ export const SettingsSchema = z.object({
   ollamaEndpoint: z.string().optional(),
   ollamaModel: z.string().optional(),
   vaultIdleTimeoutMinutes: z.number().int().min(1).max(240).optional(),
+  /** Whether a fill writes an identity number (see sensitive.ts) or leaves it empty and says so. */
+  sensitiveFields: z.enum(SENSITIVE_FIELD_MODES).default(DEFAULT_SENSITIVE_FIELD_MODE),
+  /** When sensitiveFields was last chosen, so that sync keeps the newer choice. Absent: never chosen here. */
+  sensitiveFieldsUpdatedAt: z.number().int().nonnegative().optional(),
 });
 
 export const ProfileSchema = z.object({
@@ -412,6 +432,8 @@ export type Project = z.infer<typeof ProjectSchema>;
 export type CampusEntry = z.infer<typeof CampusEntrySchema>;
 export type Award = z.infer<typeof AwardSchema>;
 export type LanguageEntry = z.infer<typeof LanguageEntrySchema>;
+export type LanguageTest = z.infer<typeof LanguageTestSchema>;
+export type LanguageTestCode = (typeof LANGUAGE_TESTS)[number];
 export type Certificate = z.infer<typeof CertificateSchema>;
 export type Skill = z.infer<typeof SkillSchema>;
 export type FamilyMember = z.infer<typeof FamilyMemberSchema>;

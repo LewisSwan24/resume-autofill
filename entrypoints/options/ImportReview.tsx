@@ -36,11 +36,15 @@ const PROBLEM_TEXT: Record<ReviewProblem['kind'], MessageKey> = {
 };
 
 /** Read as a choice, with the codes a resume keeps. */
-const ENUM_OF: Record<string, string> = { degree: 'degree', gender: 'gender', politicalStatus: 'politicalStatus', maritalStatus: 'maritalStatus' };
+const ENUM_OF: Record<string, string> = {
+  degree: 'degree', gender: 'gender', politicalStatus: 'politicalStatus', maritalStatus: 'maritalStatus', test: 'languageTest',
+};
 /** Not for showing: whether a job is current follows from its end date being empty, and its kind from its section. */
 const HIDDEN = new Set(['current', 'kind']);
 
-const MODULE_ORDER = ['basics', 'contact', 'education', 'work', 'projects', 'skills', 'selfIntroduction'];
+const MODULE_ORDER = ['basics', 'contact', 'education', 'work', 'projects', 'skills', 'languages', 'selfIntroduction'];
+/** A test read into a language entry's list: `languages.0.tests.<n>.<field>`. */
+const TEST_PATH = /^languages\.\d+\.tests\.(\d+)\.(test|score)$/;
 
 interface Group {
   key: string;
@@ -95,6 +99,12 @@ export function ImportReview({ fileName, lines, draft, title: firstTitle, busy, 
     if (path.startsWith('skills.')) return t('options.module.skills');
     if (path.startsWith('basics.nativePlace.')) return t('options.field.nativePlace');
     if (/^projects\.\d+\.name$/.test(path)) return t('options.module.projects');
+    // Each test is a row of its own: the test, then its score beside the same number.
+    const test = TEST_PATH.exec(path);
+    if (test) {
+      const item = t('options.tests.item', { n: Number(test[1]) + 1 });
+      return test[2] === 'test' ? item : `${item} · ${t('options.field.score')}`;
+    }
     return t(`options.field.${name}` as MessageKey);
   };
 

@@ -31,6 +31,12 @@ test('side panel lists the report rows of the filled antd fixture', async ({ con
     heads.map((h) => h.textContent ?? '').filter((text) => /\b(basics|contact|education|work|languages|projects)[.[]/.test(text)),
   );
   expect(leaked).toEqual([]);
+  // What became of each entry: the page starts with one education card, and the fill adds the resume's second.
+  const overview = panel.getByTestId('raf-entry-overview');
+  await expect(overview).toBeVisible();
+  const education = overview.locator('.raf-entry-group', { hasText: /教育经历|Education/ });
+  await expect(education.locator('[data-testid="raf-entry"]')).toHaveCount(2);
+  await expect(education.locator('[data-testid="raf-entry"][data-state="added"]')).toHaveCount(1);
   // Filter chips are grouped by tone and stay on one row (no wrapping).
   const chips = panel.getByRole('group', { name: /Filter by status|按状态筛选/ }).getByRole('button');
   expect(await chips.count()).toBeGreaterThanOrEqual(2);

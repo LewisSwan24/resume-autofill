@@ -15,6 +15,8 @@ export const MAX_REPORT_ROWS = 1000;
 export const MAX_LABEL = 300;
 export const MAX_VALUE = 2000;
 export const MAX_CANDIDATES = 20;
+/** Entries of one section a report may number. */
+export const MAX_ENTRY_INDEX = 199;
 export const MAX_NEEDS_KEYS = 400;
 export const MAX_OBSTACLES = 16;
 export const MAX_SCAN_COUNT = 5000;
@@ -69,7 +71,17 @@ const FieldReportShape = z.strictObject({
     )
     .max(MAX_CANDIDATES)
     .optional(),
-  note: z.enum(['same_file_held', 'entry_held']).optional(),
+  note: z.enum(['same_file_held', 'entry_held', 'picked_other_name', 'sensitive_held', 'sensitive_filled']).optional(),
+  entry: z.number().int().min(0).max(MAX_ENTRY_INDEX).optional(),
+});
+
+const EntryProgressShape = z.strictObject({
+  section: z.enum(SECTION_KEYS),
+  index: z.number().int().min(0).max(MAX_ENTRY_INDEX),
+  state: z.enum(['existing', 'added', 'skipped', 'held']),
+  reason: z.enum(['no_button', 'add_failed', 'max_adds', 'editor_held', 'no_name', 'nothing_to_fill']).optional(),
+  label: z.string().max(MAX_LABEL).optional(),
+  button: z.string().max(MAX_LABEL).optional(),
 });
 
 /** Counts travel along but the app recomputes them (countOutcomes); only the shape is checked. */
@@ -79,6 +91,7 @@ export const FillReportShape = z.strictObject({
   finishedAt: z.number(),
   fields: z.array(FieldReportShape).max(MAX_REPORT_ROWS),
   counts: z.record(z.enum(OUTCOMES as unknown as readonly [string, ...string[]]), z.number().int().min(0)),
+  entries: z.array(EntryProgressShape).max(MAX_REPORT_ROWS).optional(),
 });
 
 const viewport = z.strictObject({

@@ -7,10 +7,11 @@ import type { FileData } from '../drivers/types';
 import { matchRecipesForPage, resolveRecipeForControl } from '../recipes';
 import type { Locale, Resume, SiteRecipe } from '../schema';
 import { getFieldKeyDef } from '../schema/fieldKeys';
+import { isSensitiveFieldKey, type SensitiveFieldMode } from '../schema/sensitive';
 import type { MappingPresetId } from '../templates/presets';
 import { FILL_THRESHOLD, REVIEW_THRESHOLD } from './classify';
 import type { Classification, FieldContext, FieldKey, FieldReport, SectionKey } from './types';
-import { entryCount, resolveValue, toIntent } from './values';
+import { entryCount, everyEnglishTest, resolveValue, toIntent } from './values';
 
 export type { FillStep };
 
@@ -65,7 +66,15 @@ export function planFill(
   classifications: Classification[],
   resume: Resume,
   files: Record<string, FileData> = {},
-  opts: { now?: Date; presetId?: MappingPresetId; pageTitle?: string; pageUrl?: string; recipes?: readonly SiteRecipe[] } = {},
+  opts: {
+    now?: Date;
+    presetId?: MappingPresetId;
+    pageTitle?: string;
+    pageUrl?: string;
+    recipes?: readonly SiteRecipe[];
+    /** Absent means the default: remind. */
+    sensitiveFields?: SensitiveFieldMode;
+  } = {},
 ): FillPlan {
   const hasInternshipSection = classifications.some((c) => c.section === 'internship');
   const matchingRecipes =
@@ -137,6 +146,12 @@ export function planFill(
       return;
     }
 
+    // A field the applicant keeps to themselves stays empty, and the row tells them it is theirs to fill.
+    if (isSensitiveFieldKey(cls.fieldKey) && opts.sensitiveFields !== 'fill') {
+      reports.push({ ...report, outcome: 'needs_review', note: 'sensitive_held' });
+      return;
+    }
+
     const entryIndex = ctx.group?.index ?? 0;
     const resolved =
       cls.fieldKey === 'contact.inNamedCountry'
@@ -146,6 +161,7 @@ export function planFill(
             askedAs: report.label,
             ...(ctx.sectionNote ? { sectionNote: ctx.sectionNote } : {}),
             ...(opts.now ? { now: opts.now } : {}),
+            ...(opts.sensitiveFields ? { sensitiveFields: opts.sensitiveFields } : {}),
           });
     if (!resolved) {
       reports.push({ ...report, outcome: 'no_data' });
@@ -161,8 +177,21 @@ export function planFill(
       presetCtx: { resume, ...(opts.pageTitle ? { pageTitle: opts.pageTitle } : {}), ...(opts.pageUrl ? { pageUrl: opts.pageUrl } : {}) },
     });
     if (intent?.kind === 'multi' && cls.fieldKey === 'languages.certificate') {
-      // A list of tests that takes several wants every one passed, and which of them to tick, or whether one
-      // stands for those below it, is not settled. The resume's own answer is shown for the applicant to pick.
+      // An English level that takes several answers gets every English test held, each ticked on its own.
+      const every = everyEnglishTest(resume, report.label, ctx.sectionNote ?? '');
+      if (every) {
+        steps.push({
+          fieldId: ctx.control.id,
+          fieldKey: cls.fieldKey,
+          intent: every.intent,
+          confidence: cls.confidence,
+          source: every.source,
+          label: report.label,
+          section: cls.section,
+        });
+        return;
+      }
+      // Any other list of tests: which of them to tick is for the applicant, shown the resume's own answer.
       reports.push({ ...report, outcome: 'needs_review', value: intent.display, source: resolved.source });
       return;
     }

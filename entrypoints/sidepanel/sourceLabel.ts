@@ -16,6 +16,8 @@ const ATTACHMENT_LABEL: Readonly<Record<string, MessageKey>> = {
 };
 
 const PATH_HEAD = /^([A-Za-z]+)(?:\[(\d+)\])?(?:\.(.+))?$/;
+/** The rest of a path into a list inside an entry: `tests[1].score`. */
+const SUB_ITEM = /^([A-Za-z]+)\[(\d+)\]\.([A-Za-z]+)$/;
 
 const moduleOf = (name: string): ModuleMeta | undefined => MODULES.find((m) => m.module === name);
 const fieldOf = (module: ModuleMeta, key: string): FieldMeta | undefined => module.fields.find((f) => f.key === key);
@@ -33,6 +35,16 @@ export function describeSource(path: string, t: Translate): string | null {
   // Paths without a dot are top-level resume fields (`selfIntroduction`, `hobbies`): the "About me" module.
   const module = rest === undefined ? moduleOf('about') : moduleOf(first!);
   if (!module) return null;
+  const moduleName = t(module.labelKey as MessageKey) + (index !== undefined ? ` ${Number(index) + 1}` : '');
+
+  // An item of a list inside the entry (a language's tests). Of several tests joined, the first names the source.
+  const item = rest === undefined ? null : SUB_ITEM.exec(rest);
+  if (item) {
+    const sub = module.subLists?.find((s) => s.key === item[1]);
+    const meta = sub?.fields.find((f) => f.key === item[3]);
+    if (!sub || !meta) return null;
+    return `${moduleName} › ${t(sub.itemLabelKey as MessageKey, { n: Number(item[2]) + 1 })} › ${t(meta.labelKey as MessageKey)}`;
+  }
   const keys = rest === undefined ? [first!] : [rest, ...parts.slice(1)];
 
   const labels: string[] = [];
@@ -50,6 +62,5 @@ export function describeSource(path: string, t: Translate): string | null {
     }
   }
 
-  const moduleLabel = t(module.labelKey as MessageKey) + (index !== undefined ? ` ${Number(index) + 1}` : '');
-  return `${moduleLabel} › ${labels.join(' + ')}`;
+  return `${moduleName} › ${labels.join(' + ')}`;
 }

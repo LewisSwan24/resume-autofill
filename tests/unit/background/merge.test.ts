@@ -75,7 +75,21 @@ describe('mergeFrameReports', () => {
   });
 });
 
+describe('mergeFrameReports – entries', () => {
+  it('keeps what became of each entry from every frame, and adds no empty list', () => {
+    const top = { ...report('u', [field('a', 'filled')]), entries: [{ section: 'education' as const, index: 0, state: 'added' as const }] };
+    const inner = { ...report('u', [field('b', 'filled')]), entries: [{ section: 'internship' as const, index: 1, state: 'skipped' as const, reason: 'no_button' as const }] };
+    expect(mergeFrameReports([{ frameId: 0, report: top }, { frameId: 3, report: inner }]).entries).toEqual([...top.entries, ...inner.entries]);
+    expect('entries' in mergeFrameReports([{ frameId: 0, report: report('u', [field('a', 'filled')]) }])).toBe(false);
+  });
+});
+
 describe('patchReportField', () => {
+  it('keeps which entry a row belongs to when the page answers without it', () => {
+    const merged = mergeFrameReports([{ frameId: 0, report: report('u', [field('c1', 'no_data', { entry: 1 })]) }]);
+    expect(patchReportField(merged, 0, field('c1', 'filled')).fields[0]!.entry).toBe(1);
+  });
+
   it('keeps the reason a row needs the user until the row is filled', () => {
     const held = mergeFrameReports([{ frameId: 0, report: report('u', [field('c1', 'needs_review', { note: 'same_file_held' })]) }]);
     expect(patchReportField(held, 0, field('c1', 'action_failed')).fields[0]!.note).toBe('same_file_held');

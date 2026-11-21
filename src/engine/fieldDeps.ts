@@ -142,6 +142,11 @@ export const ENTRY_ALIGNMENT_FIELDS: Readonly<Partial<Record<ArrayModuleName, re
   languages: ['language', 'certificate'],
 };
 
+/** Leaves of an entry that a requested leaf is read from too: a language's level and score come first from its tests. */
+export const ENTRY_LEAF_SOURCES: Readonly<Partial<Record<ArrayModuleName, Readonly<Record<string, readonly string[]>>>>> = {
+  languages: { certificate: ['tests'], score: ['tests'] },
+};
+
 /** The keys plus everything their values are computed from. */
 export function expandFieldKeys(keys: Iterable<FieldKey>): Set<FieldKey> {
   const out = new Set<FieldKey>();

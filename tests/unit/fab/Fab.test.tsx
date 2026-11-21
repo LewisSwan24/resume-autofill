@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { Fab } from '../../../entrypoints/fab.content/Fab';
@@ -55,6 +55,13 @@ function answerFill(result: unknown) {
 }
 
 const button = () => screen.getByTestId('raf-fab-button') as HTMLButtonElement;
+/** The card's groups of rows, by reason. */
+const groups = () => screen.queryAllByTestId('raf-group');
+const groupOf = (id: string) => groups().find((g) => g.dataset.group === id)!;
+/** Open a group the way a click on its heading does. */
+const expand = (id: string) => fireEvent.click(groupOf(id).querySelector('summary')!);
+const expandAll = () => groups().forEach((g) => fireEvent.click(g.querySelector('summary')!));
+const rowNames = () => screen.queryAllByTestId('raf-item').map((r) => r.querySelector('.raf-list-item__name')?.textContent);
 
 describe('Fab: idle', () => {
   it('is the outlined button with a muted caption until scan:total reports fields, then the primary button', () => {
@@ -136,18 +143,23 @@ describe('Fab: fill flow', () => {
     ]);
     expect(badges.map((b) => (b as HTMLElement).dataset.tone)).toEqual(['success', 'warning', 'danger']);
     expect(badges.every((b) => b.querySelector('svg')?.getAttribute('aria-hidden') === 'true')).toBe(true);
-    // "No data" is a muted sentence, not a fourth badge.
-    expect(screen.getByTestId('raf-nodata').textContent).toBe('1 field has no data in your resume.');
     expect(button().disabled).toBe(false);
-    expect(screen.getByText('School')).toBeTruthy();
-    expect(screen.queryByText('Passport')).toBeNull(); // no_data is only counted in the sentence, never listed
-    expect(screen.getAllByTestId('raf-item').map((r) => r.querySelector('.raf-list-item__name')?.textContent)).toEqual(['School', 'Label d', 'Mystery']);
+    // Every field not filled has a row, in a group by reason; the groups start closed and say how many they hold.
+    expect(groups().map((g) => [g.dataset.group, g.querySelector('.raf-group__count')?.textContent])).toEqual([
+      ['review', '1'],
+      ['no_option', '1'],
+      ['failed', '1'],
+      ['nodata', '1'],
+    ]);
+    expect(rowNames()).toEqual([]);
+    expandAll();
+    expect(rowNames()).toEqual(['School', 'Label d', 'Mystery', 'Passport']);
     expect(button().querySelector('.raf-fab__sub')?.textContent).toBe('2 filled · 2 need review · 1 not filled');
     expect(screen.queryByText('Label a')).toBeNull(); // filled fields are not listed
     expect(screen.getByTestId('raf-card').textContent).not.toContain('SECRET-VALUE');
   });
 
-  it('lists non-filled fields as compact rows with a status Badge (icon + word) and a locate IconButton', async () => {
+  it('names each group by its reason with its icon, and gives every row a locate IconButton', async () => {
     render(<Fab />);
     fireEvent.click(button());
     deliver({
@@ -161,14 +173,20 @@ describe('Fab: fill flow', () => {
         field('g', 'no_data', { label: 'Passport' }),
       ]),
     });
-    const rows = await screen.findAllByTestId('raf-item');
-    expect(rows).toHaveLength(4); // the no_data field is not a row
+    await screen.findByTestId('raf-card');
+    const titles = groups().map((g) => [g.querySelector('.raf-group__title')?.textContent, g.querySelector('summary svg')?.getAttribute('data-icon')]);
+    expect(titles).toEqual([
+      ['Needs review', 'exclamation-circle'],
+      ['No matching option', 'exclamation-circle'],
+      ['Not recognized', 'question-circle'],
+      ['No data in resume', 'info-circle'],
+    ]);
+    expandAll();
+    const rows = screen.getAllByTestId('raf-item');
+    expect(rows).toHaveLength(5);
     const row = (name: string) => rows.find((r) => r.textContent?.includes(name))!;
-    expect(row('School').querySelector('.raf-badge__text')?.textContent).toBe('Needs review');
-    expect(row('Language').querySelector('.raf-badge__text')?.textContent).toBe('No matching option');
-    expect(row('Mystery').querySelector('.raf-badge__text')?.textContent).toBe('Fill failed');
-    expect(row('Mystery').querySelector('svg[data-icon="x-circle"]')).not.toBeNull();
-    expect(row('Unnamed field').querySelector('.raf-badge__text')?.textContent).toBe('Not recognized');
+    // A fill that failed says so under its name; the group says the rest.
+    expect(row('Mystery').querySelector('.raf-list-item__crumb')?.textContent).toBe('Fill failed');
     expect(row('Unnamed field').querySelector('.raf-list-item__name')?.getAttribute('data-empty')).toBe('true');
     for (const r of rows) {
       const locate = r.querySelector('button')!;
@@ -176,6 +194,25 @@ describe('Fab: fill flow', () => {
       expect(locate.getAttribute('data-tip')).toBe('Locate this field'); // tooltip = same words as the label
       expect(locate.querySelector('svg')?.getAttribute('data-icon')).toBe('search');
     }
+  });
+
+  it('lists a sensitive field held back by the settings under "to review", saying it was not written', async () => {
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({
+      type: 'report:updated',
+      tabId: 1,
+      report: report([
+        field('i', 'needs_review', { label: 'ID number', fieldKey: 'basics.idNumber', note: 'sensitive_held' }),
+        field('s', 'needs_review', { label: 'School' }),
+      ]),
+    });
+    await screen.findByTestId('raf-card');
+    if (groupOf('review').getAttribute('open') === null) expand('review');
+    const rows = within(groupOf('review')).getAllByTestId('raf-item');
+    const crumb = (name: string) => rows.find((r) => r.textContent?.includes(name))!.querySelector('.raf-list-item__crumb')?.textContent ?? '';
+    expect(crumb('ID number')).toContain('Reminder only, not filled');
+    expect(crumb('School')).not.toContain('Reminder only');
   });
 
   it('shows the all-done Notice and drops the "no data" sentence and the list when nothing needs attention', async () => {
@@ -187,8 +224,7 @@ describe('Fab: fill flow', () => {
     const done = screen.getByTestId('raf-alldone');
     expect(done.querySelector('.raf-notice__text')?.textContent).toBe('All detected fields were filled.');
     expect(done.querySelector('svg[data-icon="check-circle"]')).not.toBeNull();
-    expect(screen.queryByTestId('raf-nodata')).toBeNull();
-    expect(screen.queryByTestId('raf-list')).toBeNull();
+    expect(groups()).toEqual([]);
   });
 
   it('never shows more than three Badges, pluralises the no-data sentence, and renders in Chinese', async () => {
@@ -208,7 +244,8 @@ describe('Fab: fill flow', () => {
     });
     const stats = await screen.findByTestId('raf-stats');
     expect(Array.from(stats.querySelectorAll('.raf-badge__text')).map((b) => b.textContent)).toEqual(['已填写 1', '待确认 1', '未填写 1']);
-    expect(screen.getByTestId('raf-nodata').textContent).toBe('简历里没有 2 个字段的数据。');
+    expect(groups().map((g) => g.querySelector('.raf-group__title')?.textContent)).toEqual(['待确认', '未识别', '简历里没有']);
+    expect(groupOf('nodata').querySelector('.raf-group__count')?.textContent).toBe('2');
     expect(screen.getByRole('button', { name: '在侧边栏查看明细' })).toBeTruthy();
   });
 
@@ -337,6 +374,7 @@ describe('Fab: summary card actions', () => {
       report: report([field('c', 'needs_review', { label: 'School', frameId: 2 }), field('t', 'unmatched', { label: 'Top' })]),
     });
     await screen.findByTestId('raf-card');
+    expandAll();
     send.mockClear();
   }
 
@@ -371,6 +409,7 @@ describe('Fab: summary card actions', () => {
 
     deliver({ type: 'report:updated', tabId: 1, report: report([field('x', 'unmatched')]) });
     await screen.findByTestId('raf-card');
+    expandAll();
     screen.getByRole('button', { name: 'Locate this field' }).focus();
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     expect(screen.queryByTestId('raf-card')).toBeNull();
@@ -496,9 +535,10 @@ describe('Fab: fields with no data', () => {
         field('c', 'no_data', { fieldKey: 'education.gpa', source: 'education[1].gpa' }),
       ]),
     });
-    await screen.findByTestId('raf-nodata');
-    // The sentence stays a sentence; the action sits next to it.
-    expect(screen.getByTestId('raf-nodata').textContent).toBe('2 fields have no data in your resume.');
+    await screen.findByTestId('raf-card');
+    // The way to the profile sits at the foot of the open "no data" group.
+    expect(screen.queryByRole('button', { name: 'Add them to your profile' })).toBeNull();
+    expand('nodata');
     fireEvent.click(screen.getByRole('button', { name: 'Add them to your profile' }));
     expect(sent('ui:openOptions')).toEqual([{ type: 'ui:openOptions', fieldKey: 'jobIntention.cities' }]);
   });
@@ -507,7 +547,8 @@ describe('Fab: fields with no data', () => {
     render(<Fab />);
     fireEvent.click(button());
     deliver({ type: 'report:updated', tabId: 1, report: report([field('a', 'filled'), field('b', 'no_data')]) });
-    await screen.findByTestId('raf-nodata');
+    await screen.findByTestId('raf-card');
+    expand('nodata');
     fireEvent.click(screen.getByRole('button', { name: 'Add them to your profile' }));
     expect(sent('ui:openOptions')).toEqual([{ type: 'ui:openOptions' }]);
   });
@@ -525,7 +566,189 @@ describe('Fab: fields with no data', () => {
     render(<Fab />);
     fireEvent.click(button());
     deliver({ type: 'report:updated', tabId: 1, report: report([field('b', 'no_data', { fieldKey: 'contact.email' })]) });
-    expect(await screen.findByRole('button', { name: '去补上' })).toBeTruthy();
+    await screen.findByTestId('raf-card');
+    expand('nodata');
+    expect(screen.getByRole('button', { name: '去补上' })).toBeTruthy();
+  });
+});
+
+describe('Fab: the rows of fields not filled', () => {
+  const twoRanks = () =>
+    report([
+      field('q', 'no_data', { label: 'QQ', section: 'basics' }),
+      field('m', 'no_data', { label: '婚姻状况', section: 'basics' }),
+      field('r1', 'no_data', { label: '专业排名', section: 'education', entry: 0, frameId: 2 }),
+      field('g2', 'no_data', { label: 'GPA', section: 'education', entry: 1 }),
+      field('r2', 'no_data', { label: '专业排名', section: 'education', entry: 1 }),
+      field('s', 'needs_review', {
+        label: '学校',
+        section: 'education',
+        entry: 0,
+        note: 'picked_other_name',
+        value: '星河示例理工大学',
+        observed: '星河理工',
+      }),
+    ]);
+
+  it('names the first three fields of a closed group, and stops naming them once it is open', async () => {
+    setLanguage('zh');
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: twoRanks() });
+    await screen.findByTestId('raf-card');
+    expect(groupOf('nodata').querySelector('.raf-group__names')?.textContent).toBe('QQ、婚姻状况、专业排名…');
+    expand('nodata');
+    expect(groupOf('nodata').getAttribute('open')).not.toBeNull();
+    expect(groupOf('nodata').querySelector('.raf-group__names')).toBeNull();
+    expand('nodata');
+    expect(groupOf('nodata').getAttribute('open')).toBeNull();
+  });
+
+  it('tells two fields of the same name apart by their section and entry', async () => {
+    setLanguage('zh');
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: twoRanks() });
+    await screen.findByTestId('raf-card');
+    expand('nodata');
+    const crumbs = screen.getAllByTestId('raf-item').map((r) => [r.querySelector('.raf-list-item__name')?.textContent, r.querySelector('.raf-list-item__crumb')?.textContent]);
+    expect(crumbs).toEqual([
+      ['QQ', '基本信息'],
+      ['婚姻状况', '基本信息'],
+      ['专业排名', '教育经历 · 第 1 条'],
+      ['GPA', '教育经历 · 第 2 条'],
+      ['专业排名', '教育经历 · 第 2 条'],
+    ]);
+  });
+
+  it('shows the site’s option a search box picked under another name, never the resume’s wording', async () => {
+    setLanguage('zh');
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: twoRanks() });
+    await screen.findByTestId('raf-card');
+    expand('review');
+    const row = screen.getByTestId('raf-item');
+    expect(row.querySelector('.raf-list-item__pick')?.textContent).toBe('选了「星河理工」，和简历写法不同');
+    expect(screen.getByTestId('raf-card').textContent).not.toContain('星河示例理工大学');
+  });
+
+  it('a click on a row points at its field and keeps the row picked out, with the card still open', async () => {
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: twoRanks() });
+    await screen.findByTestId('raf-card');
+    expand('nodata');
+    send.mockClear();
+    const third = screen.getAllByTestId('raf-item')[2]!;
+    fireEvent.click(third.querySelector('.raf-list-item__name')!);
+    expect(send.mock.calls.map((c) => c[0])).toEqual([{ type: 'field:focus', frameId: 2, fieldId: 'r1' }]);
+    expect(third.getAttribute('aria-current')).toBe('true');
+    expect(screen.getAllByTestId('raf-item').filter((r) => r.getAttribute('aria-current') === 'true')).toHaveLength(1);
+    expect(screen.getByTestId('raf-card')).toBeTruthy();
+  });
+});
+
+describe('Fab: entries of repeated sections', () => {
+  const withEntries = (): FillReport => {
+    const r = report([
+      field('s1', 'filled', { section: 'education', entry: 0 }),
+      field('d1', 'filled', { section: 'education', entry: 0 }),
+      field('r1', 'needs_review', { section: 'education', entry: 0 }),
+      field('g1', 'no_data', { section: 'education', entry: 0 }),
+      field('s2', 'filled', { section: 'education', entry: 1 }),
+      field('g2', 'no_data', { section: 'education', entry: 1 }),
+      field('w1', 'filled', { section: 'internship', entry: 0 }),
+    ]);
+    r.entries = [
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'education', index: 1, state: 'added', label: '云岭示例大学' },
+      { section: 'internship', index: 0, state: 'added', label: '示例科技有限公司' },
+      { section: 'internship', index: 1, state: 'skipped', reason: 'add_failed', button: '添加实习经历', label: '样例数据有限公司' },
+    ];
+    return r;
+  };
+
+  it('shows each entry: whether its card was there, added or skipped, what it holds, and why one was skipped', async () => {
+    setLanguage('zh');
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: withEntries() });
+    const block = await screen.findByTestId('raf-entries');
+    // A section opens by itself when one of its entries needs a look or was skipped.
+    const heads = Array.from(block.querySelectorAll('.raf-entries__head'));
+    expect(heads.map((h) => [h.querySelector('.raf-entries__name')?.textContent, h.querySelector('.raf-card__note')?.textContent, h.querySelector('.raf-badge__text')?.textContent])).toEqual([
+      ['教育经历', '2 / 2 条', '待确认'],
+      ['实习经历', '1 / 2 条', '跳过'],
+    ]);
+    const rows = Array.from(block.querySelectorAll('[data-testid="raf-entry"]')).map((e) => [
+      e.querySelector('.raf-entry__title')?.textContent,
+      e.querySelector('.raf-entry__why')?.textContent,
+      e.querySelector('.raf-badge__text')?.textContent,
+      (e.querySelector('.raf-badge') as HTMLElement | null)?.dataset.tone,
+    ]);
+    expect(rows).toEqual([
+      ['第 1 条 · 页面原有', '星河示例理工大学 · 已填 2 格，待确认 1 格，简历里没有 1 格', '待确认', 'warning'],
+      ['第 2 条 · 新增', '云岭示例大学 · 已填 1 格，简历里没有 1 格', '已填好', 'success'],
+      ['第 1 条 · 新增', '示例科技有限公司 · 已填 1 格', '已填好', 'success'],
+      ['第 2 条 · 跳过', '样例数据有限公司 · 按了「添加实习经历」，页面没有多出一条', '跳过', 'danger'],
+    ]);
+  });
+
+  it('keeps a section closed when every entry in it was filled, and opens it on a click', async () => {
+    setLanguage('zh');
+    const r = report([field('s1', 'filled', { section: 'education', entry: 0 }), field('s2', 'filled', { section: 'education', entry: 1 })]);
+    r.entries = [
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'education', index: 1, state: 'added', label: '云岭示例大学' },
+    ];
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: r });
+    const block = await screen.findByTestId('raf-entries');
+    expect(block.querySelector('.raf-badge__text')?.textContent).toBe('已填好');
+    expect(block.querySelectorAll('[data-testid="raf-entry"]')).toHaveLength(0);
+    fireEvent.click(block.querySelector('summary')!);
+    const rows = Array.from(block.querySelectorAll('[data-testid="raf-entry"]'));
+    expect(rows.map((e) => e.querySelector('.raf-entry__why')?.textContent)).toEqual(['星河示例理工大学 · 已填 1 格', '云岭示例大学 · 已填 1 格']);
+  });
+
+  it('leaves out a section whose one entry had its card on the page', async () => {
+    const r = withEntries();
+    r.entries = [...r.entries!, { section: 'languages', index: 0, state: 'existing' }];
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: r });
+    const block = await screen.findByTestId('raf-entries');
+    expect(Array.from(block.querySelectorAll('.raf-entries__name')).map((n) => n.textContent)).toEqual(['Education', 'Internships']);
+  });
+
+  it('does not call an entry filled when none of its fields was found', async () => {
+    setLanguage('zh');
+    const r = report([field('s1', 'filled', { section: 'education', entry: 0 })]);
+    r.entries = [
+      { section: 'education', index: 0, state: 'existing' },
+      { section: 'education', index: 1, state: 'added' },
+    ];
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: r });
+    const block = await screen.findByTestId('raf-entries');
+    fireEvent.click(block.querySelector('summary')!);
+    const second = block.querySelectorAll('[data-testid="raf-entry"]')[1]!;
+    expect(second.querySelector('.raf-entry__why')?.textContent).toBe('没有可填的格子');
+    expect((second.querySelector('.raf-badge') as HTMLElement).dataset.tone).toBe('muted');
+    expect(second.querySelector('.raf-badge__text')?.textContent).toBe('新增');
+  });
+
+  it('shows no entries block when every entry had its card on the page and each section has one', async () => {
+    const r = report([field('s1', 'filled', { section: 'education', entry: 0 })]);
+    r.entries = [{ section: 'education', index: 0, state: 'existing' }];
+    render(<Fab />);
+    fireEvent.click(button());
+    deliver({ type: 'report:updated', tabId: 1, report: r });
+    await screen.findByTestId('raf-card');
+    expect(screen.queryByTestId('raf-entries')).toBeNull();
   });
 });
 

@@ -10,6 +10,16 @@ describe('import / export', () => {
     if (result.ok) expect(result.profile).toEqual(profile);
   });
 
+  it('exports the test-score list of a language and reads it back; an older file gains the list on import', () => {
+    const profile = createSampleProfile();
+    const text = exportProfile(profile);
+    expect(JSON.parse(text).resumes[0].languages[0].tests).toEqual([{ test: 'cet6', score: '580', date: '' }]);
+    const older = JSON.parse(text);
+    delete older.resumes[0].languages[0].tests;
+    const result = parseProfileJson(JSON.stringify(older));
+    expect(result.ok && result.profile.resumes[0]!.languages[0]!.tests).toEqual([{ test: 'cet6', score: '580', date: '' }]);
+  });
+
   it('export contains no file bytes, only attachment ids', () => {
     const text = exportProfile(createSampleProfile());
     expect(text).not.toMatch(/data:|base64/i);

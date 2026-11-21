@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CURRENT_SCHEMA_VERSION, ProfileMigrationError, createSampleProfile, migrateProfile } from '../../../src/schema';
+import { CURRENT_SCHEMA_VERSION, LanguageEntrySchema, ProfileMigrationError, createSampleProfile, migrateProfile } from '../../../src/schema';
 
 describe('migrateProfile', () => {
   it('passes a current-version profile through (validated)', () => {
@@ -16,7 +16,7 @@ describe('migrateProfile', () => {
     expect(p.resumes[0]!.basics.familyName).toBe('林');
     expect(p.resumes[0]!.education).toEqual([]);
     expect(p.activeResumeId).toBe('a');
-    expect(p.settings).toEqual({ uiLanguage: 'auto', previewBeforeFill: false });
+    expect(p.settings).toEqual({ uiLanguage: 'auto', previewBeforeFill: false, sensitiveFields: 'remind' });
   });
 
   it('keeps an explicit activeResumeId when migrating v0', () => {
@@ -46,6 +46,39 @@ describe('migrateProfile', () => {
     expect(() => migrateProfile({ schemaVersion: 99, resumes: [] })).toThrow(ProfileMigrationError);
     expect(() => migrateProfile({ schemaVersion: 'x', resumes: [] })).toThrow(ProfileMigrationError);
     expect(() => migrateProfile({ schemaVersion: -1, resumes: [] })).toThrow(ProfileMigrationError);
+  });
+
+  describe('test scores of a language entry', () => {
+    const withLanguages = (languages: object[]) =>
+      migrateProfile({ schemaVersion: 2, resumes: [{ id: 'a', title: 'A', locale: 'zh-CN', languages }] }).resumes[0]!.languages;
+
+    it('starts a new entry with an empty list', () => {
+      expect(LanguageEntrySchema.parse({}).tests).toEqual([]);
+    });
+
+    it('derives the test and its score from a certificate that names exactly one test, keeping the old fields', () => {
+      const [en, ja] = withLanguages([
+        { language: '英语', certificate: '大学英语六级（CET-6）', score: '520' },
+        { language: '日语', certificate: '日语N1', score: '150' },
+      ]);
+      expect(en).toMatchObject({ certificate: '大学英语六级（CET-6）', score: '520', tests: [{ test: 'cet6', score: '520', date: '' }] });
+      expect(ja!.tests).toEqual([{ test: 'jlpt_n1', score: '150', date: '' }]);
+    });
+
+    it('derives nothing from two tests, a test with no score, a word that is no test, or a list already kept', () => {
+      const [two, noScore, notTest, kept, otherLanguage] = withLanguages([
+        { language: '英语', certificate: 'CET-4 / CET-6', score: '560' },
+        { language: '英语', certificate: 'CET-6', score: '' },
+        { language: '英语', certificate: '流利', score: '90' },
+        { language: '英语', certificate: 'CET-6', score: '520', tests: [{ test: 'ielts', score: '7.5' }] },
+        { language: '日语', certificate: 'CET-4', score: '500' },
+      ]);
+      expect(two!.tests).toEqual([]);
+      expect(noScore!.tests).toEqual([]);
+      expect(notTest!.tests).toEqual([]);
+      expect(kept!.tests).toEqual([{ test: 'ielts', score: '7.5', date: '' }]);
+      expect(otherLanguage!.tests).toEqual([]);
+    });
   });
 
   it('exposes a typed error', () => {

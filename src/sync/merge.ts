@@ -1,6 +1,6 @@
 // Conflict-aware resume + tracker + SHA-256 deduplicated attachment merge engine for `.raf` and WebRTC sync.
 import { ATTACHMENT_SLOTS, pruneMissingAttachments, referencedFileIds } from '../editor';
-import type { Profile, Resume } from '../schema';
+import type { Profile, Resume, Settings } from '../schema';
 import { mergeTrackerRecords, recordKey } from '../tracker';
 import type { ApplicationRecord } from '../tracker/schema';
 import { sha256Hex, type SkippedAttachmentMeta, type UnlockedAttachment, type UnlockedSyncPayload } from './raf';
@@ -197,6 +197,16 @@ export async function deleteOrphanFiles(storage: Pick<SyncStorageAdapter, 'delet
   for (const id of ids) await storage.deleteFile(id);
 }
 
+/**
+ * Whether a fill writes identity numbers is one choice for every device: the one made last wins. A device that never
+ * made it has no time on it, so any choice made elsewhere replaces its default.
+ */
+function newerSensitiveChoice(local: Settings, incoming: Settings): Partial<Settings> {
+  const at = incoming.sensitiveFieldsUpdatedAt;
+  if (at === undefined || at <= (local.sensitiveFieldsUpdatedAt ?? -1)) return {};
+  return { sensitiveFields: incoming.sensitiveFields, sensitiveFieldsUpdatedAt: at };
+}
+
 /** Execute merge or replace, deduplicate attachments by SHA-256, repair links, and list orphaned files (never deletes). */
 export async function applySyncMerge(
   existingProfile: Profile,
@@ -256,6 +266,7 @@ export async function applySyncMerge(
             ...(existingProfile.settings.mappingPresetId || !incoming.profile.settings.mappingPresetId
               ? {}
               : { mappingPresetId: incoming.profile.settings.mappingPresetId }),
+            ...newerSensitiveChoice(existingProfile.settings, incoming.profile.settings),
           },
           activeResumeId:
             existingProfile.activeResumeId && repairedResumes.some((r) => r.id === existingProfile.activeResumeId)

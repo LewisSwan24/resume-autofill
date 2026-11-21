@@ -10,6 +10,7 @@ import { expect, test } from '../e2e/fixtures';
 import {
   accessibleNames,
   fabBox,
+  fabPoint,
   fillFixture,
   fixtureUrl,
   scanTotal,
@@ -130,6 +131,18 @@ for (const scheme of SCHEMES) {
       await settle(antd.page);
       await antd.page.screenshot({ path: out(`fab-card-antd-${scheme}.png`), clip: await fabClip(antd.page, true) });
       await antd.page.screenshot({ path: out(`page-antd-filled-${scheme}.png`) });
+      // One group of rows opened, and its first row pointed at.
+      for (const group of ['nodata', 'review', 'no_option', 'failed']) {
+        const head = await fabPoint(antd.page, `raf-group-head-${group}`);
+        if (!head) continue;
+        await antd.page.mouse.click(head.x, head.y);
+        const row = await fabPoint(antd.page, 'raf-item');
+        if (row) await antd.page.mouse.click(row.x - 40, row.y);
+        break;
+      }
+      await antd.page.mouse.move(5, 5);
+      await settle(antd.page);
+      await antd.page.screenshot({ path: out(`fab-card-antd-open-${scheme}.png`), clip: await fabClip(antd.page, true) });
       await antd.page.close();
 
       // native fixture card.

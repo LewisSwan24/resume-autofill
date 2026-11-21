@@ -134,6 +134,7 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
     tem8: 'TEM-8|TEM8|专八|英语专业八级|英语专业八级考试|Test for English Majors Band 8',
     ielts: '雅思|雅思考试|IELTS|IELTS Academic|International English Language Testing System|IELTS General Training',
     toefl: '托福|托福考试|TOEFL|TOEFL iBT|TOEFL ITP|Test of English as a Foreign Language',
+    toeic: 'TOEIC|托业|托业考试|TOEIC Listening and Reading|Test of English for International Communication',
     pte: 'PTE|PTE Academic|Pearson Test of English|Pearson English test|培生英语|培生英语测试',
     duolingo: '多邻国|多邻国英语测试|Duolingo|Duolingo English Test|DET',
     jlpt_n1: '日语N1|日语一级|JLPT N1|N1',

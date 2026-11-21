@@ -3,7 +3,7 @@ import { useId, useRef, useState } from 'react';
 import { forgetAllPlaces } from '../fab.content/placement';
 import { exportProfile, parseProfileJson } from '../../src/editor';
 import { useT, type LanguageSetting } from '../../src/i18n';
-import type { Profile, Settings } from '../../src/schema';
+import type { Profile, SensitiveFieldMode, Settings } from '../../src/schema';
 import {
   DEFAULT_OLLAMA_ENDPOINT,
   DEFAULT_OLLAMA_MODEL,
@@ -82,6 +82,22 @@ export function SettingsPanel({ settings, onChange, onVaultLocked, onVaultUnlock
         checked={settings.previewBeforeFill}
         onChange={(previewBeforeFill) => onChange({ ...settings, previewBeforeFill })}
       />
+      <div>
+        <Segmented<SensitiveFieldMode>
+          label={t('options.settings.sensitive')}
+          visibleLabel
+          value={settings.sensitiveFields}
+          options={[
+            { value: 'fill', label: t('options.settings.sensitiveFill') },
+            { value: 'remind', label: t('options.settings.sensitiveRemind') },
+          ]}
+          // The time goes with the choice, so that sync keeps whichever device chose last.
+          onChange={(sensitiveFields) => onChange({ ...settings, sensitiveFields, sensitiveFieldsUpdatedAt: Date.now() })}
+        />
+        <p className="raf-field__help">{t('options.settings.sensitiveHint')}</p>
+        <p className="raf-field__help">{t('options.settings.sensitiveWhich')}</p>
+        <p className="raf-field__help">{t('options.settings.sensitiveSync')}</p>
+      </div>
       <Field label={t('options.settings.mappingPreset')} help={t('options.settings.mappingHint')}>
         {(ctrl) => (
           <SelectInput

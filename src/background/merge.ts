@@ -74,7 +74,8 @@ export function mergeFrameReports(parts: readonly FramePart[]): FillReport {
   );
   const startedAt = parts.length ? Math.min(...parts.map((p) => p.report.startedAt)) : Date.now();
   const finishedAt = parts.length ? Math.max(...parts.map((p) => p.report.finishedAt)) : startedAt;
-  return { url: top?.report.url ?? '', startedAt, finishedAt, fields, counts: countOutcomes(fields) };
+  const entries = parts.flatMap((p) => p.report.entries ?? []);
+  return { url: top?.report.url ?? '', startedAt, finishedAt, fields, counts: countOutcomes(fields), ...(entries.length > 0 ? { entries } : {}) };
 }
 
 /** Does this stored row belong to (frameId, fieldId)? Rows without a frameId count as frame 0. */
@@ -100,6 +101,7 @@ export function patchReportField(report: FillReport, frameId: number, updated: F
     const source = updated.source ?? f.source;
     if (source !== undefined) next.source = source;
     if (f.note && updated.outcome !== 'filled') next.note = f.note;
+    if (f.entry !== undefined && updated.entry === undefined) next.entry = f.entry;
     return next;
   });
   return { ...report, fields, counts: countOutcomes(fields) };

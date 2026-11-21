@@ -13,6 +13,7 @@
 import {
   ATTACHMENT_PROP,
   ENTRY_ALIGNMENT_FIELDS,
+  ENTRY_LEAF_SOURCES,
   expandFieldKeys,
   isArrayModuleName,
   isAttachmentKey,
@@ -34,6 +35,7 @@ import {
   SkillSchema,
   WorkEntrySchema,
   type Resume,
+  type SensitiveFieldMode,
 } from '../schema';
 
 type Bag = Record<string, unknown>;
@@ -71,7 +73,11 @@ const clone = <T>(v: T): T => (v === undefined ? v : structuredClone(v));
  * defaults (the contact country code is blanked instead of the `+86` default). Entry counts of the
  * array modules in play are preserved so `ensureCards` / card alignment behave as with the full resume.
  */
-export function buildResumeSubset(resume: Resume, needs: FrameNeeds): Resume {
+export function buildResumeSubset(
+  resume: Resume,
+  needs: FrameNeeds,
+  opts: { sensitiveFields?: SensitiveFieldMode } = {},
+): Resume {
   const attachmentKeys = new Set(needs.attachmentKeys);
   const requested = expandFieldKeys(needs.fieldKeys.filter((k) => !isAttachmentKey(k)));
   for (const k of needs.fieldKeys) if (isAttachmentKey(k)) attachmentKeys.add(k);
@@ -114,8 +120,8 @@ export function buildResumeSubset(resume: Resume, needs: FrameNeeds): Resume {
     // attachments.* and unknown keys: nothing to copy here
   }
 
-  // An identity or passport number is never filled into any page, whatever the page asks: it stays home.
-  (outBag.basics as Bag).idNumber = '';
+  // An identity or passport number stays home unless the applicant chose to fill it and this page asks for it.
+  if (opts.sensitiveFields !== 'fill') (outBag.basics as Bag).idNumber = '';
 
   // Not a field of its own on any page: it says how the gender field is answered.
   if (requested.has('basics.gender')) {
@@ -133,7 +139,9 @@ export function buildResumeSubset(resume: Resume, needs: FrameNeeds): Resume {
     if (wholeModules.has(module)) {
       outBag[module] = entries.map((e) => clone(e));
     } else if (arrayLeaves.has(module)) {
-      const leaves = new Set([...arrayLeaves.get(module)!, ...(ENTRY_ALIGNMENT_FIELDS[module] ?? [])]);
+      const asked = arrayLeaves.get(module)!;
+      const sources = [...asked].flatMap((leaf) => ENTRY_LEAF_SOURCES[module]?.[leaf] ?? []);
+      const leaves = new Set([...asked, ...(ENTRY_ALIGNMENT_FIELDS[module] ?? []), ...sources]);
       outBag[module] = entries.map((entry) => {
         const copy = ENTRY_SCHEMAS[module].parse({}) as Bag;
         for (const leaf of leaves) if (leaf in copy) copy[leaf] = clone(entry[leaf]);

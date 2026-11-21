@@ -6,6 +6,7 @@ import {
   getByPath,
   insertEntry,
   moveEntry,
+  newSubItem,
   removeEntry,
   setByPath,
   setEndDate,
@@ -13,8 +14,9 @@ import {
   type ArrayModuleName,
   type FieldMeta,
   type ModuleMeta,
+  type SubListMeta,
 } from '../../src/editor';
-import { useLanguage, useT } from '../../src/i18n';
+import { useLanguage, useT, type MessageKey } from '../../src/i18n';
 import {
   clearVariantOverride,
   inheritedSection,
@@ -207,6 +209,44 @@ function Fields({ resume, fields, base, issues, onEdit, allResumes }: FieldsProp
   return <div className="raf-fields">{rows}</div>;
 }
 
+interface SubListProps {
+  resume: Resume;
+  sub: SubListMeta;
+  /** Path of the list, relative to the resume: `languages.0.tests`. */
+  base: string;
+  issues: ReadonlyMap<string, string>;
+  onEdit: (edit: (resume: Resume) => Resume) => void;
+}
+
+/** A list inside one entry (the tests of a language): each item a small group of fields, added and deleted here. */
+function SubList({ resume, sub, base, issues, onEdit }: SubListProps) {
+  const t = useT();
+  const items = (getByPath(resume, base) as unknown[] | undefined) ?? [];
+  const editItems = (edit: (items: unknown[]) => unknown[]) =>
+    onEdit((r) => setByPath(r, base, edit([...((getByPath(r, base) as unknown[] | undefined) ?? [])])));
+  return (
+    <fieldset className="raf-fieldset raf-sublist" data-field-path={base}>
+      <legend className="raf-field__label">{t(sub.labelKey as MessageKey)}</legend>
+      <p className="raf-field__help">{t(sub.helpKey as MessageKey)}</p>
+      {items.map((_, j) => (
+        // Index keys, as for entries: every edit re-renders the whole list.
+        <fieldset key={j} className="raf-entry raf-sublist__item">
+          <legend className="raf-entry__legend">
+            <span className="raf-entry__name">{t(sub.itemLabelKey as MessageKey, { n: j + 1 })}</span>
+          </legend>
+          <div className="raf-entry__actions">
+            <IconButton icon="trash" label={t(sub.removeLabelKey as MessageKey)} danger onClick={() => editItems((list) => list.filter((_, k) => k !== j))} />
+          </div>
+          <Fields resume={resume} fields={sub.fields} base={`${base}.${j}`} issues={issues} onEdit={onEdit} />
+        </fieldset>
+      ))}
+      <Button icon="plus-lg" onClick={() => editItems((list) => [...list, newSubItem(sub)])}>
+        {t(sub.addLabelKey as MessageKey)}
+      </Button>
+    </fieldset>
+  );
+}
+
 /** First filled text field of an entry, shown next to its number so long lists stay scannable. */
 function entrySummary(meta: ModuleMeta, entry: Record<string, unknown>): string {
   for (const field of meta.fields) {
@@ -309,6 +349,9 @@ export function ModuleForm({ resume, meta, issues, onEdit, allResumes }: Props) 
                 <IconButton icon="trash" label={t('options.removeEntry')} danger onClick={() => remove(index)} />
               </div>
               <Fields resume={resume} fields={meta.fields} base={join(module, index)} issues={issues} onEdit={onEdit} />
+              {meta.subLists?.map((sub) => (
+                <SubList key={sub.key} resume={resume} sub={sub} base={join(module, index, sub.key)} issues={issues} onEdit={onEdit} />
+              ))}
             </fieldset>
           </Fragment>
         );

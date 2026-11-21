@@ -198,6 +198,24 @@ describe('Options page – editing and autosave', () => {
   });
 });
 
+describe('Options page – test scores of a language', () => {
+  it('adds a test with its score to a language entry, and removes it again', async () => {
+    await renderApp();
+    openSection(/^Languages/);
+    fireEvent.click(screen.getByRole('button', { name: 'Add languages' }));
+    const entry = screen.getByRole('group', { name: /^Languages 1/ });
+    fireEvent.click(within(entry).getByRole('button', { name: 'Add a test' }));
+    const test = within(entry).getByRole('group', { name: 'Test 1' });
+    const choice = within(test).getByLabelText('Test') as HTMLSelectElement;
+    expect([...choice.options].map((o) => o.textContent)).toEqual(expect.arrayContaining(['CET-6', 'IELTS']));
+    fireEvent.change(choice, { target: { value: 'cet6' } });
+    fireEvent.change(within(test).getByLabelText('Score'), { target: { value: '520' } });
+    await waitFor(async () => expect((await savedResume()).languages[0]?.tests).toEqual([{ test: 'cet6', score: '520', date: '' }]), WAIT);
+    fireEvent.click(within(test).getByRole('button', { name: 'Delete this test' }));
+    await waitFor(async () => expect((await savedResume()).languages[0]?.tests).toEqual([]), WAIT);
+  });
+});
+
 describe('Options page – repeatable modules', () => {
   it('adds, edits and removes an entry', async () => {
     await renderApp();
@@ -427,6 +445,18 @@ describe('Options page – settings', () => {
     fireEvent.click(screen.getByRole('radio', { name: '中文' }));
     await screen.findByRole('radiogroup', { name: '界面语言' });
     await waitFor(async () => expect((await loadProfile()).settings.uiLanguage).toBe('zh'), WAIT);
+  });
+
+  it('shows sensitive fields as reminded by default, and stores a switch to fill with the time it was made', async () => {
+    await renderApp();
+    openTab('Settings');
+    const group = screen.getByRole('radiogroup', { name: 'Sensitive fields' });
+    expect(within(group).getByRole('radio', { name: 'Only remind me' })).toHaveProperty('checked', true);
+    expect(screen.getByText(/Counted as sensitive: ID number/)).toBeTruthy();
+    const before = Date.now();
+    fireEvent.click(within(group).getByRole('radio', { name: 'Fill them' }));
+    await waitFor(async () => expect((await loadProfile()).settings.sensitiveFields).toBe('fill'), WAIT);
+    expect((await loadProfile()).settings.sensitiveFieldsUpdatedAt).toBeGreaterThanOrEqual(before);
   });
 });
 

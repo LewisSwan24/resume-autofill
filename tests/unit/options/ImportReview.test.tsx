@@ -71,6 +71,25 @@ describe('the check page', () => {
     expect(document.getElementById('raf-source-1')!.className).toContain('is-active');
   });
 
+  it('shows each English test read as a row of its own: the test as a choice, then its score', () => {
+    const lines: TextLine[] = ['示例同学', '技能证书', '英语六级 520 分'].map((text) => ({ text, cells: [text], page: 1, fontSize: 0 }));
+    const draft: Draft = {
+      locale: 'zh-CN',
+      fields: [
+        { path: 'basics.givenName', value: '同学', certainty: 'check', line: 0 },
+        { path: 'languages.0.language', value: '英语', certainty: 'check', line: 2 },
+        { path: 'languages.0.tests.0.test', value: 'cet6', certainty: 'check', line: 2 },
+        { path: 'languages.0.tests.0.score', value: '520', certainty: 'check', line: 2 },
+      ],
+    };
+    render(<ImportReview fileName="mine.pdf" lines={lines} draft={draft} onCancel={() => undefined} onSave={() => undefined} />);
+    const group = screen.getByRole('group', { name: /^Languages 1/ });
+    const test = within(group).getByLabelText('Test 1') as HTMLSelectElement;
+    expect(test.value).toBe('cet6');
+    expect(test.selectedOptions[0]!.textContent).toBe('CET-6');
+    expect((within(group).getByLabelText('Test 1 · Score') as HTMLInputElement).value).toBe('520');
+  });
+
   it('gives what was edited to the save, and shows file text as text', () => {
     const onSave = vi.fn();
     const hostile = [{ text: '<img src=x onerror=alert(1)>', cells: ['x'], page: 1, fontSize: 0 }];

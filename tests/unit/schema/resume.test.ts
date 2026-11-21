@@ -99,7 +99,7 @@ describe('ProfileSchema', () => {
       schemaVersion: 1,
       resumes: [],
       activeResumeId: null,
-      settings: { uiLanguage: 'auto', previewBeforeFill: false },
+      settings: { uiLanguage: 'auto', previewBeforeFill: false, sensitiveFields: 'remind' },
     });
   });
 

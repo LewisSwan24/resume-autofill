@@ -10,10 +10,12 @@ import { scanDocument, type ScanResult } from '../engine/scan';
 import type { Classification, Control, FieldContext, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { isVisible } from '../engine/visibility';
 import type { Resume, SiteRecipe } from '../schema';
+import { isSensitiveFieldKey, type SensitiveFieldMode } from '../schema/sensitive';
 import type { MappingPresetId } from '../templates/presets';
-import { ensureCards, type SectionGrowth } from './ensureCards';
+import { ensureCards, REPEATED, type SectionGrowth } from './ensureCards';
 import { fillEntryEditors } from './entryEditors';
-import { heldEntries, placeInCard } from './heldEntries';
+import { entriesInPlace } from './entryProgress';
+import { entryName, heldEntries, placeInCard } from './heldEntries';
 import { runStep } from './runStep';
 import { applyHighlights } from './highlight';
 import { countOutcomes } from './report';
@@ -23,6 +25,8 @@ export interface FillPayload {
   files: Record<string, FileData>;
   presetId?: MappingPresetId;
   recipes?: SiteRecipe[];
+  /** settings.sensitiveFields. Absent: the default, remind. */
+  sensitiveFields?: SensitiveFieldMode;
 }
 
 export interface RunFillOptions {
@@ -112,12 +116,26 @@ function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
   const held = heldEntries(scan.contexts, scan.classifications, resume);
   const free: { ctx: FieldContext; cls: Classification }[] = [];
   const left: FieldReport[] = [];
+  /** fieldId → the entry of its repeated section a field is filled from. */
+  const entryOf = new Map<string, number>();
   scan.contexts.forEach((ctx, i) => {
     if (ctx.control.fixedSection) return;
     const cls = scan.classifications[i]!;
     const placed = placeInCard(held, ctx);
-    if (placed) free.push({ ctx: placed, cls });
-    else left.push({ ...baseReport(ctx, cls, resume.locale), outcome: 'no_data', note: 'entry_held' });
+    const repeated = cls.section !== null && REPEATED.has(cls.section);
+    if (placed) {
+      free.push({ ctx: placed, cls });
+      // A section with no grouped cards is one card, which the plan fills from the first entry.
+      if (repeated) entryOf.set(ctx.control.id, placed.group?.index ?? 0);
+      return;
+    }
+    const shows = ctx.group ? held.shows.get(ctx.group.key)?.get(ctx.group.index) : undefined;
+    left.push({
+      ...baseReport(ctx, cls, resume.locale),
+      outcome: 'no_data',
+      note: 'entry_held',
+      ...(repeated && shows !== undefined ? { entry: shows } : {}),
+    });
   });
   const plan = planFill(
     free.map((f) => f.ctx),
@@ -127,6 +145,7 @@ function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
     {
       ...(payload.presetId ? { presetId: payload.presetId } : {}),
       ...(payload.recipes ? { recipes: payload.recipes } : {}),
+      ...(payload.sensitiveFields ? { sensitiveFields: payload.sensitiveFields } : {}),
       ...(doc.title ? { pageTitle: doc.title } : {}),
       ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
     },
@@ -137,7 +156,7 @@ function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
       ...d,
       have: Math.max(0, d.have - (held.foreign.get(d.section) ?? 0)),
     }));
-  return { plan, left, cardDemand };
+  return { plan, left, cardDemand, entryOf, shown: held.shown };
 }
 
 /**
@@ -159,7 +178,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
   }
   const scan: ScanResult = scanDocument(doc, idFor);
-  const { plan, left } = planPage(doc, scan, payload);
+  const { plan, left, entryOf, shown } = planPage(doc, scan, payload);
 
   const controls = new Map<string, Control>();
   for (const ctx of scan.contexts) controls.set(ctx.control.id, ctx.control);
@@ -195,8 +214,17 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     if (step.intent.kind === 'file') uploaded = true;
     const result = await runStep(step, controls, doc);
     if (step.intent.kind === 'file' && step.fieldKey === 'attachments.resume' && result.outcome === 'filled') resumeTaken = true;
-    results.push(result);
+    // Filled because the applicant chose to: the row still says it was a sensitive field.
+    results.push(result.outcome === 'filled' && isSensitiveFieldKey(step.fieldKey) ? { ...result, note: 'sensitive_filled' } : result);
   }
+
+  // Each row says which entry of its section it belongs to, and each entry what became of it.
+  for (const [i, r] of results.entries()) {
+    const entry = entryOf.get(r.fieldId);
+    if (entry !== undefined && r.entry === undefined) results[i] = { ...r, entry };
+  }
+  const hasInternshipSection = scan.classifications.some((c) => c.section === 'internship');
+  const entries = entriesInPlace(growth, results, shown, (section, index) => entryName(resume, section, index, hasInternshipSection));
 
   // After the rest of the page: on a page with `uploadBusy`, the upload has been read by now, and it may list entries.
   const editorRun = adapter?.editors?.length
@@ -205,6 +233,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   if (editorRun) {
     results.push(...editorRun.results);
     growth = growth.concat(editorRun.growth);
+    entries.push(...editorRun.entries);
     for (const [id, control] of editorRun.controls) controls.set(id, control);
   }
 
@@ -220,6 +249,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     finishedAt: Date.now(),
     fields,
     counts: countOutcomes(fields),
+    ...(entries.length > 0 ? { entries } : {}),
   };
   return { report, controls, growth };
 }

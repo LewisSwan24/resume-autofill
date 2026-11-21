@@ -22,7 +22,7 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
         return true;
       }
       case 'frame:preview': {
-        const { resume, files, presetId, recipes } = message;
+        const { resume, files, presetId, recipes, sensitiveFields } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
         Promise.resolve()
           .then(() =>
@@ -31,13 +31,14 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
               files,
               ...(presetId ? { presetId } : {}),
               ...(Array.isArray(recipes) ? { recipes } : {}),
+              ...(sensitiveFields === 'fill' ? { sensitiveFields } : {}),
             }),
           )
           .then(sendResponse, () => sendResponse(undefined));
         return true;
       }
       case 'frame:fill': {
-        const { resume, files, filter, presetId, recipes } = message;
+        const { resume, files, filter, presetId, recipes, sensitiveFields } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
         handlers
           .fill({
@@ -46,6 +47,7 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
             ...(filter ? { filter } : {}),
             ...(presetId ? { presetId } : {}),
             ...(Array.isArray(recipes) ? { recipes } : {}),
+            ...(sensitiveFields === 'fill' ? { sensitiveFields } : {}),
           })
           .then(sendResponse, () => sendResponse(undefined));
         return true;

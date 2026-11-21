@@ -7,6 +7,8 @@ import { resolveCode } from '../dictionary';
 export const ENGLISH_LADDER: readonly string[] = ['cet4', 'cet6', 'tem4', 'tem8'];
 const ENGLISH_TESTS: ReadonlySet<string> = new Set([...ENGLISH_LADDER, 'ielts', 'toefl', 'toeic', 'pte', 'duolingo']);
 
+export const isEnglishTest = (code: string | undefined): boolean => code !== undefined && ENGLISH_TESTS.has(code);
+
 /** 四六级 names both CET tests, so it says English and no more. */
 const BOTH_CET = /四六级/g;
 /** Tests as labels and certificates write them, with or without more words around them. */
@@ -46,6 +48,16 @@ const PART_SCORE = /听力|阅读|写作|口语|\b(?:listening|reading|writing|s
 export function testsNamed(text: string): string[] {
   const words = text.replace(BOTH_CET, '');
   return TEST_NAMED.filter(([, re]) => re.test(words)).map(([test]) => test);
+}
+
+/** Every place a text names a test, in reading order: where the name starts and ends. */
+export function testsAt(text: string): { test: string; at: number; end: number }[] {
+  // Blanked, not removed, so that places stay where they are in the text.
+  const words = text.replace(BOTH_CET, (m) => ' '.repeat(m.length));
+  const found = TEST_NAMED.flatMap(([test, re]) =>
+    [...words.matchAll(new RegExp(re.source, `${re.flags}g`))].map((m) => ({ test, at: m.index, end: m.index + m[0].length })),
+  );
+  return found.sort((a, b) => a.at - b.at);
 }
 
 /** The language a question names, as a code; English wins when it names more than one. */

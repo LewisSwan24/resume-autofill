@@ -21,6 +21,13 @@ export interface FillStep {
   section?: SectionKey | null;
 }
 
+/** Names a site may list under its own wording (a short form, a campus): a pick under another name is the user's to confirm. */
+const NAMES_PICKED_FROM_A_LIST: ReadonlySet<FieldKey> = new Set<FieldKey>(['education.school', 'education.schoolEn', 'education.major']);
+
+/** The control offers a list to pick from, rather than taking what is typed. */
+const picksFromList = (control: Control): boolean =>
+  Boolean(control.search || control.prompt) || control.kind === 'select' || control.kind === 'cascader';
+
 export interface ExecuteOptions {
   /** Per-attempt budget in ms. Default 4000. */
   timeoutMs?: number;
@@ -189,6 +196,17 @@ export async function executeStep(
       report.outcome = 'action_failed';
     } else if (result.ok) {
       report.outcome = 'filled';
+      const wanted = report.value ?? '';
+      if (
+        NAMES_PICKED_FROM_A_LIST.has(step.fieldKey) &&
+        picksFromList(control) &&
+        wanted !== '' &&
+        report.observed &&
+        !valuesEquivalent(wanted, report.observed)
+      ) {
+        report.outcome = 'needs_review';
+        report.note = 'picked_other_name';
+      }
     } else {
       report.outcome = result.outcome ?? 'action_failed';
       if (result.candidates && result.candidates.length > 0) {

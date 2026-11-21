@@ -6,6 +6,7 @@ import type { TextLine } from '../extract/types';
 import { cleanLines } from './clean';
 import { isEmail, phoneUnderLabel, readFormats, readLabels } from './contact';
 import { readEducation, readJobs, readProjects, readSkills } from './entries';
+import { readLanguageTests } from './languageTests';
 import type { Draft, DraftField } from './types';
 
 export type { Certainty, Draft, DraftField } from './types';
@@ -231,6 +232,9 @@ export function parseResume(raw: TextLine[]): Draft {
   fields.push(...jobs, ...readJobs(section('internship'), lines, jobCount, 'internship'));
   fields.push(...readProjects(section('projects'), lines));
   fields.push(...readSkills(section('skills'), lines));
+  // Tests sit where a resume lists what someone holds, never in the work it describes.
+  const holdings = ['head', 'basics', 'skills', 'languages', 'certificates', 'awards', 'other'].flatMap(section).sort((x, y) => x - y);
+  fields.push(...readLanguageTests(holdings, lines, locale));
 
   return { locale, fields: oncePerPath(settle(fields).flatMap(checkedAgainstFormat)).slice(0, MAX_DRAFT_FIELDS) };
 }

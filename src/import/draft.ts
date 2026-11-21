@@ -4,7 +4,7 @@ import type { Draft, DraftField } from './parse';
 
 type Bag = Record<string, unknown>;
 
-const LIST_MODULES = new Set(['education', 'work', 'projects', 'skills']);
+const LIST_MODULES = new Set(['education', 'work', 'projects', 'skills', 'languages', 'tests']);
 const BOOLEAN_FIELDS = new Set(['current']);
 
 function put(root: Bag, path: string, value: string): void {
@@ -37,11 +37,14 @@ function acceptable(fields: DraftField[], base: Bag): DraftField[] {
   });
 }
 
+/** Lists close up where a path was refused, at any depth (the tests inside a language entry too). */
 function withoutHoles(bag: Bag): Bag {
   const out: Bag = { ...bag };
   for (const key of LIST_MODULES) {
     const list = out[key];
-    if (Array.isArray(list)) out[key] = list.filter((x) => x !== undefined && x !== null);
+    if (Array.isArray(list)) {
+      out[key] = list.filter((x) => x !== undefined && x !== null).map((x) => (typeof x === 'object' ? withoutHoles(x as Bag) : x));
+    }
   }
   return out;
 }

@@ -109,6 +109,70 @@ describe('runFill', () => {
   });
 });
 
+describe('runFill: what became of each entry', () => {
+  /** The sample resume with made-up schools. */
+  const named = structuredClone(zh);
+  named.education[0] = { ...named.education[0]!, school: '星河示例理工大学', schoolEn: '' };
+  named.education[1] = { ...named.education[1]!, school: '云岭示例大学', schoolEn: '' };
+
+  it('reports the card the page had and the card it added, each with its school, and numbers every field by entry', async () => {
+    mount();
+    const ids = new WeakMap<HTMLElement, string>();
+    let n = 0;
+    const idFor = (el: HTMLElement) => ids.get(el) ?? (ids.set(el, `e${++n}`), ids.get(el)!);
+    const { report } = await runFill(document, { resume: named, files }, { idFor });
+    expect(report.entries).toEqual([
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'education', index: 1, state: 'added', label: '云岭示例大学' },
+    ]);
+    const row = (id: string) => report.fields.find((f) => f.fieldId === idFor(document.getElementById(id)!));
+    expect(row('s1')).toMatchObject({ section: 'education', entry: 0 });
+    expect(row('g2')).toMatchObject({ outcome: 'no_data', section: 'education', entry: 1 });
+    expect(row('nm')?.entry).toBeUndefined();
+  });
+
+  it('says an entry was skipped because pressing the add button brought no new card', async () => {
+    mount();
+    const add = document.getElementById('add')!;
+    add.replaceWith(add.cloneNode(true)); // the same button, with nothing behind it
+    const { report } = await runFill(document, { resume: named, files });
+    expect(report.entries).toEqual([
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'education', index: 1, state: 'skipped', reason: 'add_failed', label: '云岭示例大学', button: '添加教育经历' },
+    ]);
+  });
+
+  it('says an entry was skipped because the page has no add button for it', async () => {
+    mount();
+    document.getElementById('add')!.remove();
+    const { report } = await runFill(document, { resume: named, files });
+    expect(report.entries?.[1]).toEqual({ section: 'education', index: 1, state: 'skipped', reason: 'no_button', label: '云岭示例大学' });
+  });
+
+  it('counts the fields of a section with one ungrouped card as its first entry', async () => {
+    document.body.innerHTML = `<form><h2>教育经历</h2>
+      <div><label for="s">学校名称</label><input id="s"></div><div><label for="m">专业</label><input id="m"></div></form>`;
+    const { report } = await runFill(document, { resume: named, files });
+    const school = report.fields.find((f) => f.label === '学校名称');
+    expect(school).toMatchObject({ outcome: 'filled', section: 'education', entry: 0 });
+    expect(report.entries?.[0]).toEqual({ section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' });
+  });
+
+  it('says which entries the page already showed, and leaves them alone', async () => {
+    mount();
+    document.getElementById('edu')!.insertAdjacentHTML('beforeend', card(2));
+    (document.getElementById('s1') as HTMLInputElement).value = '云岭示例大学';
+    const { report } = await runFill(document, { resume: named, files });
+    expect(report.entries).toEqual([
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'education', index: 1, state: 'held', label: '云岭示例大学' },
+    ]);
+    expect(value('s2')).toBe('星河示例理工大学');
+    // The held card's rows name the entry they show.
+    expect(report.fields.filter((f) => f.note === 'entry_held').every((f) => f.entry === 1)).toBe(true);
+  });
+});
+
 describe('a form in several steps', () => {
   const mountSteps = () => {
     document.body.innerHTML = `<form id="f">
@@ -279,6 +343,29 @@ describe('runFill on entries the page already holds', () => {
     expect([picked('s1'), picked('s2')]).toEqual(['星河理工大学（XHU）', '晨光师范']);
   });
 
+  it('asks the user to confirm a school picked from the site’s options under another name, and says what was picked', async () => {
+    mountSelects();
+    const idFor = stableIds();
+    const { report } = await runFill(document, { resume: aliased, files }, { idFor });
+    const [s1, s2] = idsOf(idFor, 's1', 's2').map((id) => report.fields.find((f) => f.fieldId === id));
+    expect(s1).toMatchObject({ outcome: 'needs_review', note: 'picked_other_name', value: '星河理工大学', observed: '星河理工大学（XHU）', entry: 0 });
+    expect(s2).toMatchObject({ outcome: 'needs_review', note: 'picked_other_name', observed: '晨光师范', entry: 1 });
+    // The pick stays on the page: the user confirms it, or changes it.
+    expect(picked('s1')).toBe('星河理工大学（XHU）');
+  });
+
+  it('reports a school written on the site’s list exactly as the resume writes it as filled', async () => {
+    mountSelects();
+    document.querySelectorAll('#edu option').forEach((o) => {
+      if (o.textContent === '他人大学') o.textContent = '星河理工大学';
+    });
+    const idFor = stableIds();
+    const { report } = await runFill(document, { resume: aliased, files }, { idFor });
+    const s1 = report.fields.find((f) => f.fieldId === idsOf(idFor, 's1')[0]);
+    expect(s1).toMatchObject({ outcome: 'filled', observed: '星河理工大学' });
+    expect(s1?.note).toBeUndefined();
+  });
+
   it('a school the resume does not have is still someone’s own entry, and the resume’s go to new cards', async () => {
     const { clicks } = mountSelects();
     (document.getElementById('s1') as HTMLSelectElement).selectedIndex = 3;
@@ -317,5 +404,35 @@ describe('runFill on entries the page already holds', () => {
       expect(row?.value, id).toBe(shown);
     }
     expect(value('s2')).toBe('浙江大学');
+  });
+});
+
+// An identity number is written only when the applicant chose to; by default the box stays empty and the row says why.
+describe('runFill and a sensitive field', () => {
+  const mountId = () => {
+    document.body.innerHTML = `<form><h2>基本信息</h2>
+      <div><label for="nm">姓名</label><input id="nm"></div>
+      <div><label for="idn">身份证号</label><input id="idn"></div></form>`;
+  };
+
+  it('leaves the identity number empty by default and reminds the applicant', async () => {
+    mountId();
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(value('nm')).toBe('林知远');
+    expect(value('idn')).toBe('');
+    const row = report.fields.find((f) => f.label === '身份证号');
+    expect(row).toMatchObject({ fieldKey: 'basics.idNumber', outcome: 'needs_review', note: 'sensitive_held' });
+    expect(row?.value).toBeUndefined();
+  });
+
+  it('fills it when the applicant chose to, and the row says it was a sensitive field', async () => {
+    mountId();
+    const { report } = await runFill(document, { resume: zh, files, sensitiveFields: 'fill' });
+    expect(value('idn')).toBe(zh.basics.idNumber);
+    expect(report.fields.find((f) => f.label === '身份证号')).toMatchObject({
+      fieldKey: 'basics.idNumber',
+      outcome: 'filled',
+      note: 'sensitive_filled',
+    });
   });
 });

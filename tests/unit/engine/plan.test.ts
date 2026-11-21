@@ -379,6 +379,86 @@ describe('a question about English or about one test', () => {
   });
 });
 
+// An entry's test-score list is read before its certificate and score: one entry can hold every test sat.
+describe('the test-score list of a language entry', () => {
+  const LEVELS = ['未参加', '未通过', 'CET-4', 'CET-6', 'TEM-4', 'TEM-8', '雅思', '托福', '托业', '其他'];
+  const select = (label: string, id: string, multiple = false) =>
+    row(label, `<select id="${id}"${multiple ? ' multiple' : ''}>${multiple ? '' : '<option value="">请选择</option>'}${LEVELS.map((o) => `<option>${o}</option>`).join('')}</select>`, id);
+  const withLanguages = (languages: object[]) => ResumeSchema.parse({ ...zh, languages });
+  const bothCet = withLanguages([
+    { language: '英语', proficiency: 'proficient', tests: [{ test: 'cet4', score: '560' }, { test: 'cet6', score: '520' }] },
+  ]);
+  const shown = (p: ReturnType<typeof plan>, label: string) => {
+    const intent = stepOf(p, label)?.intent as { text?: string; display?: string } | undefined;
+    return intent?.text ?? intent?.display ?? null;
+  };
+  /** The options a multi-select step would tick, by label. */
+  const ticked = (p: ReturnType<typeof plan>, label: string, id: string) => {
+    const intent = stepOf(p, label)?.intent;
+    if (intent?.kind !== 'multi') return null;
+    const options = p.scan.contexts.find((c) => c.control.el.id === id)!.control.options!;
+    return intent.items.map((item) => {
+      const m = item.match(options);
+      return m.status === 'matched' ? options[m.index]!.label : `(${m.status})`;
+    });
+  };
+
+  it('gives the score of the test a question names from the list', () => {
+    const p = plan(`<h3>语言能力</h3>${text('四级成绩', 'a')}${text('六级成绩', 'b')}${text('专八成绩', 'c')}`, bothCet);
+    expect(stepOf(p, '四级成绩')).toMatchObject({ fieldKey: 'languages.score', source: 'languages[0].tests[0].score' });
+    expect(shown(p, '四级成绩')).toBe('560');
+    expect(stepOf(p, '六级成绩')).toMatchObject({ source: 'languages[0].tests[1].score' });
+    expect(shown(p, '六级成绩')).toBe('520');
+    expect(stepOf(p, '专八成绩')).toBeUndefined();
+  });
+
+  it('answers a one-answer English level and its score from the same test, the highest on the CET/TEM ladder', () => {
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a')}${text('英语成绩', 'b')}`, bothCet);
+    expect(stepOf(p, '英语等级')).toMatchObject({ fieldKey: 'languages.certificate', source: 'languages[0].tests[1].test' });
+    expect(shown(p, '英语等级')).toBe('CET-6');
+    expect(stepOf(p, '英语成绩')).toMatchObject({ source: 'languages[0].tests[1].score' });
+  });
+
+  it('keeps the resume order on a one-answer list when a test off the ladder is held', () => {
+    const ieltsFirst = withLanguages([{ language: '英语', tests: [{ test: 'ielts', score: '7.5' }, { test: 'cet6', score: '520' }] }]);
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a')}${text('英语成绩', 'b')}`, ieltsFirst);
+    expect(shown(p, '英语等级')).toBe('IELTS');
+    expect(shown(p, '英语成绩')).toBe('7.5');
+  });
+
+  it('still reads the certificate of an entry with no list', () => {
+    const p = plan(`<h3>语言能力</h3>${text('六级成绩', 'a')}`, withLanguages([{ language: '英语', certificate: 'CET-6', score: '502' }]));
+    expect(stepOf(p, '六级成绩')).toMatchObject({ source: 'languages[0].score' });
+  });
+
+  it('ticks every English test held on a list that takes several, from the list and from older entries alike', () => {
+    const resume = withLanguages([
+      { language: '日语', certificate: 'JLPT N1', score: '170', tests: [{ test: 'jlpt_n1', score: '170' }] },
+      { language: '英语', tests: [{ test: 'cet4', score: '560' }, { test: 'cet6', score: '520' }] },
+      { language: '英语', certificate: '雅思', score: '7.0' },
+    ]);
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a', true)}`, resume);
+    expect(stepOf(p, '英语等级')).toMatchObject({ fieldKey: 'languages.certificate' });
+    expect(ticked(p, '英语等级', 'a')).toEqual(['CET-4', 'CET-6', '雅思']);
+    expect(reportOf(p, '英语等级')).toBeUndefined();
+  });
+
+  it('knows TOEIC by its Chinese name on a list', () => {
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a', true)}`, withLanguages([{ language: '英语', tests: [{ test: 'toeic', score: '900' }] }]));
+    expect(ticked(p, '英语等级', 'a')).toEqual(['托业']);
+  });
+
+  it('ticks the one English test of the sample resume', () => {
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a', true)}`);
+    expect(ticked(p, '英语等级', 'a')).toEqual(['CET-6']);
+  });
+
+  it('ticks nothing on a list that takes several when no English test is held', () => {
+    const p = plan(`<h3>个人信息</h3>${select('英语等级', 'a', true)}`, withLanguages([{ language: '日语', certificate: 'JLPT N1', score: '170' }]));
+    expect(stepOf(p, '英语等级')).toBeUndefined();
+  });
+});
+
 describe('fieldKeyLabel', () => {
   it('uses the first synonym of the resume language', () => {
     expect(fieldKeyLabel('education.school', 'zh-CN')).toBe('学校');

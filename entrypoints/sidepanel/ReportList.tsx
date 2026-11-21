@@ -91,9 +91,13 @@ function FieldItem({
   }, [supportsAiDraft, resume, field.label]);
 
   const label = field.label || field.fieldKey || field.fieldId;
-  const value = displayValue(field);
-  // The meta line is the value only; the source is explained in plain words in the expanded area.
-  const meta = value || t('panel.noValue');
+  // A name a search box picked under another wording shows as the page has it.
+  const picked = field.note === 'picked_other_name' && field.observed ? field.observed : null;
+  const value = picked ?? displayValue(field);
+  // The meta line is the entry (two fields of one name) and the value; the source is explained in the expanded area.
+  const meta = [field.entry !== undefined ? t('common.entry.number', { n: field.entry + 1 }) : '', value || t('panel.noValue')]
+    .filter(Boolean)
+    .join(' · ');
   const sourceLabel = field.source ? (describeSource(field.source, t) ?? field.source) : null;
   // Plain-words source ("Basics › Family name + Given name"); the raw resume path is only the tooltip.
   const sourceNode =
@@ -107,7 +111,7 @@ function FieldItem({
   const percent = hasConfidence(field) ? confidencePercent(field.confidence) : null;
   // A card the page already held keeps its outcome for the counts, and says what happened in its own word.
   const held = field.note === 'entry_held';
-  const word = held ? ('status.entry_held' as const) : undefined;
+  const word = held ? ('status.entry_held' as const) : picked ? ('panel.picked.word' as const) : undefined;
   const statusWord = t(word ?? OUTCOME_STATUS[field.outcome].labelKey);
 
   const run = async (input: ApplyInput) => {
@@ -162,7 +166,21 @@ function FieldItem({
           </div>
 
           {field.note === 'same_file_held' ? <p className="raf-help raf-field-note">{t('panel.note.sameFileHeld')}</p> : null}
+          {field.note === 'sensitive_held' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveHeld')}</p> : null}
+          {field.note === 'sensitive_filled' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveFilled')}</p> : null}
           {held ? <p className="raf-help raf-field-note">{t('panel.note.entryHeld')}</p> : null}
+
+          {picked ? (
+            <div className="raf-picked">
+              <dl className="raf-picked-pairs">
+                <dt>{t('panel.picked.resume')}</dt>
+                <dd>{field.value}</dd>
+                <dt>{t('panel.picked.page')}</dt>
+                <dd>{picked}</dd>
+              </dl>
+              <p className="raf-help raf-picked-help">{t('panel.picked.help')}</p>
+            </div>
+          ) : null}
 
           {field.outcome === 'no_data' && !held ? (
             <button

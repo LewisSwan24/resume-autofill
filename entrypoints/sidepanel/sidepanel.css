@@ -919,3 +919,119 @@ select {
   font-size: var(--raf-font-size-xs);
   color: var(--raf-color-text);
 }
+
+/* ------------------------------------------------------------- entries of repeated sections */
+
+.raf-entry-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  padding-top: var(--raf-space-2);
+  border-top: var(--raf-border-width) solid var(--raf-color-border);
+}
+.raf-entry-overview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+  flex-wrap: wrap;
+}
+.raf-entry-overview-title {
+  margin: 0;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+}
+.raf-entry-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-1);
+}
+.raf-entry-sec {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--raf-space-2);
+}
+.raf-entry-sec-name {
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-strong);
+}
+.raf-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+}
+.raf-entry-no {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-surface-hover);
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+.raf-entry-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.raf-entry-title {
+  overflow: hidden;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.raf-entry-why {
+  color: var(--raf-color-text-muted);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+}
+.raf-entry-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--raf-space-1);
+  margin-top: var(--raf-space-1);
+  padding: var(--raf-space-2);
+  border-radius: var(--raf-radius-sm);
+  background: var(--raf-color-surface-hover);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+}
+.raf-entry .raf-badge {
+  flex: none;
+}
+
+/* ------------------------------------------------------------- a name a search box picked */
+
+.raf-picked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-1);
+}
+.raf-picked-pairs {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--raf-space-1) var(--raf-space-3);
+  margin: 0;
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+}
+.raf-picked-pairs dt {
+  color: var(--raf-color-text-muted);
+}
+.raf-picked-pairs dd {
+  margin: 0;
+  font-weight: var(--raf-font-weight-strong);
+}

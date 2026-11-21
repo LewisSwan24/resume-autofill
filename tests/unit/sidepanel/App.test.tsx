@@ -213,6 +213,19 @@ describe('Side panel – report list', () => {
     expect(rowOf('Photo').querySelector('.raf-field-note')).toBeNull();
   });
 
+  it('says a sensitive field was held back by the settings, or filled by them', async () => {
+    const report = makeReport([
+      field('held', 'needs_review', { label: '身份证号', fieldKey: 'basics.idNumber', note: 'sensitive_held' }),
+      field('filled', 'filled', { label: '证件号码', fieldKey: 'basics.idNumber', note: 'sensitive_filled', value: '***' }),
+      field('other', 'needs_review', { label: '籍贯' }),
+    ]);
+    await renderPanel({ report });
+    await screen.findByText('身份证号');
+    expect(rowOf('身份证号').querySelector('.raf-field-note')?.textContent).toMatch(/只提醒|Only remind me/);
+    expect(rowOf('证件号码').querySelector('.raf-field-note')?.textContent).toMatch(/敏感字段|sensitive field/i);
+    expect(rowOf('籍贯').querySelector('.raf-field-note')).toBeNull();
+  });
+
   it('says a card was the page’s own entry, and offers nothing to add to the resume for it', async () => {
     const report = makeReport([
       field('held', 'no_data', { label: '学校名称', note: 'entry_held' }),
@@ -347,6 +360,87 @@ describe('Side panel – report list', () => {
     await renderPanel({ profile: makeProfile('en', false) });
     await screen.findByText('No resume yet. Fill one in on the profile page and it will show up here.');
     expect(screen.queryByLabelText('Active resume')).toBeNull();
+  });
+});
+
+describe('Side panel – entries and names', () => {
+  it('tells two fields of the same name apart by their entry', async () => {
+    const report = makeReport([
+      field('r1', 'no_data', { label: 'Rank', section: 'education', entry: 0 }),
+      field('r2', 'no_data', { label: 'Rank 2', section: 'education', entry: 1 }),
+      field('e', 'no_data', { label: 'Email' }),
+    ]);
+    await renderPanel({ report });
+    await screen.findByText('Rank');
+    expect(rowOf('Rank').querySelector('.raf-item-meta')?.textContent).toBe('Entry 1 · —');
+    expect(rowOf('Rank 2').querySelector('.raf-item-meta')?.textContent).toBe('Entry 2 · —');
+    expect(rowOf('Email').querySelector('.raf-item-meta')?.textContent).toBe('—');
+  });
+
+  it('shows what became of each entry, with its name, before the rows', async () => {
+    setLanguage('zh');
+    const report = makeReport([
+      field('s1', 'filled', { label: '学校', section: 'education', entry: 0, value: '星河示例理工大学' }),
+      field('g1', 'no_data', { label: 'GPA', section: 'education', entry: 0 }),
+      field('w1', 'filled', { label: '公司', section: 'internship', entry: 0, value: '示例科技有限公司' }),
+    ]);
+    report.entries = [
+      { section: 'education', index: 0, state: 'existing', label: '星河示例理工大学' },
+      { section: 'internship', index: 0, state: 'added', label: '示例科技有限公司' },
+      { section: 'internship', index: 1, state: 'skipped', reason: 'add_failed', button: '添加实习经历', label: '样例数据有限公司' },
+    ];
+    await renderPanel({ report, profile: makeProfile('zh') });
+    const box = await screen.findByTestId('raf-entry-overview');
+    expect(box.querySelector('h2')?.textContent).toBe('多条经历');
+    expect(box.querySelector('.raf-help')?.textContent).toBe('这次新增 1 条，跳过 1 条');
+    expect(Array.from(box.querySelectorAll('.raf-entry-sec')).map((s) => s.textContent)).toEqual(['教育经历1 / 1 条', '实习经历1 / 2 条']);
+    const rows = Array.from(box.querySelectorAll('[data-testid="raf-entry"]')).map((e) => [
+      e.querySelector('.raf-entry-title')?.textContent,
+      e.querySelector('.raf-entry-why')?.textContent,
+      e.querySelector('.raf-badge')?.textContent?.trim(),
+    ]);
+    expect(rows).toEqual([
+      ['星河示例理工大学', '第 1 条 · 页面原有 · 已填 1 格，简历里没有 1 格', '已填好'],
+      ['示例科技有限公司', '第 1 条 · 新增 · 已填 1 格', '已填好'],
+      ['样例数据有限公司', '第 2 条 · 跳过', '跳过'],
+    ]);
+    const skipped = box.querySelectorAll('[data-testid="raf-entry"]')[2]!;
+    expect(skipped.querySelector('.raf-entry-reason')?.textContent?.trim()).toBe('按了「添加实习经历」，页面没有多出一条');
+    // The overview comes before the list of rows.
+    const list = screen.getByRole('list');
+    expect(box.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows no overview for a report without entries', async () => {
+    await renderPanel();
+    await screen.findByText('Email');
+    expect(screen.queryByTestId('raf-entry-overview')).toBeNull();
+  });
+
+  it('sets the resume’s name beside the one the search box picked, and asks to confirm it', async () => {
+    const report = makeReport([
+      field('s', 'needs_review', {
+        label: 'School',
+        section: 'education',
+        entry: 0,
+        note: 'picked_other_name',
+        value: '星河示例理工大学',
+        observed: '星河理工',
+        candidates: [{ label: '星河理工' }, { label: '星河理工（东校区）' }],
+      }),
+    ]);
+    await renderPanel({ report });
+    await screen.findByText('School');
+    const head = summaryOf('School');
+    expect(head.querySelector('.raf-item-meta')?.textContent).toBe('Entry 1 · 星河理工');
+    expect(head.querySelector('.raf-badge')?.textContent?.trim()).toBe('Different name');
+    const row = expand('School');
+    const pairs = Array.from(row.querySelectorAll('.raf-picked dt')).map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]);
+    expect(pairs).toEqual([
+      ['Your resume says', '星河示例理工大学'],
+      ['Picked on the page', '星河理工'],
+    ]);
+    expect(row.querySelector('.raf-picked-help')?.textContent).toMatch(/same school/);
   });
 });
 

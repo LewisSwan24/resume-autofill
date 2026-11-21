@@ -32,6 +32,10 @@ export interface HeldEntries {
   cards: Map<string, Map<number, number | null>>;
   /** Per section: cards holding an entry the resume does not have. They take none of the resume's. */
   foreign: Map<SectionKey, number>;
+  /** Per repeated card group (its key): card index → the resume entry it already shows. */
+  shows: Map<string, Map<number, number>>;
+  /** Per section: the resume entries cards on the page already show. */
+  shown: Map<SectionKey, Set<number>>;
 }
 
 interface Bucket {
@@ -72,7 +76,7 @@ export function heldEntries(contexts: readonly FieldContext[], classifications: 
     if (shown) b.named.set(ctx.group.index, shown);
   });
 
-  const held: HeldEntries = { cards: new Map(), foreign: new Map() };
+  const held: HeldEntries = { cards: new Map(), foreign: new Map(), shows: new Map(), shown: new Map() };
   for (const [key, b] of buckets) {
     if (b.named.size === 0) continue;
     const module = moduleOf(b.section);
@@ -87,8 +91,13 @@ export function heldEntries(contexts: readonly FieldContext[], classifications: 
       const free = (p: number) => !taken.has(p);
       const exact = rows.findIndex((r, p) => free(p) && namesOf(r.entry).some((n) => normal(n) === normal(name)));
       const at = exact >= 0 ? exact : rows.findIndex((r, p) => free(p) && showsEntry(name, namesOf(r.entry)));
-      if (at >= 0) taken.add(at);
-      else held.foreign.set(b.section, (held.foreign.get(b.section) ?? 0) + 1);
+      if (at >= 0) {
+        taken.add(at);
+        if (!held.shows.has(key)) held.shows.set(key, new Map());
+        held.shows.get(key)!.set(card, at);
+        if (!held.shown.has(b.section)) held.shown.set(b.section, new Set());
+        held.shown.get(b.section)!.add(at);
+      } else held.foreign.set(b.section, (held.foreign.get(b.section) ?? 0) + 1);
       // Matched or not, the card is someone's own: it is left alone.
       map.set(card, null);
     }
@@ -101,6 +110,16 @@ export function heldEntries(contexts: readonly FieldContext[], classifications: 
     held.cards.set(key, map);
   }
   return held;
+}
+
+/** The name the resume gives one entry of a section (its school, company, project), or '' when it has none. */
+export function entryName(resume: Resume, section: SectionKey, index: number, hasInternshipSection = false): string {
+  const module = moduleOf(section);
+  const fields = NAME_FIELDS[module];
+  if (!fields) return '';
+  const row = sectionEntries(resume, module as Parameters<typeof sectionEntries>[1], section, hasInternshipSection)[index];
+  if (!row) return '';
+  return fields.map((f) => entryFieldText(module, f, row.entry, resume.locale).trim()).find(Boolean) ?? '';
 }
 
 /**

@@ -361,18 +361,6 @@
   gap: var(--raf-space-1) var(--raf-space-2);
 }
 
-/* "N fields have no data" and its way to the profile page, on one line when it fits. */
-.raf-card__nodata {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--raf-space-2);
-}
-.raf-card__nodata > .raf-card__note {
-  flex: 1 1 12em;
-  margin: 0;
-}
 /* Auto-advance offer: one line of what it will (not) press, then the button. */
 .raf-card__advance {
   display: flex;
@@ -382,8 +370,7 @@
 .raf-card__advance > .raf-card__note {
   margin: 0;
 }
-.raf-card__note,
-.raf-card__list-title {
+.raf-card__note {
   font-size: var(--raf-font-size-sm);
   font-weight: var(--raf-font-weight-regular);
   line-height: var(--raf-line-height-tight);
@@ -488,14 +475,196 @@
   transition-delay: 0s;
 }
 
+/* ------------------------------------------------------------------ Entries of repeated sections (one row per entry) */
+
+.raf-entries {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+}
+
+.raf-entries__sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--raf-space-1);
+}
+
+.raf-entries__sec[open] > .raf-entry + .raf-entry,
+.raf-entries__sec[open] > .raf-entries__head + .raf-entry {
+  margin-top: var(--raf-space-1);
+}
+
+.raf-entries__head {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-2);
+  min-height: var(--raf-size-icon-button);
+  padding: 0 var(--raf-space-2) 0 var(--raf-space-3);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  cursor: pointer;
+  list-style: none;
+}
+
+.raf-entries__head::-webkit-details-marker {
+  display: none;
+}
+
+.raf-entries__head:hover {
+  background: var(--raf-color-surface-hover);
+}
+
+.raf-entries__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+}
+
+.raf-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-2);
+  padding: var(--raf-space-1) var(--raf-space-2);
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+}
+
+.raf-entry__no {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--raf-radius-pill);
+  background: var(--raf-color-surface-hover);
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.raf-entry__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.raf-entry__title {
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+}
+
+.raf-entry__why {
+  color: var(--raf-color-text-muted);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+}
+
+/* ------------------------------------------------------------------ Groups of rows by reason (closed until opened) */
+
+/* The groups keep to the list's old height; the card itself does not grow for them. */
+.raf-groups {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--raf-space-2);
+  max-height: var(--raf-size-card-list-max-height);
+  overflow-y: auto;
+}
+
+.raf-group {
+  flex: none;
+  border: var(--raf-border-width) solid var(--raf-color-border);
+  border-radius: var(--raf-radius-md);
+  background: var(--raf-color-surface);
+}
+
+.raf-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--raf-space-2);
+  min-height: var(--raf-size-icon-button);
+  padding: var(--raf-space-1) var(--raf-space-2) var(--raf-space-1) var(--raf-space-3);
+  border-radius: var(--raf-radius-md);
+  cursor: pointer;
+  list-style: none;
+}
+
+.raf-group__head::-webkit-details-marker {
+  display: none;
+}
+
+.raf-group__head:hover {
+  background: var(--raf-color-surface-hover);
+}
+
+.raf-group__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.raf-group__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.raf-group__title {
+  font-size: var(--raf-font-size-md);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: var(--raf-line-height-tight);
+}
+
+.raf-group__names {
+  overflow: hidden;
+  color: var(--raf-color-text-muted);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The count is drawn like a Badge: tone on text and a 1px border. */
+.raf-group__count {
+  min-width: 20px;
+  padding: 0 var(--raf-space-1);
+  border: var(--raf-border-width) solid var(--raf-badge-tone);
+  border-radius: var(--raf-radius-xs);
+  color: var(--raf-badge-tone);
+  font-size: var(--raf-font-size-sm);
+  font-weight: var(--raf-font-weight-strong);
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.raf-group__chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--raf-color-text-muted);
+}
+
+.raf-group > .raf-list {
+  padding: 0 var(--raf-space-2) var(--raf-space-2);
+}
+
+.raf-group__foot {
+  display: flex;
+  padding: 0 var(--raf-space-2) var(--raf-space-2);
+}
+
 /* ------------------------------------------------------------------ ListItem (compact: no tile, 36px row) */
 
 .raf-list {
   display: flex;
   flex-direction: column;
-  gap: var(--raf-space-2);
-  max-height: var(--raf-size-card-list-max-height);
-  overflow-y: auto;
+  gap: var(--raf-space-1);
   list-style: none;
 }
 
@@ -505,14 +674,53 @@
   align-items: center;
   gap: var(--raf-space-2);
   min-height: var(--raf-size-icon-button);
-  padding: 0 var(--raf-space-1) 0 var(--raf-space-3);
+  padding: var(--raf-space-1) var(--raf-space-1) var(--raf-space-1) var(--raf-space-3);
   border: var(--raf-border-width) solid var(--raf-color-border);
   border-radius: var(--raf-radius-md);
   background: var(--raf-color-surface);
+  cursor: pointer;
+}
+
+.raf-list-item:hover {
+  background: var(--raf-color-surface-hover);
+}
+
+/* The row last pointed at stays picked out while the card is open. */
+.raf-list-item[aria-current='true'] {
+  border-color: var(--raf-color-focus);
+  box-shadow: inset 0 0 0 var(--raf-border-width) var(--raf-color-focus);
+}
+
+.raf-list-item__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.raf-list-item__crumb {
+  overflow: hidden;
+  color: var(--raf-color-text-muted);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.raf-list-item__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--raf-space-1);
+  font-size: var(--raf-font-size-sm);
+  line-height: var(--raf-line-height-tight);
+}
+
+.raf-list-item__pick > .raf-icon {
+  flex: none;
+  color: var(--raf-color-warning);
 }
 
 .raf-list-item__name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   font-size: var(--raf-font-size-md);

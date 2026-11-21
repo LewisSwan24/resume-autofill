@@ -1,10 +1,12 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
 import { formatByPattern, isDatePattern } from './dateFormat';
 import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOption, namesOtherState, namesPlace, placeOptions, placeSpellings } from '../dictionary';
-import { asksBesidesEnglish, asksPartScore, bestEnglish, languageNamed, languageOf, testOf, testsNamed } from './languageAsked';
+import { asksBesidesEnglish, asksPartScore, bestEnglish, isEnglishTest, languageNamed, languageOf, testOf, testsNamed } from './languageAsked';
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
-import type { GenderAnswer, Locale, Region, Resume } from '../schema';
+import type { GenderAnswer, LanguageEntry, Locale, Region, Resume } from '../schema';
+import { LANGUAGE_TEST_LABELS, isLanguageTestCode } from '../schema/languageTests';
 import { getFieldKeyDef, type FieldKeyDef } from '../schema/fieldKeys';
+import { isSensitiveFieldKey, type SensitiveFieldMode } from '../schema/sensitive';
 import { formatWithPreset, type InterpolationContext, type MappingPresetId } from '../templates/presets';
 import type { Control, FieldKey, OptionInfo, SectionKey } from './types';
 
@@ -27,6 +29,8 @@ export interface ResolveOptions {
   askedAs?: string;
   /** Advice under the section's title, which can narrow it: 除英语外的其他外语能力. */
   sectionNote?: string;
+  /** The applicant's choice for sensitive fields: only 'fill' gives their values. */
+  sensitiveFields?: SensitiveFieldMode;
 }
 
 /** Enum domains for text-typed keys that nevertheless have a dictionary (used when the control offers options). */
@@ -160,6 +164,67 @@ function languageRow<T extends { entry: unknown }>(rows: T[], entryIndex: number
   return rows[entryIndex];
 }
 
+/** A language row; one standing for a test in an entry's list has the path of that test. */
+type LanguageRow = EntryRef<unknown> & { path?: string };
+
+/**
+ * The rows a question about a test or a language reads: each test in an entry's list stands as a row of its own (the
+ * test as its certificate, with its score), so the list is read first. The entry itself stays a row only when its
+ * certificate names a test the list does not have, or names none (then it steps aside for the tests in bestEnglish).
+ */
+function withTestRows(rows: EntryRef<unknown>[]): LanguageRow[] {
+  return rows.flatMap((r): LanguageRow[] => {
+    const entry = r.entry as Partial<LanguageEntry>;
+    const listed = (entry.tests ?? []).flatMap((t, j): LanguageRow[] =>
+      isLanguageTestCode(t.test)
+        ? [{
+            entry: { language: entry.language ?? '', proficiency: entry.proficiency ?? null, certificate: LANGUAGE_TEST_LABELS[t.test], score: t.score },
+            index: r.index,
+            path: `languages[${r.index}].tests[${j}]`,
+          }]
+        : [],
+    );
+    if (listed.length === 0) return [r];
+    const own = testOf(entry);
+    return own !== undefined && listed.some((l) => testOf(l.entry) === own) ? listed : [...listed, r];
+  });
+}
+
+/** A certificate or score question that names a test or a language: the one a test list answers. */
+const asksAboutTests = (field: string, opts: ResolveOptions): boolean =>
+  (field === 'certificate' || field === 'score') &&
+  !asksBesidesEnglish(opts.askedAs ?? '') &&
+  !asksBesidesEnglish(opts.sectionNote ?? '') &&
+  (testsNamed(opts.askedAs ?? '').length > 0 || languageNamed(opts.askedAs ?? '') !== undefined);
+
+/**
+ * For an English level on a list that takes several answers: every English test the resume holds, from the test lists
+ * and from older entries' certificates, each once, in resume order. A question naming tests takes only those. Null when
+ * the question is not about English, or no English test is held.
+ */
+export function everyEnglishTest(resume: Resume, askedAs: string, sectionNote = ''): { intent: FillIntent; source: string } | null {
+  if (asksBesidesEnglish(askedAs) || asksBesidesEnglish(sectionNote)) return null;
+  const named = testsNamed(askedAs);
+  if (named.length > 0 ? !named.every((t) => isEnglishTest(t)) : languageNamed(askedAs) !== 'en') return null;
+  const held = new Map<string, { label: string; source: string }>();
+  for (const row of withTestRows(sectionEntries(resume, 'languages', 'languages'))) {
+    const test = testOf(row.entry);
+    if (!test || !isEnglishTest(test) || held.has(test) || (named.length > 0 && !named.includes(test))) continue;
+    const label = (row.entry as { certificate: string }).certificate.trim();
+    held.set(test, { label, source: row.path ? `${row.path}.test` : `languages[${row.index}].certificate` });
+  }
+  if (held.size === 0) return null;
+  const tests = [...held.values()];
+  return {
+    intent: {
+      kind: 'multi',
+      display: tests.map((t) => t.label).join('、'),
+      items: tests.map((t) => ({ query: t.label, match: (options) => matchOption('languageCert', t.label, options) })),
+    },
+    source: tests.map((t) => t.source).join('+'),
+  };
+}
+
 const SUPERVISED = /导师|指导(?:老师|教师)|supervisor|advis[oe]r/i;
 const schoolName = (s: unknown): string => (typeof s === 'string' ? s.normalize('NFKC').replace(/\s+/g, '').toLowerCase() : '');
 
@@ -265,8 +330,6 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
   }
 }
 
-/** An identity or passport number. */
-const NEVER_GIVEN: ReadonlySet<string> = new Set(['basics.idNumber']);
 
 /**
  * Value of a field key for card `entryIndex` of a page section. Handles derived keys, the work/internship
@@ -281,8 +344,8 @@ export function resolveValue(
 ): ResolvedValue | null {
   const dot = fieldKey.indexOf('.');
   if (dot < 0) return null;
-  // Never filled, wherever it is asked for and whatever the resume holds.
-  if (NEVER_GIVEN.has(fieldKey)) return null;
+  // An identity number is given only when the applicant chose to fill such fields, wherever it is asked for.
+  if (isSensitiveFieldKey(fieldKey) && opts.sensitiveFields !== 'fill') return null;
   const module = fieldKey.slice(0, dot);
   const field = fieldKey.slice(dot + 1);
 
@@ -317,11 +380,13 @@ export function resolveValue(
       module === 'education' && section && section !== 'education' && entryIndex === 0
         ? highestSchooling(rows)
         : module === 'languages'
-          ? languageRow(rows, entryIndex, opts.askedAs, opts.sectionNote)
+          ? languageRow<LanguageRow>(asksAboutTests(field, opts) ? withTestRows(rows) : rows, entryIndex, opts.askedAs, opts.sectionNote)
           : rows[entryIndex];
     if (!row) return null;
     const entry = row.entry as Record<string, unknown>;
-    const source = `${module}[${row.index}].${field}`;
+    const path = (row as LanguageRow).path;
+    // A test from an entry's list is found at its own place there: its name is `test`.
+    const source = path ? `${path}.${field === 'certificate' ? 'test' : field}` : `${module}[${row.index}].${field}`;
     if (field === 'classYear') {
       // Which class someone belongs to, wherever it is asked: the schooling they are finishing, not this card's.
       const latest = lastSchooling(rows) ?? row;

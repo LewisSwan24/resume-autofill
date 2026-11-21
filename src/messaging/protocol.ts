@@ -4,7 +4,7 @@ import { browser } from 'wxt/browser';
 import type { FrameNeeds } from '../engine/fieldDeps';
 import type { FieldReport, FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
 import type { FileData } from '../drivers/types';
-import type { Resume, SiteRecipe, SiteRecipeFingerprint } from '../schema';
+import type { Resume, SensitiveFieldMode, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { WizardSessionState } from '../background/wizardSession';
 import type { InspectorTargetInfo } from '../content/inspector';
@@ -23,8 +23,8 @@ export type BgToFrame =
   | { type: 'scan:total'; total: number }
   /** Ask what the frame could fill (no resume data attached); answered with FrameNeeds. */
   | { type: 'frame:needs' }
-  | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[] }
-  | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[] }
+  | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode }
+  | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode }
   | { type: 'frame:focus'; fieldId: string }
   | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string }
   | { type: 'frame:captureFingerprint'; fieldId: string }

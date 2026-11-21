@@ -1,6 +1,7 @@
 // Profile migrations. Table-driven: add `{ from: 1, run }` here when the schema moves to v2.
 import { CURRENT_SCHEMA_VERSION, ProfileSchema, type Profile } from './resume';
 import { migrateHiddenIndices } from './variant';
+import { migrateLanguageTests } from './languageTests';
 
 export class ProfileMigrationError extends Error {
   override readonly name = 'ProfileMigrationError';
@@ -72,6 +73,6 @@ export function migrateProfile(raw: unknown): Profile {
   if (!parsed.success) {
     throw new ProfileMigrationError(`Profile failed validation: ${parsed.error.message}`, { cause: parsed.error });
   }
-  // In-version upgrade: variants hide base entries by id, not by position.
-  return migrateHiddenIndices(parsed.data);
+  // In-version upgrades: variants hide base entries by id, not by position; language entries list their tests.
+  return migrateLanguageTests(migrateHiddenIndices(parsed.data));
 }

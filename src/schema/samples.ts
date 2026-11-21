@@ -73,7 +73,7 @@ const zhInput: ResumeInput = {
     },
   ],
   awards: [{ name: '国家奖学金', date: '2022-10', level: 'national' }],
-  languages: [{ language: '英语', proficiency: 'fluent', certificate: 'CET-6', score: '580' }],
+  languages: [{ language: '英语', proficiency: 'fluent', certificate: 'CET-6', score: '580', tests: [{ test: 'cet6', score: '580' }] }],
   certificates: [{ name: '全国计算机等级考试二级', date: '2021-09' }],
   skills: [{ name: 'Python' }, { name: 'TypeScript' }, { name: 'SQL' }],
   family: [
@@ -175,6 +175,6 @@ export function createSampleProfile(): Profile {
     schemaVersion: 2,
     resumes,
     activeResumeId: 'sample-zh',
-    settings: { uiLanguage: 'auto', previewBeforeFill: false },
+    settings: { uiLanguage: 'auto', previewBeforeFill: false, sensitiveFields: 'remind' },
   };
 }

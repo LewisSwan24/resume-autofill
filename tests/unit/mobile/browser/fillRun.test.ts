@@ -47,7 +47,7 @@ interface Rig {
   pages: Map<number, Page>;
   commands: { frame: number; cmd: AppCommand }[];
   profile: { current: Profile | null };
-  checkIn(frame: number, opts?: { main?: boolean; count?: number; origin?: string }): void;
+  checkIn(frame: number, opts?: { main?: boolean; count?: number; origin?: string; step?: string | null }): void;
   emitReply(frame: number, data: object): void;
 }
 
@@ -94,7 +94,7 @@ async function rig(): Promise<Rig> {
       origins.set(frame, opts.origin ?? ORIGIN);
       const gen = session.getState().generation;
       native.emit('message', { frame, generation: gen, origin: opts.origin ?? ORIGIN, main, data: encode({ v: 1, kind: 'hello', iframes: 0 }) });
-      native.emit('message', { frame, generation: gen, origin: opts.origin ?? ORIGIN, main, data: encode({ v: 1, kind: 'scan', count: opts.count ?? 3, iframes: 0 }) });
+      native.emit('message', { frame, generation: gen, origin: opts.origin ?? ORIGIN, main, data: encode({ v: 1, kind: 'scan', count: opts.count ?? 3, iframes: 0, ...(opts.step !== undefined ? { step: opts.step } : {}) }) });
     },
   };
 }
@@ -121,9 +121,20 @@ describe('fill run', () => {
     const run = r.session.getState().run;
     expect(run.phase).toBe('done');
     if (run.phase === 'done') {
+      expect(run.stepAtFill).toBeNull();
       expect(run.frames).toEqual([0, 5]);
       expect(run.report.fields.map((f) => f.frameId)).toEqual([0, 5]);
     }
+  });
+
+  it('a finished fill remembers the step the page was showing', async () => {
+    const r = await rig();
+    r.checkIn(0, { step: '基本信息' });
+    r.pages.set(0, page(needs({ fieldKeys: ['contact.email'] })));
+    expect(await r.session.fill()).toBe('started');
+    await flush();
+    const run = r.session.getState().run;
+    expect(run.phase === 'done' && run.stepAtFill).toBe('基本信息');
   });
 
   it('each frame receives exactly buildResumeSubset(resume, its needs)', async () => {

@@ -45,6 +45,11 @@ export interface CapturedField {
    * and the report row must say needs_review so the applicant hears of the rest.
    */
   partial?: true;
+  /**
+   * A search box with no row in the resume's words (Moka has no major called 计算机科学): it holds the nearest row
+   * the site offers, and the report row must say needs_review so the applicant checks the name the site picked.
+   */
+  picked?: true;
 }
 
 export interface LocatedEntry {
@@ -326,7 +331,7 @@ export function scoreSample(
       const rows = rowsOf(report, label, field.fieldKey);
       if (field.follows) continue;
       if (rows.length === 0) falselyFailed.push(`${label}: no report row`);
-      else if (field.partial) {
+      else if (field.partial || field.picked) {
         if (!rows.some((r) => r.outcome === 'needs_review')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}, not needs_review`);
       } else if (!rows.some((r) => r.outcome === 'filled')) falselyFailed.push(`${label}: reported ${rows[0]!.outcome}`);
     } else if (isEmptyReading(actual)) missing.push(label);

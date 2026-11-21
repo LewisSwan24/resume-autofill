@@ -5,6 +5,8 @@ import { ADAPTERS } from '../../../src/adapters';
 import { resolveAdapter } from '../../../src/adapters/resolve';
 import { runAutoAdvance, type AdvanceDeps } from '../../../src/background/autoAdvance';
 import { createStepHandlers } from '../../../src/content/steps';
+import { FILL_THRESHOLD } from '../../../src/engine/classify';
+import { scanDocument } from '../../../src/engine/scan';
 import { findStepAction, stepFingerprint } from '../../../src/fill/nextStep';
 import { BEISEN_FORM } from '../../shared/beisenForm';
 import { FEISHU_FORM } from '../../shared/feishuForm';
@@ -74,6 +76,28 @@ describe('Moka', () => {
     expect(findStepAction(document).kind).toBe('ambiguous');
     const own = findStepAction(document, moka.nextButton);
     expect(own.kind === 'next' && own.button.closest('.mobile-layout__footer')).toBeTruthy();
+  });
+
+  it('on a phone, reads a question asked inside 基本信息 as the label of its list, so it is filled', () => {
+    // The phone puts the company's own questions in the 基本信息 block, titled by a span that is no <label>.
+    const list = (kind: string, title: string) =>
+      `<div class="applyField-Uxo0YVBxOp "><div class="title-info-Bb7QUC5Eao"><span class="title-VjPF9BH7ee"><span>${title}</span></span><span class="sd-Icon-container-1njYU required-XDAMDlWuLZ"></span></div><div class="${kind}"><input class="" placeholder="请选择" readonly=""><div class="fade-gradient"></div></div><div class="describe-Px7yQoZJQ_"></div></div>`;
+    const page = mokaMobileSteps([{ title: '基本信息', fields: ['姓名', '邮箱', '民族'] }]);
+    document.body.innerHTML = page.html.replace(
+      '</div></div></div></div><div class="mobile-layout__footer',
+      `${list('bool_info', '是否接收组织调配')}${list('multi_select_info', '语言技能')}</div></div></div></div><div class="mobile-layout__footer`,
+    );
+    const scan = scanDocument(document);
+    const at = (label: string) => {
+      const i = scan.contexts.findIndex((c) => c.control.el.closest('[class*="applyField-"]')?.textContent?.includes(label));
+      return scan.classifications[i]!;
+    };
+    expect(at('是否接收组织调配').fieldKey).toBe('jobIntention.acceptAdjustment');
+    expect(at('是否接收组织调配').confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+    expect(at('语言技能').fieldKey).toBe('languages.language');
+    expect(at('语言技能').confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+    // The block's own title is not a question: 姓名 keeps its own label.
+    expect(at('姓名').fieldKey).toBe('basics.fullName');
   });
 
   it('runs through the phone steps on its own and stops at the one that sends', async () => {

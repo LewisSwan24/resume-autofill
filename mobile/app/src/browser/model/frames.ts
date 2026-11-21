@@ -22,6 +22,8 @@ export interface FrameEntry {
   incompatible: boolean;
   /** At least one scan arrived. */
   scanned: boolean;
+  /** Main frame: the step the page names (step bar title or adapter signature); null or absent when none. */
+  step?: string | null;
 }
 
 export interface FramesState {
@@ -87,8 +89,11 @@ export function checkInbound(state: FramesState, e: NativeEvents['message']): Ch
   if ((message.kind === 'obstacles' || message.kind === 'step' || message.kind === 'pressed') && !known.main) return drop(state);
 
   if (message.kind === 'scan') {
-    if (known.scanned && known.count === message.count && known.iframes === message.iframes) return { state, message, frame: known };
-    const entry = { ...known, count: message.count, iframes: message.iframes, scanned: true };
+    const step = message.step ?? null;
+    if (known.scanned && known.count === message.count && known.iframes === message.iframes && (known.step ?? null) === step) {
+      return { state, message, frame: known };
+    }
+    const entry = { ...known, count: message.count, iframes: message.iframes, scanned: true, step };
     return { state: { ...state, frames: state.frames.map((f) => (f === known ? entry : f)) }, message, frame: entry };
   }
   if (message.kind === 'bye') {

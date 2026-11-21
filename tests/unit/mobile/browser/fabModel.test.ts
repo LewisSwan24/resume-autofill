@@ -85,6 +85,21 @@ describe('fabModel', () => {
     expect(v.state).toBe('more');
   });
 
+  it('a page that moved to its next step offers the fill again, even with fewer fields', () => {
+    const v = fabModel(input({ frames: [frame({ count: 6, step: '教育经历' })], run: done({ stepAtFill: '基本信息' }) }))!;
+    expect(v).toMatchObject({ state: 'ready', icon: 'magic', subtext: { key: 'm.br.fab.count', params: { n: 6 } }, tap: 'fill' });
+  });
+
+  it('the same step, or a page that names no step, keeps the report', () => {
+    expect(fabModel(input({ frames: [frame({ count: 12, step: '基本信息' })], run: done({ stepAtFill: '基本信息' }) }))!.state).toBe('done');
+    expect(fabModel(input({ frames: [frame({ count: 6, step: null })], run: done({ stepAtFill: '基本信息' }) }))!.state).toBe('done');
+    expect(fabModel(input({ frames: [frame({ count: 6, step: '教育经历' })], run: done({ stepAtFill: null }) }))!.state).toBe('done');
+  });
+
+  it('a new step with nothing to fill keeps the report', () => {
+    expect(fabModel(input({ frames: [frame({ count: 0, step: '其他信息' })], run: done({ stepAtFill: '基本信息' }) }))!.state).toBe('done');
+  });
+
   it('unavailable and missing', () => {
     expect(fabModel(input({ engine: 'unsupported', frames: [] }))).toMatchObject({ state: 'unavailable', icon: 'warning', text: { key: 'm.br.fab.unavailable' }, subtext: null, tap: 'explainUnsupported' });
     expect(fabModel(input({ engine: 'missing', frames: [] }))).toMatchObject({ state: 'missing', icon: 'warning', text: { key: 'm.br.fab.missing' }, tap: 'explainMissing' });

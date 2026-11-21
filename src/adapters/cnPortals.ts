@@ -50,6 +50,15 @@ export const moka: AtsAdapter = {
   },
   nextButton: '.mobile-layout__footer button',
   uploadBusy: '.file_upload [class*="sd-Loading-"]',
+  // On a phone a field's title is a span, not a <label>, and the company's own questions sit in 基本信息: read the
+  // title as the question so 是否接收组织调配 or 语言技能 is not held back as a stray guess there.
+  questions: [
+    {
+      control: 'input, textarea, [contenteditable]',
+      within: '.mobile-layout__content [class*="applyField-"]',
+      text: '[class*="title-info-"] > [class*="title-"]',
+    },
+  ],
 };
 
 /**

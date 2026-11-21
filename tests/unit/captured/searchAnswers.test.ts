@@ -44,6 +44,17 @@ describe('searchAnswer', () => {
     expect(rows.data.result.suggestions.map((s) => s.name)).toContain('Canberra, Australian Capital Territory, Australia');
   });
 
+  it("answers Moka's school and major searches with what Moka said live, the sample resume's words only", () => {
+    const get = (path: string, words: string) => searchAnswer({ method: 'GET', url: `https://app.mokahr.com${path}?searchKey=${encodeURIComponent(words)}&source=locales`, postData: null });
+    const names = (words: string, path: string) => (JSON.parse(get(path, words)!.body) as Array<{ name: string }>).map((r) => r.name);
+    expect(names('浙江大学', '/api/schools/searchV2')[0]).toBe('浙江大学');
+    expect(names('澳大利亚国立大学', '/api/schools/searchV2')[0]).toBe('澳大利亚国立大学');
+    expect(names('计算机科学与技术', '/api/majors/search')).toEqual(['计算机科学与技术']);
+    // Moka has no major called 计算机科学: it offers the nearest one.
+    expect(names('计算机科学', '/api/majors/search')).toEqual(['计算机科学与技术']);
+    expect(get('/api/schools/searchV2', '清华大学')).toBeNull();
+  });
+
   it('leaves a search it has no recorded answer for unanswered', () => {
     expect(searchAnswer({ method: 'GET', url: 'https://jobs.lever.co/searchLocations?text=Canber', postData: null })).toBeNull();
     expect(searchAnswer({ method: 'GET', url: 'https://jobs.lever.co/searchLocations?text=canberra%20act', postData: null })).toBeNull();

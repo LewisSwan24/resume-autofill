@@ -7,6 +7,7 @@ import type { Inspection } from '../../tests/shared/capturedExpectations.ts';
 import { fabPoint, fillFixture, tabIdOf } from '../../tests/e2e/helpers.ts';
 import type { AdvanceState } from '../../src/background/wizardSession.ts';
 import { inspect, type Locators } from '../../tests/captured/readState.ts';
+import { isListedRead } from './searches.ts';
 
 export interface BlockedRequest {
   method: string;
@@ -40,7 +41,8 @@ function isGraphqlRead(method: string, url: string, body: string | null): boolea
 }
 
 /** Call before opening any page. Lets reads through; stops writes, sockets and service workers. */
-export async function guardWrites(context: BrowserContext): Promise<WriteGuard> {
+/** `reads`: POST paths the site only reads with (see isListedRead); every other write is still blocked. */
+export async function guardWrites(context: BrowserContext, reads: RegExp | null = null): Promise<WriteGuard> {
   const log = new Map<string, BlockedRequest>();
   let sockets = 0;
 
@@ -48,6 +50,7 @@ export async function guardWrites(context: BrowserContext): Promise<WriteGuard> 
     const request = route.request();
     const method = request.method();
     if (READ_METHODS.has(method) || isGraphqlRead(method, request.url(), request.postData())) return route.continue();
+    if (isListedRead(method, request.url(), reads)) return route.continue();
     const { host, pathname } = new URL(request.url());
     const key = `${method} ${host}${pathname}`;
     const entry = log.get(key) ?? { method, host, path: pathname, count: 0 };

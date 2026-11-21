@@ -124,6 +124,8 @@ export const PageMessageSchema = z.discriminatedUnion('kind', [
     kind: z.literal('scan'),
     count: z.number().int().min(0).max(MAX_SCAN_COUNT),
     iframes: z.number().int().min(0).max(MAX_FRAMES),
+    /** Top frame only: the step the page shows (its adapter's signature or its step bar's title); null when it names none. */
+    step: z.string().max(200).nullable().optional(),
   }),
   z.strictObject({ ...base, kind: z.literal('needs'), reqId, needs: FrameNeedsShape }),
   z.strictObject({ ...base, kind: z.literal('report'), reqId, runId: reqId, report: FillReportShape }),

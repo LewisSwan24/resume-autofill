@@ -199,6 +199,96 @@ const SERVICES: SearchService[] = [
       },
     },
   },
+  {
+    // Moka (app.mokahr.com): a GET per pause in typing, searchKey the words. Saved on the live page on 2026-11-21
+    // (live-check --save-searches, every write blocked) for the sample resume's schools.
+    kind: 'school',
+    asked: getParam('app.mokahr.com', '/api/schools/searchV2', 'searchKey'),
+    answers: {
+      '浙江大学': [
+        {
+          "id": "008ae5fdf8ef9364488ab183708a654f",
+          "name": "浙江大学",
+          "englishName": "Zhejiang University",
+          "tags": [
+            "双一流",
+            "中国大陆"
+          ]
+        },
+        {
+          "id": "0507327fdf8761c61fd9ab820b19ceca",
+          "name": "浙江大学医学院",
+          "englishName": "Zhejiang University School of Medicine",
+          "tags": [
+            "中国大陆",
+            "双一流-大学"
+          ]
+        },
+        {
+          "id": "1aae244c703e6bc250b65fa15379dd6c",
+          "name": "浙江大学远程教育学院",
+          "englishName": "",
+          "tags": []
+        },
+        {
+          "id": "992918f6bfa78f86ebc706838f52088f",
+          "name": "浙大城市学院",
+          "englishName": "Hangzhou City University",
+          "tags": [
+            "CDIO工程教育联盟",
+            "公办"
+          ]
+        },
+        {
+          "id": "0171b0470a703aede5491035261f3677",
+          "name": "浙大宁波理工学院",
+          "englishName": "Ningbo Tech University",
+          "tags": [
+            "公办",
+            "中国大陆"
+          ]
+        }
+      ],
+      '澳大利亚国立大学': [
+        {
+          "id": "605c5806339e128e4129645a3a71c14d",
+          "name": "澳大利亚国立大学",
+          "englishName": "The Australian National University (ANU）",
+          "tags": [
+            "2021年USNEWS排名_69",
+            "2021年QS排名_31"
+          ]
+        },
+        {
+          "id": "61338ae07787ee34dbbbb94ae9b5ca11",
+          "name": "澳大利亚国立大学商学院",
+          "englishName": "",
+          "tags": [
+            "海外院校"
+          ]
+        }
+      ],
+    },
+  },
+  {
+    // Moka's major search, saved the same way. It has no major called 计算机科学 and offers the nearest one.
+    kind: 'major',
+    asked: getParam('app.mokahr.com', '/api/majors/search', 'searchKey'),
+    answers: {
+      '计算机科学与技术': [
+        {
+          "name": "计算机科学与技术",
+          "englishName": "Computer Science & Technology"
+        }
+      ],
+      '计算机科学': [
+        {
+          "name": "计算机科学与技术",
+          "englishName": "Computer Science & Technology"
+        }
+      ],
+    },
+  },
 ];
 
 /** The answer one of these services gave on the live page to this request, or null when there is none. */

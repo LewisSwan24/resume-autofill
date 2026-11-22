@@ -17,6 +17,7 @@ const SAME_AS: Readonly<Record<string, string>> = {
   'basics.fullName': 'familyName',
   'basics.age': 'birthDate',
   'basics.isAdult': 'birthDate',
+  'education.fullTimeStudent': 'endDate',
   'workRights.citizenOrResident': 'status',
   'contact.addressCountry': 'address.country',
   'contact.addressProvince': 'address.province',

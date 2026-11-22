@@ -133,6 +133,14 @@ describe('global assignment', () => {
   });
 });
 
+describe('a full-time student now', () => {
+  it.each(['是否为全日制在校学生（非全日制、非在校不可参加实习，请联系您的招聘HR）', '是否为全日制在校学生', '是否全日制在校生'])('%s', (ask) => {
+    const s = scan(`<h3>申请信息</h3>${row(ask, '<select id="q"><option></option><option>是</option><option>否</option></select>', 'q')}`);
+    expect(keys(s)).toEqual(['education.fullTimeStudent']);
+    expect(s.cls[0]!.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+  });
+});
+
 describe('section context', () => {
   it('reads an ambiguous label ("时间") from the awards card', () => {
     const s = scan(`<h3>获奖情况</h3>${text('奖项名称', 'a')}${row('时间', '<input id="b" type="month">', 'b')}`);

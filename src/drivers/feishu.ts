@@ -109,6 +109,8 @@ async function pickLevel(control: Control, intent: Level, current: string | null
 // ---- dates -------------------------------------------------------------------------------------------------------
 
 const monthOf = (d: DatePart) => `${d.year}-${String(d.month).padStart(2, '0')}`;
+/** As the box's format asks: a box for a year alone (YYYY, as 获奖时间) takes the year, any other the month. */
+const dateFor = (input: HTMLInputElement, d: DatePart) => (/^y{4}$/i.test(input.placeholder.trim()) ? String(d.year) : monthOf(d));
 
 async function typeDate(input: HTMLInputElement, text: string, ctx: DriverContext): Promise<boolean> {
   if (input.value === text) return true;
@@ -143,7 +145,7 @@ async function fillDates(control: Control, intent: FillIntent, ctx: DriverContex
     // Filled as far as it can be: the end is for the applicant to say, on a form that has no word for "still going".
     return failed('still going, and the form has no word for that', readDates(control), 'needs_review');
   }
-  const wants = intent.kind === 'date' && inputs.length === 1 ? [monthOf(intent)] : intent.kind === 'dateRange' && inputs.length === 2 ? [monthOf(intent.start), monthOf(intent.end)] : null;
+  const wants = intent.kind === 'date' && inputs.length === 1 ? [dateFor(inputs[0]!, intent)] : intent.kind === 'dateRange' && inputs.length === 2 ? [monthOf(intent.start), monthOf(intent.end)] : null;
   if (!wants) return failed(`a ${intent.kind} answer on ${inputs.length} boxes`, readDates(control));
   for (const [i, want] of wants.entries()) {
     if (!(await typeDate(inputs[i]!, want, ctx))) return failed(`the date box did not keep ${want}`, readDates(control));

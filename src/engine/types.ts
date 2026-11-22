@@ -151,10 +151,12 @@ export interface FieldReport {
    * What the outcome does not say: why this row needs the user, or that its card was the page's own entry already.
    * `picked_other_name`: a search box held no option written as the resume writes it, and one under another name
    * was picked (`observed`); the user should confirm it is the same school.
+   * `answer_held`: the box already held an answer of the applicant's own (`observed`), different from the resume's
+   * (`value`), and was left as it is.
    * `sensitive_held`: a sensitive field the settings say to leave to the applicant. `sensitive_filled`: one they
    * said to fill, and it was.
    */
-  note?: 'same_file_held' | 'entry_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled';
+  note?: 'same_file_held' | 'entry_held' | 'answer_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled';
   /** Which entry of its section (0-based, in the resume's order for that section) this field belongs to. */
   entry?: number;
 }

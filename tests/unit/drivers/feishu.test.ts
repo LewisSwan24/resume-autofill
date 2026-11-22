@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { feishuDrivers } from '../../../src/drivers/feishu';
 import type { FillIntent } from '../../../src/drivers/types';
-import { feishuList } from '../../shared/feishuForm';
+import { feishuList, feishuMonth } from '../../shared/feishuForm';
 import { ctx1, firstControl } from './helpers';
 
 afterEach(() => {
@@ -36,5 +36,20 @@ describe('a search that finds nothing', () => {
     input.readOnly = false;
     await list.fill(control, answering('博士', 0.8), ctx1);
     expect(input.value).toBe('');
+  });
+});
+
+describe('a date box', () => {
+  const dates = feishuDrivers.find((d) => d.id === 'feishu-date')!;
+  const date: FillIntent = { kind: 'date', display: '2022-10', year: 2022, month: 10 };
+
+  it('takes the year alone when its format asks only for a year', async () => {
+    const control = firstControl(feishuMonth('YYYY'));
+    expect(await dates.fill(control, date, ctx1)).toMatchObject({ ok: true, observed: '2022' });
+  });
+
+  it('takes the month when its format asks for one', async () => {
+    const control = firstControl(feishuMonth());
+    expect(await dates.fill(control, date, ctx1)).toMatchObject({ ok: true, observed: '2022-10' });
   });
 });

@@ -337,6 +337,7 @@ export const zh = {
   'panel.editInput': '“{label}”的新值',
   'panel.editHelp': '会直接写入页面上的这个字段。',
   'panel.note.entryHeld': '页面上已有这一条，里面的内容没有改动。要按简历填写的话，先在页面上清空，再填写一次。',
+  'panel.note.answerHeld': '这一格本来就有内容，和简历不同，所以没有改动。要换成简历的内容，先在页面上清空，再填写一次。',
   'panel.note.sameFileHeld': '页面上已有同名文件，它可能是旧版本。要换的话，先在页面上删掉，再填写一次。',
   'panel.note.sensitiveHeld': '你的设置是「只提醒」，这一格没有写入。请自己填，或在设置里改成「直接填」。',
   'panel.note.sensitiveFilled': '这是敏感字段，按你的设置「直接填」写入了。',

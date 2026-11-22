@@ -2,12 +2,13 @@
 import { resolveAdapter } from '../adapters/resolve';
 import type { HeldFile } from '../adapters/types';
 import { registerAllDrivers } from '../drivers';
-import { intentDisplay } from '../drivers/execute';
+import { intentDisplay, valuesEquivalent } from '../drivers/execute';
+import { getDriver } from '../drivers/registry';
 import type { FileData } from '../drivers/types';
 import { waitFor } from '../drivers/wait';
 import { baseReport, planFill, type CardDemand, type FillStep } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
-import type { Classification, Control, FieldContext, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
+import type { Classification, Control, FieldContext, FieldKey, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { isVisible } from '../engine/visibility';
 import type { Resume, SiteRecipe } from '../schema';
 import { isSensitiveFieldKey, type SensitiveFieldMode } from '../schema/sensitive';
@@ -92,6 +93,11 @@ function heldFileReport(step: FillStep): FieldReport {
   };
 }
 
+/** A box that already held an answer of its own: left as it is, with the resume's value beside it to compare. */
+function heldAnswerReport(step: FillStep, answer: string): FieldReport {
+  return { ...heldFileReport(step), observed: answer, note: 'answer_held' };
+}
+
 /** Section-level failure rows: an add button was clicked but no card appeared. */
 function growthReports(growth: SectionGrowth[]): FieldReport[] {
   return growth
@@ -159,6 +165,33 @@ function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
   return { plan, left, cardDemand, entryOf, shown: held.shown };
 }
 
+/** Kinds whose answer a person typed or picked: a list or a radio can start on a default nobody chose. */
+const TYPED_KINDS: ReadonlySet<Control['kind']> = new Set<Control['kind']>(['text', 'textarea', 'date']);
+
+/**
+ * What a site writes into a fresh form by itself: the account's name and contact details, or a place it guessed from
+ * where the browser is. Not the applicant's answer to this form, so the resume's goes in over it.
+ */
+const BROUGHT_BY_THE_SITE: ReadonlySet<FieldKey> = new Set<FieldKey>([
+  'basics.fullName',
+  'basics.familyName',
+  'basics.givenName',
+  'basics.englishName',
+  'basics.currentLocation',
+]);
+const broughtByTheSite = (key: FieldKey): boolean => key.startsWith('contact.') || BROUGHT_BY_THE_SITE.has(key);
+
+/** What a box the applicant types or picks a date in already holds, as its driver reads it; null when empty. */
+function heldAnswer(control: Control | undefined): string | null {
+  if (!control || !TYPED_KINDS.has(control.kind)) return null;
+  try {
+    const text = getDriver(control)?.read(control)?.trim();
+    return text ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fill the page with the resume. Never clicks submit / next buttons (only section add buttons).
  * Fields are filled strictly one after another; each result is read back from the page.
@@ -193,6 +226,13 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
         : s,
     );
 
+  // Read before anything is written: a page that reads an uploaded resume writes its own answers in a moment.
+  const held = new Map<string, string>();
+  for (const step of plannedSteps) {
+    const answer = Object.hasOwn(overrides, step.fieldId) || broughtByTheSite(step.fieldKey) ? null : heldAnswer(controls.get(step.fieldId));
+    if (answer !== null) held.set(step.fieldId, answer);
+  }
+
   const results: FieldReport[] = [...plan.reports, ...left];
   // Files first: many forms read an uploaded resume and write over their fields with what they find.
   const steps = [...plannedSteps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
@@ -210,6 +250,12 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     if (uploadBusy && !read && step.intent.kind !== 'file') {
       read = true;
       await waitForUploadRead(doc, uploadBusy, uploaded, resumeTaken ? adapter?.uploadSignMs : undefined);
+    }
+    // The page opened with an answer of the applicant's own (a form kept from an earlier application): theirs to change.
+    const answer = held.get(step.fieldId);
+    if (answer !== undefined && !valuesEquivalent(intentDisplay(step.intent), answer)) {
+      results.push(heldAnswerReport(step, answer));
+      continue;
     }
     if (step.intent.kind === 'file') uploaded = true;
     const result = await runStep(step, controls, doc);

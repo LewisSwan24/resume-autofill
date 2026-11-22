@@ -436,3 +436,52 @@ describe('runFill and a sensitive field', () => {
     });
   });
 });
+
+// A page that opens with the applicant's earlier answers (Feishu fills a form from the last application): an answer
+// already there is theirs to change, so it stays, and the row says what the resume has instead.
+describe('runFill on a page that already holds answers', () => {
+  const preset = (id: string, text: string) => ((document.getElementById(id) as HTMLInputElement).value = text);
+  const row = <T extends { label?: string }>(fields: T[], label: string): T => fields.find((f) => f.label === label)!;
+  /** The form of mount() with a question beside the name that only the applicant answers. */
+  const mountWithStart = () => {
+    mount();
+    document.getElementById('vc')!.insertAdjacentHTML('afterend', '<label for="av">预计入职时间</label><input id="av">');
+  };
+
+  it('keeps an answer of its own and asks about it, and fills the empty boxes beside it', async () => {
+    mountWithStart();
+    preset('av', '2026.12-');
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(value('av')).toBe('2026.12-');
+    expect(value('nm')).toBe('林知远');
+    expect(row(report.fields, '预计入职时间')).toMatchObject({ outcome: 'needs_review', observed: '2026.12-', note: 'answer_held' });
+  });
+
+  // A site writes the account's name, phone and email, or a city it guessed, into a fresh form: not the applicant's
+  // answer to this one, so the resume's goes in.
+  it('writes over what a site brings from the account: the name and how to reach the applicant', async () => {
+    mountWithStart();
+    preset('nm', '王小明');
+    preset('em', 'account@example.com');
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(value('nm')).toBe('林知远');
+    expect(value('em')).toBe('zhiyuan.lin@example.com');
+    expect(row(report.fields, '姓名').outcome).toBe('filled');
+  });
+
+  it('an answer that is already the resume’s counts as filled', async () => {
+    mountWithStart();
+    preset('av', '2026-07');
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(row(report.fields, '预计入职时间').outcome).toBe('filled');
+  });
+
+  it('writes over it when the applicant chose a value for that box in the preview', async () => {
+    mountWithStart();
+    preset('av', '2026.12-');
+    const preview = runPreview(document, { resume: zh, files }, { idFor: (el) => el.id });
+    const start = preview.items.find((i) => i.label === '预计入职时间')!;
+    await runFill(document, { resume: zh, files }, { idFor: (el) => el.id, filter: { excludedFieldIds: [], overrides: { [start.fieldId]: '2026-07' } } });
+    expect(value('av')).toBe('2026-07');
+  });
+});

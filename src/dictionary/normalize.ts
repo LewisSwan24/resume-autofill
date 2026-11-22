@@ -49,7 +49,9 @@ const NOISE_PHRASES: RegExp[] = [
   /(?:非必填|必填|选填|必选)/g,
   /请(?:输入|选择|填写|选填|上传|选)/g,
   // How to write the answer, in brackets after the question: 籍贯（填写格式：xx省xx市）. Brackets are half-width by now.
-  /((?:填写|书写)?格式(?:为)?:[^)]*)/g,
+  /\((?:填写|书写)?格式(?:为)?:[^)]*\)/g,
+  // What to do, in brackets after the question: 是否为全日制在校学生（非全日制、非在校不可参加实习，请联系您的招聘HR）.
+  /\([^)]*(?:请|不可|不能|须|如有|若有)[^)]*\)/g,
 ];
 
 // ( ) [ ] * : plus sentence punctuation. Full-width forms are already folded by NFKC.

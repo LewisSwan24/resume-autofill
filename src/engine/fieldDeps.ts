@@ -109,6 +109,7 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'basics.fullName': ['basics.familyName', 'basics.givenName'],
   'basics.age': ['basics.birthDate'],
   'basics.isAdult': ['basics.birthDate'],
+  'education.fullTimeStudent': ['education.startDate', 'education.endDate', 'education.current', 'education.educationType'],
   'workRights.citizenOrResident': ['workRights.status', 'basics.nationality'],
   'basics.currentLocation': ['contact.addressCountry', 'contact.addressProvince', 'contact.addressCity'],
   // On a list of places these tell the ones of one name apart (matchPlace in values.ts).

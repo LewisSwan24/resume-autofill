@@ -78,6 +78,20 @@ describe('resolveValue', () => {
     expect(resolveValue('basics.age', zh, 0, 'basics', { now: new Date(2026, 2, 15) })?.raw).toBe(24);
   });
 
+  it('works out "a full-time student now" from the latest schooling: still going and full-time', () => {
+    const now = new Date(2026, 10, 20);
+    const latest = (over: Partial<Resume['education'][number]>) => ({ ...zh, education: [zh.education[0]!, { ...zh.education[1]!, ...over }] });
+    const student = (r: Resume) => resolveValue('education.fullTimeStudent', r, 0, 'basics', { now })?.raw;
+    // The sample's master's ended in 2026-06.
+    expect(student(zh)).toBe(false);
+    expect(student(latest({ endDate: '2027-06', educationType: 'full_time' }))).toBe(true);
+    expect(student(latest({ endDate: null, current: true, educationType: 'full_time' }))).toBe(true);
+    expect(student(latest({ endDate: '2026-11', educationType: 'full_time' }))).toBe(true);
+    expect(student(latest({ endDate: '2027-06', educationType: 'part_time' }))).toBe(false);
+    // Still going, but whether full-time the resume does not say: nothing is guessed.
+    expect(student(latest({ endDate: '2027-06', educationType: null }))).toBeUndefined();
+  });
+
   it('works out "over 18" from the birth date, and leaves a month-only date on the birthday month unsaid', () => {
     const born = (birthDate: string) => ({ ...en, basics: { ...en.basics, birthDate } });
     const adult = (birthDate: string, now: Date) => resolveValue('basics.isAdult', born(birthDate), 0, 'basics', { now })?.raw;

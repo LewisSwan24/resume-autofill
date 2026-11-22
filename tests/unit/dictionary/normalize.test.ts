@@ -19,6 +19,9 @@ describe('normalizeLabel', () => {
     ['format in brackets', '籍贯（填写格式：xx省xx市）', '籍贯'],
     ['format in brackets, upper case', '目前所在地（填写格式：XX省XX市）', '目前所在地'],
     ['format given as', '出生年月（格式为：YYYY-MM）', '出生年月'],
+    // A note in brackets that tells the applicant what to do is not part of the question.
+    ['instruction in brackets', '是否为全日制在校学生（非全日制、非在校不可参加实习，请联系您的招聘HR）', '是否为全日制在校学生'],
+    ['what a bracket names stays', '外语水平（英语）', '外语水平英语'],
     ['colon + brackets', 'Phone: [mobile]', 'phone mobile'],
     ['collapses whitespace', '  First   name \t ', 'first name'],
     ['spaces between CJK chars are dropped', '姓    名', '姓名'],

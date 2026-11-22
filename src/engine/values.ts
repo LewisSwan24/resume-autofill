@@ -286,6 +286,18 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
       const { country, province, city } = contact.address;
       return province.trim() || city.trim() ? { raw: { country, province, city }, source: 'contact.address' } : null;
     }
+    case 'education.fullTimeStudent': {
+      // The latest schooling: still going (no end yet, or an end this month or later) and full-time.
+      const latest = [...resume.education].sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''))[0];
+      if (!latest) return null;
+      const now = opts.now ?? new Date();
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const end = (latest.endDate ?? '').slice(0, 7);
+      if (!latest.current && end !== '' && end < thisMonth) return { raw: false, source: 'education.endDate' };
+      if (!latest.current && end === '') return null;
+      if (latest.educationType === 'part_time') return { raw: false, source: 'education.educationType' };
+      return latest.educationType === 'full_time' ? { raw: true, source: 'education.educationType' } : null;
+    }
     case 'basics.isAdult': {
       // A month-only birth date in the eighteenth birthday's month could go either way: say nothing.
       const birth = basics.birthDate.trim();

@@ -131,6 +131,10 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '年龄|岁数|周岁|实际年龄|您的年龄',
     'Age|Your age|Age (years)|Current age|Age in years',
   ),
+  'education.fullTimeStudent': s(
+    '是否为全日制在校学生|是否全日制在校学生|是否为全日制在校生|是否全日制在校生|是否为在校全日制学生|是否全日制在读',
+    'Are you a full-time student|Are you currently a full-time student|Currently enrolled full-time',
+  ),
   'basics.isAdult': s(
     '是否年满18周岁|是否已满18周岁|是否年满18岁|是否已满18岁|是否年满十八周岁|年满18周岁|是否成年|是否已成年',
     'Are you over 18|Are you over 18 years|Are you over 18 years old|Are you 18 or over|Are you 18 or older|Are you 18 years or older|Are you 18 years of age or older|Are you at least 18|Are you at least 18 years of age|Are you at least 18 years old|Are you over the age of 18|Over 18|18 years or older|18 or over',

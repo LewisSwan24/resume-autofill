@@ -166,6 +166,7 @@ function FieldItem({
           </div>
 
           {field.note === 'same_file_held' ? <p className="raf-help raf-field-note">{t('panel.note.sameFileHeld')}</p> : null}
+          {field.note === 'answer_held' ? <p className="raf-help raf-field-note">{t('panel.note.answerHeld')}</p> : null}
           {field.note === 'sensitive_held' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveHeld')}</p> : null}
           {field.note === 'sensitive_filled' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveFilled')}</p> : null}
           {held ? <p className="raf-help raf-field-note">{t('panel.note.entryHeld')}</p> : null}

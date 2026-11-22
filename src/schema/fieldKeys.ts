@@ -135,6 +135,8 @@ export const FIELD_KEYS: FieldKeyDef[] = [
   // A span of dates in one field, worked out from the two ends.
   def('education.period', 'period', ['education'], { derived: true }),
   // 届别: the year of graduating.
+  // Still at school and full-time, as a form asks before an internship (蔚来): worked out from the latest schooling.
+  def('education.fullTimeStudent', 'bool', ['basics', 'jobIntention', 'education', 'other'], { derived: true, enumDomain: 'yesNo' }),
   def('education.classYear', 'text', ['education', 'basics', 'other'], { derived: true }),
   // 在校导师: a referee who supervised the applicant at this card's school.
   def('education.supervisor', 'text', ['education'], { derived: true }),

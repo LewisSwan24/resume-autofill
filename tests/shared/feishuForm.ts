@@ -11,8 +11,9 @@ const area = (name: string) => `<div class="ud__textarea"><textarea class="ud__t
 export const feishuList = (shown = '') =>
   `<div class="ud__select select__45922b"><div class="ud__select__selector ud__select__selector-lg ud__select__selector-readOnly"><div class="ud__select__selector__content">${shown ? `<div class="ud__select__selector__selectItem ud__textOverflow">${shown}</div>` : ''}<div class="ud__select__selector__search"><input class="ud__select__selector__search__input ud__native-input" role="combobox" type="search" readonly=""></div></div><div class="ud__select__selector__arrow"><span class="universe-icon"></span></div></div></div>`;
 export const feishuSearch = (name: string) => `<div class="ud__select"><div>${box(name)}</div></div>`;
-export const feishuMonth = () =>
-  `<div class="ud__picker ud__picker--size-lg"><div class="ud__picker-dateInput ud__picker-inputWrapper"><div class="ud__picker-inputWrapper-inner"><input class="ud__picker-input ud__native-input" size="12" placeholder="YYYY-MM"></div></div></div>`;
+/** One month, or one year when `format` is YYYY (获奖时间 asks only for that). */
+export const feishuMonth = (format = 'YYYY-MM') =>
+  `<div class="ud__picker ud__picker--size-lg"><div class="ud__picker-dateInput ud__picker-inputWrapper"><div class="ud__picker-inputWrapper-inner"><input class="ud__picker-input ud__native-input" size="12" placeholder="${format}"></div></div></div>`;
 const clearable = () => box('').replace('</label>', '<span class="ud__input__clear-icon"></span></label>');
 export const feishuSpan = () =>
   `<div class="throne-biz-date-range-picker-wrapper"><div class="throne-biz-date-range-picker-input">${clearable()}</div><div class="throne-biz-date-range-picker-rangeInput-seperator"><div class="throne-biz-date-range-picker-seperator"></div></div><div class="throne-biz-date-range-picker-input">${clearable()}</div></div>`;

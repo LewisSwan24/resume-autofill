@@ -184,7 +184,7 @@ export function setLinkedResume(profile: Profile, id: string, linkedId: string |
 
 // ------------------------------------------------------------------ attachments
 
-export const ATTACHMENT_SLOTS = ['resumeFileId', 'photoFileId', 'transcriptFileId'] as const;
+export const ATTACHMENT_SLOTS = ['resumeFileId', 'photoFileId', 'transcriptFileId', 'portfolioFileId'] as const;
 export type AttachmentSlot = (typeof ATTACHMENT_SLOTS)[number];
 
 /** Set (string) or clear (`null`) an attachment id. */

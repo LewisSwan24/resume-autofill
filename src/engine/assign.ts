@@ -24,6 +24,15 @@ const FALLBACK_CAP = 0.7;
 const DEFAULT_MIN_CONFIDENCE = 0.5;
 
 /** Scope in which keys must be unique. */
+/**
+ * The best guess belongs to another part of the form, and so does another just as good: the bare label (描述 under 作品)
+ * says nothing of which part it is, so neither is taken.
+ */
+function tiedElsewhere(candidates: readonly ScoredCandidate[]): boolean {
+  const [first, second] = candidates;
+  return !!first?.elsewhere && !!second?.elsewhere && Math.abs(first.confidence - second.confidence) < 1e-6;
+}
+
 export function scopeKey(ctx: FieldContext, section: SectionKey | null): string {
   return ctx.group ? `g:${ctx.group.key}#${ctx.group.index}` : `s:${section ?? ''}`;
 }
@@ -72,7 +81,7 @@ export function assign(
   for (const { index, cand, scope } of claims) {
     if (assigned.has(index)) continue;
     // Its own key went to another control: a key of another part of the form is no second answer.
-    if (cand.elsewhere && cand !== scores[index]!.candidates[0]) continue;
+    if (cand.elsewhere && (cand !== scores[index]!.candidates[0] || tiedElsewhere(scores[index]!.candidates))) continue;
     let keys = taken.get(scope);
     if (!keys) taken.set(scope, (keys = new Set()));
     if (cand.fieldKey === SCORE_KEY) {

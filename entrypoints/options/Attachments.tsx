@@ -15,6 +15,7 @@ const SLOT_LABEL: Record<AttachmentSlot, string> = {
   resumeFileId: 'options.attach.resume',
   photoFileId: 'options.attach.photo',
   transcriptFileId: 'options.attach.transcript',
+  portfolioFileId: 'options.attach.portfolio',
 };
 
 type TypeKind = 'pdf' | 'image' | 'pdfOrImage';
@@ -22,6 +23,7 @@ const SLOT_KIND: Record<AttachmentSlot, TypeKind> = {
   resumeFileId: 'pdf',
   photoFileId: 'image',
   transcriptFileId: 'pdfOrImage',
+  portfolioFileId: 'pdfOrImage',
 };
 const KIND_ACCEPT: Record<TypeKind, string> = {
   pdf: 'application/pdf,.pdf',

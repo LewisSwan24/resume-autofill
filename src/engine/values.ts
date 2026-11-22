@@ -58,6 +58,7 @@ const ATTACHMENT_FIELDS: Record<string, keyof Resume['attachments']> = {
   resume: 'resumeFileId',
   photo: 'photoFileId',
   transcript: 'transcriptFileId',
+  portfolio: 'portfolioFileId',
 };
 
 type ArrayModule =

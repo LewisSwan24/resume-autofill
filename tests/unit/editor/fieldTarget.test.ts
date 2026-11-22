@@ -33,6 +33,7 @@ describe('targetOfField – where the profile page should jump for a field', () 
 
   it('attachments go to their upload slot', () => {
     expect(targetOfField('attachments.transcript')).toEqual({ module: 'attachments', field: 'transcriptFileId' });
+    expect(targetOfField('attachments.portfolio')).toEqual({ module: 'attachments', field: 'portfolioFileId' });
   });
 
   it('an entry of a list module takes the index from the source, else the first entry', () => {

@@ -83,7 +83,7 @@ type LocalSheet = 'report' | 'resume' | 'pageInfo' | 'advance' | 'sensitive' | n
 /** Sessions already started: the screen remounts when the page comes back from the 简历 tab. */
 const started = new WeakSet<object>();
 
-const ATTACHMENT_SLOTS = ['resumeFileId', 'photoFileId', 'transcriptFileId'] as const;
+const ATTACHMENT_SLOTS = ['resumeFileId', 'photoFileId', 'transcriptFileId', 'portfolioFileId'] as const;
 
 /** One key per run transition worth reacting to. */
 function runKey(run: RunState): string {

@@ -23,9 +23,10 @@ const SLOT_LABEL: Record<AttachmentSlot, string> = {
   resumeFileId: 'options.attach.resume',
   photoFileId: 'options.attach.photo',
   transcriptFileId: 'options.attach.transcript',
+  portfolioFileId: 'options.attach.portfolio',
 };
 type Kind = 'pdf' | 'image' | 'pdfOrImage';
-const SLOT_KIND: Record<AttachmentSlot, Kind> = { resumeFileId: 'pdf', photoFileId: 'image', transcriptFileId: 'pdfOrImage' };
+const SLOT_KIND: Record<AttachmentSlot, Kind> = { resumeFileId: 'pdf', photoFileId: 'image', transcriptFileId: 'pdfOrImage', portfolioFileId: 'pdfOrImage' };
 const KIND_ACCEPT: Record<Kind, string> = { pdf: 'application/pdf,.pdf', image: 'image/*', pdfOrImage: 'application/pdf,image/*,.pdf' };
 
 /** The picker's `accept` is only a hint, so check the file itself. */

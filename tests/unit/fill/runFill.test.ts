@@ -92,6 +92,19 @@ describe('runFill', () => {
     expect(order).toContain('nm');
   });
 
+  it('puts the portfolio file in the portfolio box and the resume in the resume box', async () => {
+    document.body.innerHTML = `<form><h2>附件</h2>
+      <div><label for="cv">简历附件</label><input id="cv" type="file"></div>
+      <div><label for="wk">作品附件</label><input id="wk" type="file"></div></form>`;
+    const works = { ...files, 'my-works': { ...files['sample-resume-zh']!, name: '作品集.pdf' } };
+    const resume = { ...zh, attachments: { ...zh.attachments, portfolioFileId: 'my-works' } };
+    const { report } = await runFill(document, { resume, files: works });
+    const name = (id: string) => (document.getElementById(id) as HTMLInputElement).files?.[0]?.name;
+    expect(name('cv')).toBe('林知远-简历.pdf');
+    expect(name('wk')).toBe('作品集.pdf');
+    expect(report.fields.find((f) => f.label === '作品附件')).toMatchObject({ outcome: 'filled', fieldKey: 'attachments.portfolio' });
+  });
+
   it('never clicks the submit button', async () => {
     const { clicks } = mount();
     await runFill(document, { resume: zh, files });

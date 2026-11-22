@@ -275,6 +275,7 @@ export const AttachmentsSchema = z.object({
   resumeFileId: z.string().optional(),
   photoFileId: z.string().optional(),
   transcriptFileId: z.string().optional(),
+  portfolioFileId: z.string().optional(),
 });
 
 export const CustomAnswerSchema = z.object({

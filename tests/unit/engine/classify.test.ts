@@ -318,6 +318,32 @@ describe('evidence weights and types', () => {
       expect(scan(file('上传简历', 'a')).cls[0]!.fieldKey).toBe('attachments.resume');
     });
 
+    // A portfolio is a file on an upload box and a link on a text box: the box says which.
+    it.each(['作品集', '作品附件', '上传作品集', 'Portfolio', 'Portfolio upload'])('%j on an upload box is the portfolio file', (label) => {
+      expect(scan(file(label, 'a')).cls[0]!.fieldKey).toBe('attachments.portfolio');
+    });
+
+    it('a portfolio on a text box is still its link, and a resume upload beside it is still the resume', () => {
+      expect(scan(text('作品集', 'a')).cls[0]!.fieldKey).toBe('contact.portfolio');
+      const s = scan(`${file('简历附件', 'a')}${file('作品附件', 'b')}`);
+      expect(keys(s)).toEqual(['attachments.resume', 'attachments.portfolio']);
+    });
+
+    // Which file such a box wants is the applicant's call: never the portfolio alone.
+    it('one box for the resume and the portfolio together never takes the portfolio alone', () => {
+      expect(scan(file('上传简历及作品集', 'a')).cls[0]!.fieldKey).not.toBe('attachments.portfolio');
+      expect(scan(file('Resume and portfolio', 'a')).cls[0]!.fieldKey).not.toBe('attachments.portfolio');
+    });
+
+    // NIO's 作品: a link, a file and a few words about the work. None of it is a job.
+    it('a 作品 section is the portfolio: its link, its file, and a description that is no job’s', () => {
+      const s = scan(
+        `<h2>作品</h2><div>${text('作品链接', 'a')}${file('作品附件', 'b')}${row('描述', '<textarea id="c"></textarea>', 'c')}</div>` +
+          `<h2>工作经历</h2><div>${text('公司名称', 'd')}${row('描述', '<textarea id="e"></textarea>', 'e')}</div>`,
+      );
+      expect(keys(s)).toEqual(['contact.portfolio', 'attachments.portfolio', null, 'work.company', 'work.description']);
+    });
+
     it('the wording only counts on an upload box', () => {
       expect(scan(text('Autofill from resume', 'a')).cls[0]!.reason).not.toBe('never_fill');
     });

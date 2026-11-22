@@ -237,6 +237,7 @@ export const en: Record<MessageKey, string> = {
   'options.attach.resume': 'Resume file (PDF)',
   'options.attach.photo': 'Photo',
   'options.attach.transcript': 'Transcript',
+  'options.attach.portfolio': 'Portfolio',
   'options.attach.upload': 'Upload',
   'options.attach.replace': 'Replace',
   'options.attach.remove': 'Remove',

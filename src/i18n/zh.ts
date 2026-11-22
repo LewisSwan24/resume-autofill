@@ -236,6 +236,7 @@ export const zh = {
   'options.attach.resume': '简历文件 (PDF)',
   'options.attach.photo': '证件照',
   'options.attach.transcript': '成绩单',
+  'options.attach.portfolio': '作品集',
   'options.attach.upload': '上传',
   'options.attach.replace': '替换',
   'options.attach.remove': '移除',

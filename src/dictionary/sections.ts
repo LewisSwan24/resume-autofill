@@ -92,6 +92,8 @@ export const SECTION_SYNONYMS: Record<SectionKey, string[]> = {
   attachments: [
     '附件', '附件上传', '上传附件', '简历附件', '文件上传', '材料上传', '上传简历',
     'Attachments', 'Documents', 'Upload documents', 'Supporting documents', 'File uploads', 'Upload resume',
+    // A portfolio: its link and its file. Feishu calls the section 作品.
+    '作品', '作品集', '作品展示', '个人作品', 'Portfolio', 'Work samples',
   ],
   other: [
     '其他信息', '其它信息', '其他', '补充信息', '附加信息', '更多信息', '其他情况',

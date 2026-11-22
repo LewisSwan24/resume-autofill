@@ -367,6 +367,8 @@ describe('buildResumeSubset: attachments', () => {
       transcriptFileId: 'f-tr',
     });
     expect(buildResumeSubset(r, needs({ fieldKeys: ['contact.email'] })).attachments).toEqual({});
+    const withWork = { ...zh, attachments: { resumeFileId: 'f-resume', portfolioFileId: 'f-works' } };
+    expect(buildResumeSubset(withWork, needs({ attachmentKeys: ['attachments.portfolio'] })).attachments).toEqual({ portfolioFileId: 'f-works' });
   });
 
   it('a missing file id stays missing', () => {

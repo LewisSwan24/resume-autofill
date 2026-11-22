@@ -346,6 +346,13 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '照片|证件照|个人照片|上传照片|头像|上传头像|免冠照片|一寸照片|一寸照|电子照片|相片',
     'Photo|Photo upload|Profile photo|Profile picture|Upload photo|Picture|Headshot|Passport photo|Your photo|Avatar',
   ),
+  // A link on a text box is contact.portfolio, under the same words: the box's kind tells the two apart.
+  'attachments.portfolio': s(
+    '作品集|作品附件|作品集附件|上传作品集|作品集文件|作品文件|上传作品|个人作品集',
+    'Portfolio|Portfolio upload|Upload portfolio|Upload your portfolio|Portfolio file|Work samples|Work sample|Design portfolio|Attach portfolio',
+    // One box for both takes the resume.
+    '简历|resume|cv',
+  ),
   'attachments.transcript': s(
     '成绩单|上传成绩单|成绩单附件|学业成绩单|在校成绩单|成绩证明',
     'Transcript|Academic transcript|Academic record|Official transcript|Upload transcript|Transcript upload|Academic results|Record of results|Statement of results',

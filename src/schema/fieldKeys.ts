@@ -177,7 +177,7 @@ export const FIELD_KEYS: FieldKeyDef[] = [
   def('misc.selfIntroduction', 'longtext', ['selfIntro', 'other']),
   def('misc.hobbies', 'longtext', ['selfIntro', 'other']),
 
-  ...module('attachments', ['attachments', 'other'], { resume: 'file', photo: 'file', transcript: 'file' }),
+  ...module('attachments', ['attachments', 'other'], { resume: 'file', photo: 'file', transcript: 'file', portfolio: 'file' }),
 ];
 
 const BY_KEY = new Map(FIELD_KEYS.map((d) => [d.key, d]));

@@ -88,6 +88,7 @@ describe('FIELD_KEYS', () => {
       'attachments.resume': 'file',
       'attachments.photo': 'file',
       'attachments.transcript': 'file',
+      'attachments.portfolio': 'file',
     };
     for (const [key, type] of Object.entries(expected)) {
       expect(getFieldKeyDef(key)?.type, key).toBe(type);

@@ -68,3 +68,69 @@ export const FEISHU_FORM =
   moduleOf('自我评价', item('self_evaluation', '自我评价', area('self_evaluation'), false)) +
   `<label class="ud__checkbox"><input type="checkbox" class="ud__checkbox-input"><span>我已阅读并同意隐私政策</span></label>` +
   `</div></form>`;
+
+/**
+ * A list of places drawn as a tree (NIO's 期望工作地点): country, province, city, each with a checkbox. Typing in the
+ * box shows the places that match with the path down to them; the ticked ones show in the box. Returns how to stop.
+ */
+export function behaveAsPlaceTree(doc: Document, tree: Record<string, Record<string, string[]>>, ticked: string[] = []): () => void {
+  const root = () => doc.querySelector<HTMLElement>('.ud__select')!;
+  const input = () => root().querySelector<HTMLInputElement>('input')!;
+  const panel = () => doc.querySelector<HTMLElement>('.ud__select__dropdown');
+  // A place is ticked when it or a place it lies in is.
+  const node = (text: string, depth: number, within: string[] = []) =>
+    `<div class="ud__tree__node" data-depth="${depth}"><label class="ud__checkbox__wrapper ud__tree__node__checkbox"><span class="ud__checkbox"><input type="checkbox" class="ud__checkbox__input"${[text, ...within].some((t) => ticked.includes(t)) ? ' checked' : ''}></span></label><div class="ud__tree__node__label">${text}</div></div>`;
+  const render = () => {
+    const q = input().value.trim();
+    const rows: string[] = [];
+    for (const [country, provinces] of Object.entries(tree)) {
+      if (!q) {
+        rows.push(node(country, 0));
+        continue;
+      }
+      for (const [province, cities] of Object.entries(provinces)) {
+        const hits = cities.filter((c) => c.includes(q));
+        if (hits.length === 0 && !province.includes(q)) continue;
+        rows.push(node(country, 0), node(province, 1, [country]), ...hits.map((c) => node(c, 2, [country, province])));
+      }
+    }
+    panel()!.innerHTML = `<div class="ud__tree">${rows.join('')}</div>`;
+    root().querySelector('.ud__select__selector__content')!.innerHTML =
+      ticked.map((t) => `<div class="ud__overflow__item"><span class="ud__tag ud__select__selector__tag"><div class="ud__tag__content">${t}</div></span></div>`).join('') +
+      `<div class="ud__select__selector__search"><input class="ud__select__selector__search__input ud__native-input" value="${q}"></div>`;
+  };
+  const onClick = (e: Event) => {
+    const t = e.target as Element;
+    if (t.closest('.ud__select__selector') && !panel()) {
+      doc.body.insertAdjacentHTML('beforeend', '<div class="ud__select__dropdown"></div>');
+      render();
+      return;
+    }
+    const box = t.closest('.ud__tree__node__checkbox');
+    if (box) {
+      const text = box.closest('.ud__tree__node')!.querySelector('.ud__tree__node__label')!.textContent!;
+      const at = ticked.indexOf(text);
+      if (at >= 0) ticked.splice(at, 1);
+      else ticked.push(text);
+      render();
+    }
+  };
+  const onInput = (e: Event) => {
+    if ((e.target as Element).closest('.ud__select') && panel()) {
+      const value = (e.target as HTMLInputElement).value;
+      render();
+      input().value = value;
+      render();
+    }
+  };
+  doc.addEventListener('click', onClick, true);
+  doc.addEventListener('input', onInput, true);
+  return () => {
+    doc.removeEventListener('click', onClick, true);
+    doc.removeEventListener('input', onInput, true);
+  };
+}
+
+/** The box of such a list, empty. */
+export const feishuPlaceList = () =>
+  `<div class="ud__select"><div class="ud__select__selector ud__select__selector-lg"><div class="ud__select__selector__content"><div class="ud__select__selector__search"><input class="ud__select__selector__search__input ud__native-input"></div></div></div></div>`;

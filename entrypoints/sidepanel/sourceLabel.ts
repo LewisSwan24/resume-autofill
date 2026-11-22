@@ -13,6 +13,7 @@ const ATTACHMENT_LABEL: Readonly<Record<string, MessageKey>> = {
   resumeFileId: 'options.attach.resume',
   photoFileId: 'options.attach.photo',
   transcriptFileId: 'options.attach.transcript',
+  portfolioFileId: 'options.attach.portfolio',
 };
 
 const PATH_HEAD = /^([A-Za-z]+)(?:\[(\d+)\])?(?:\.(.+))?$/;

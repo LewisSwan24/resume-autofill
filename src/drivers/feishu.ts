@@ -9,7 +9,8 @@ import { waitFor } from './wait';
 
 const PANEL = '.ud__select__dropdown';
 const OPTION = '.ud__select__list__item';
-const CHOSEN = '.ud__select__selector__selectItem';
+/** One answer shows as an item; several, as tags. */
+const CHOSEN = '.ud__select__selector__selectItem, .ud__select__selector__tag .ud__tag__content';
 const OPENS_BY_ITSELF_MS = 500;
 const SEARCH_MS = 3000;
 const MIN_SEARCH_MS = 300;
@@ -30,6 +31,7 @@ function readList(control: Control): string | null {
 type Level = Pick<Extract<FillIntent, { kind: 'choice' }>, 'query' | 'match'>;
 
 async function fillList(control: Control, intent: FillIntent, ctx: DriverContext): Promise<FillResult> {
+  if (intent.kind === 'multi') return fillPlaces(control, intent, ctx);
   if (intent.kind !== 'choice') return failed(`a ${intent.kind} answer on a single list`, readList(control));
   const current = readList(control);
   const until = Date.now() + ctx.timeoutMs - TIDY_MS;
@@ -104,6 +106,54 @@ async function pickLevel(control: Control, intent: Level, current: string | null
   const taken = await waitFor(() => readList(control) === chosen.info.label || null, { timeout: 1500, signal: ctx.signal, root: ctx.doc });
   shutDropdown(ctx.doc, () => near() !== null);
   return taken ? { ok: true, observed: chosen.info.label } : failed('the list did not take the choice', readList(control));
+}
+
+// ---- several places, on a tree ----------------------------------------------------------------------------------
+
+const TREE_NODE = '.ud__tree__node';
+const nodeLabel = (node: Element) => clean(node.querySelector('.ud__tree__node__label')?.textContent);
+
+/**
+ * Several answers on a list of places drawn as a tree (NIO's 期望工作地点: country, province, city). Each is searched
+ * for in the box, which shows the matching places with the path down to them, and its own box is ticked.
+ */
+async function fillPlaces(control: Control, intent: Extract<FillIntent, { kind: 'multi' }>, ctx: DriverContext): Promise<FillResult> {
+  const input = inputOf(control.el);
+  if (!input || input.readOnly) return failed('a list of several answers with no search box', readList(control), 'no_option');
+  const near = () => findDropdownNear(control.el, PANEL, { doc: ctx.doc });
+  const shown = () => (readList(control) ?? '').split('、').filter(Boolean);
+  const searchMs = Math.max(MIN_SEARCH_MS, Math.min(SEARCH_MS, (ctx.timeoutMs - TIDY_MS) / intent.items.length - OPENS_BY_ITSELF_MS));
+  let missing = 0;
+  for (const item of intent.items) {
+    if (shown().some((label) => item.match([{ label }]).status === 'matched')) continue;
+    focusElement(input);
+    if (!near()) simulateClick(control.el.querySelector('.ud__select__selector') ?? input);
+    await waitFor(near, { timeout: OPENS_BY_ITSELF_MS, signal: ctx.signal, root: ctx.doc });
+    typeText(inputOf(control.el) ?? input, item.query);
+    const hit = await waitFor(
+      () => {
+        const nodes = Array.from(near()?.querySelectorAll(TREE_NODE) ?? []);
+        const m = item.match(nodes.map((n) => ({ label: nodeLabel(n) })));
+        return m.status === 'matched' ? nodes[m.index]! : null;
+      },
+      { timeout: searchMs, signal: ctx.signal, root: ctx.doc },
+    );
+    const label = hit ? nodeLabel(hit) : '';
+    // Ticked already, through a place it lies in (中国大陆 holds 深圳): a click would take it out.
+    const covered = !!hit?.querySelector<HTMLInputElement>('.ud__tree__node__checkbox input')?.checked;
+    if (hit && !covered) simulateClick(hit.querySelector('.ud__tree__node__checkbox input') ?? hit.querySelector('.ud__tree__node__checkbox') ?? hit);
+    const box = inputOf(control.el);
+    if (box?.value) {
+      setNativeValue(box, '');
+      fireInput(box, null, 'deleteContentBackward');
+    }
+    if (!hit || (!covered && !(await waitFor(() => shown().includes(label) || null, { timeout: 1500, signal: ctx.signal, root: ctx.doc })))) missing++;
+  }
+  shutDropdown(ctx.doc, () => near() !== null);
+  const observed = readList(control);
+  if (missing === 0) return { ok: true, observed };
+  if (missing === intent.items.length) return failed(`no place on the list for ${intent.display}`, observed, 'no_option');
+  return failed('some of the places are not on the list', observed, 'needs_review');
 }
 
 // ---- dates -------------------------------------------------------------------------------------------------------

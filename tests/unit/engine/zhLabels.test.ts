@@ -60,6 +60,7 @@ describe('labels that mean the field they name', () => {
     ['当前所在地点', 'basics.currentLocation'],
     ['家乡', 'basics.nativePlace'],
     ['成绩单', 'attachments.transcript'],
+    ['作品链接', 'contact.portfolio'],
   ])('%s is %s', (label, key) => {
     expect(read(label).key).toBe(key);
   });

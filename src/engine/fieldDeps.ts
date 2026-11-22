@@ -6,19 +6,21 @@
 // tests/unit/engine/fieldDeps.test.ts resolves every derived key against a subset built from this table.
 import { FIELD_KEYS, getFieldKeyDef, type FieldKey, type SectionKey } from '../schema/fieldKeys';
 
-export type AttachmentKey = 'attachments.resume' | 'attachments.photo' | 'attachments.transcript';
+export type AttachmentKey = 'attachments.resume' | 'attachments.photo' | 'attachments.transcript' | 'attachments.portfolio';
 
 export const ATTACHMENT_KEYS: readonly AttachmentKey[] = [
   'attachments.resume',
   'attachments.photo',
   'attachments.transcript',
+  'attachments.portfolio',
 ];
 
 /** Attachment key → the `resume.attachments` property that holds its file id. */
-export const ATTACHMENT_PROP: Readonly<Record<AttachmentKey, 'resumeFileId' | 'photoFileId' | 'transcriptFileId'>> = {
+export const ATTACHMENT_PROP: Readonly<Record<AttachmentKey, 'resumeFileId' | 'photoFileId' | 'transcriptFileId' | 'portfolioFileId'>> = {
   'attachments.resume': 'resumeFileId',
   'attachments.photo': 'photoFileId',
   'attachments.transcript': 'transcriptFileId',
+  'attachments.portfolio': 'portfolioFileId',
 };
 
 export const isAttachmentKey = (key: string): key is AttachmentKey =>

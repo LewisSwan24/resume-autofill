@@ -15,6 +15,8 @@ import type { PressResult, StepState } from '../background/autoAdvance';
 /** content script → background */
 export type ContentToBg =
   | { type: 'scan:result'; count: number; url: string }
+  /** A frame is still filling: it adds entries and fills boxes, which can take longer than a frame's budget. */
+  | { type: 'frame:alive' }
   | { type: 'inspector:hover'; target: InspectorTargetInfo | null }
   | { type: 'inspector:picked'; url: string; target: InspectorTargetInfo };
 
@@ -109,6 +111,7 @@ export type ResponseFor<M extends { type: string }> = M['type'] extends keyof Re
  */
 const TYPE_TABLE = {
   'scan:result': true,
+  'frame:alive': true,
   'scan:total': true,
   'fill:request': true,
   'fill:commitPreview': true,

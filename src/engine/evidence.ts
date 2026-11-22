@@ -20,7 +20,7 @@ export const FIELD_SELECTOR =
 export const STRICT_HEADING_SELECTOR =
   'caption, h1, h2, h3, h4, h5, h6, legend, [role=heading], .ant-card-head-title, .el-card__header, .ant-divider-inner-text, [class^="blockTitle-"], .applyFormModuleWrapper-text';
 
-export const FORM_ITEM_SELECTOR = '.ant-form-item, .el-form-item, [class^="apply-field-"], .ud-formily-item';
+export const FORM_ITEM_SELECTOR = '.ant-form-item, .el-form-item, [class^="apply-field-"], .ud-formily-item, .formily-m-item';
 const MAX_TEXT = 80;
 /** Forms ask whole questions, and a label or the line above a control is meant to be read as one. */
 const MAX_LABEL_TEXT = 200;
@@ -233,7 +233,9 @@ function formItemLabel(item: Element): Element | null {
     own(item.querySelector('.el-form-item__label')) ??
     own(item.querySelector('.ant-form-item-label')) ??
     own(item.querySelector('[class^="title-"]')) ??
-    own(item.querySelector(':scope > .ud-formily-item-label label'))
+    own(item.querySelector(':scope > .ud-formily-item-label label')) ??
+    // Feishu on a phone: the same row, with the label in a div.
+    own(item.querySelector(':scope > .formily-m-item-label .formily-m-item-label-content'))
   );
 }
 

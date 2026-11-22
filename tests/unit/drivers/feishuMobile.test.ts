@@ -137,6 +137,12 @@ describe('one month', () => {
     expect(openDrawers()).toBe(0);
   });
 
+  // A phone page that cannot show a date it holds writes this: no answer is there to keep.
+  it('reads a box showing Invalid date as empty', () => {
+    const control = only(mdate('Invalid date'));
+    expect(getDriver(control)!.read?.(control)).toBeNull();
+  });
+
   it('the month already there is left alone', async () => {
     const control = only(mdate('2002-03'));
     expect(await fill(control, { kind: 'date', display: '2002-03', year: 2002, month: 3 })).toMatchObject({ ok: true });

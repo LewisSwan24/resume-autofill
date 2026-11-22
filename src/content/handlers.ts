@@ -4,7 +4,7 @@ import { executeStep, type FillStep } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
 import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { applyHighlights, clearHighlights, focusField } from '../fill/highlight';
-import { highlightRun, runFill, runPreview, type FillPayload, type FillRun } from '../fill/runFill';
+import { highlightRun, runFill, runPreview, type FillPayload, type FillRun, type RunFillOptions } from '../fill/runFill';
 import { collectEvidence } from '../engine/evidence';
 import { captureFieldFingerprint } from '../recipes';
 import type { Resume, SensitiveFieldMode, SiteRecipe, SiteRecipeFingerprint } from '../schema';
@@ -21,8 +21,10 @@ export interface FrameHandlerDeps {
   discardOwnWrites?: () => void;
   /** Called when the frame goes idle again after a fill / apply (e.g. to schedule a rescan). */
   onIdle?: () => void;
+  /** Called as a fill goes on: it is still at work (a form that adds many entries fills for a while). */
+  onProgress?: () => void;
   /** Overrides for tests. */
-  runFill?: (doc: Document, payload: FillPayload, opts: { idFor: (el: HTMLElement) => string }) => Promise<FillRun>;
+  runFill?: (doc: Document, payload: FillPayload, opts: RunFillOptions) => Promise<FillRun>;
   executeStep?: typeof executeStep;
   computeNeeds?: (doc: Document, idFor: (el: HTMLElement) => string) => FrameNeeds;
   onInspectorHover?: (target: InspectorTargetInfo | null) => void;
@@ -77,7 +79,11 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
 
   async function doFill(payload: FillPayload, filter?: FillFilter): Promise<FillReport> {
     clearHighlights();
-    const result = await run(deps.doc, payload, { idFor: deps.idFor, ...(filter ? { filter } : {}) });
+    const result = await run(deps.doc, payload, {
+      idFor: deps.idFor,
+      ...(filter ? { filter } : {}),
+      ...(deps.onProgress ? { onProgress: deps.onProgress } : {}),
+    });
     controls = result.controls;
     reports = new Map(result.report.fields.map((f) => [f.fieldId, f]));
     highlightRun(result);

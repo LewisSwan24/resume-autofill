@@ -42,6 +42,8 @@ export interface EnsureCardsOptions {
   maxAdds?: number;
   /** Sections something else looks after. */
   skip?: ReadonlySet<SectionKey>;
+  /** Called for each card added: the fill is still at work. */
+  onProgress?: () => void;
 }
 
 const FIELD_SELECTOR = 'input, select, textarea, [contenteditable=""], [contenteditable="true"]';
@@ -87,8 +89,8 @@ function isDisabled(el: HTMLElement): boolean {
   );
 }
 
-/** How far above an add button its section's name may sit beside it. */
-const MAX_TITLE_LEVELS = 3;
+/** How far above an add button its section's name may sit beside it: NIO's phone form puts it three wrappers up. */
+const MAX_TITLE_LEVELS = 4;
 const MAX_TITLE_WORDS = 20;
 
 /**
@@ -234,6 +236,7 @@ export async function ensureCards(
         break;
       }
       result.added += 1;
+      opts.onProgress?.();
     }
     if (result.status === 'ok' && result.added >= maxAdds) {
       // Stopped by the cap, not by success: refresh the counts and do not claim a complete section.

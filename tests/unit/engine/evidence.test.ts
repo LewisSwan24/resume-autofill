@@ -451,6 +451,16 @@ describe('Element Plus markup', () => {
   });
 });
 
+describe('Feishu formily markup on a phone', () => {
+  it('reads the row label of a formily-m-item as the label of its one box', () => {
+    const html = `
+      <div class="formily-m-item formily-m-item-vertical" data-form-field-id="7211"><div class="formily-m-item-label">
+        <div class="formily-m-item-label-content"><span class="formily-m-item-asterisk">*</span><span>预计入职时间</span></div></div>
+        <div class="formily-m-item-control"><div class="formily-m-item-control-content"><input class="ud__native-input" placeholder="请输入"></div></div></div>`;
+    expect(texts(evidenceAt(html, 'input'), 'label-for')).toEqual(['预计入职时间']);
+  });
+});
+
 describe('option-like wrapped labels (single checkbox)', () => {
   const epItem = (label: string, wrap: string) =>
     `<div class="el-form-item" role="group" aria-labelledby="el-id-1-1"><div id="el-id-1-1" class="el-form-item__label">${label}</div>` +

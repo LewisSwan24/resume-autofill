@@ -19,11 +19,15 @@ export * from './needs';
 export * from './steps';
 export * from './watcher';
 
+/** How often a fill tells the background it is still at work: well inside the background's budget for a frame. */
+const ALIVE_EVERY_MS = 2_000;
+
 /** Start the content script in `doc`; returns a stop function (extension context invalidated). */
 export function startContentScript(doc: Document = document): () => void {
   registerAllDrivers();
 
   let handlers: ReturnType<typeof createFrameHandlers>;
+  let lastAlive = 0;
   const scan = () => {
     try {
       const { fillableCount } = scanDocument(doc, idFor);
@@ -45,6 +49,12 @@ export function startContentScript(doc: Document = document): () => void {
     idFor,
     discardOwnWrites: () => watcher.discardOwnWrites(),
     onIdle: () => watcher.schedule(),
+    onProgress: () => {
+      const now = Date.now();
+      if (now - lastAlive < ALIVE_EVERY_MS) return;
+      lastAlive = now;
+      void sendToBackground({ type: 'frame:alive' }).catch(() => undefined);
+    },
     onInspectorHover: (target) => {
       void sendToBackground({ type: 'inspector:hover', target }).catch(() => undefined);
     },

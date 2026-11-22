@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { FrameTimeoutError, NOTHING_TO_FILL, collectFrameReports, listFrameIds, withTimeout } from '../../../src/background/frames';
+import { FrameTimeoutError, NOTHING_TO_FILL, collectFrameReports, frameSaysAlive, listFrameIds, watchFrame, withTimeout } from '../../../src/background/frames';
 import type { FillReport } from '../../../src/engine/types';
 import { emptyCounts } from '../../../src/fill/report';
 
@@ -92,6 +92,35 @@ describe('collectFrameReports', () => {
       expect(parts.map((p) => p.frameId)).toEqual([1]);
       expect(skipped[0]).toBeInstanceOf(FrameTimeoutError);
     });
+
+    it('keeps waiting while a slow frame says it is still filling, and gives up once it falls silent', async () => {
+      const touches = new Map<number, () => void>();
+      let done: (r: FillReport) => void = () => undefined;
+      const skipped: unknown[] = [];
+      const pending = collectFrameReports(
+        [0, 1],
+        (frameId) => (frameId === 0 ? new Promise<FillReport>((resolve) => (done = resolve)) : new Promise(() => undefined)),
+        {
+          onSkip: (_id, reason) => skipped.push(reason),
+          alive: (frameId, touch) => {
+            touches.set(frameId, touch);
+            return () => touches.delete(frameId);
+          },
+        },
+      );
+      for (let s = 0; s < 4; s++) {
+        await vi.advanceTimersByTimeAsync(20_000);
+        touches.get(0)!();
+      }
+      done(rep('slow'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(touches.has(0)).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const parts = await pending;
+      expect(parts.map((p) => p.frameId)).toEqual([0]);
+      expect(skipped[0]).toBeInstanceOf(FrameTimeoutError);
+      expect(touches.size).toBe(0);
+    });
   });
 });
 
@@ -142,5 +171,19 @@ describe('withTimeout', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('watchFrame', () => {
+  it('hears only its own tab and frame, and nothing once stopped', () => {
+    const touch = vi.fn();
+    const stop = watchFrame(3, 1, touch);
+    frameSaysAlive(3, 1);
+    frameSaysAlive(3, 0);
+    frameSaysAlive(4, 1);
+    expect(touch).toHaveBeenCalledTimes(1);
+    stop();
+    frameSaysAlive(3, 1);
+    expect(touch).toHaveBeenCalledTimes(1);
   });
 });

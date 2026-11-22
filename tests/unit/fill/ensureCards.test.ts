@@ -130,6 +130,20 @@ describe('findAddButtons', () => {
     expect(empty.map((b) => b.section)).toEqual(['internship', 'projects', null, 'awards']);
   });
 
+  // Feishu's formily form on a phone (NIO): an empty section is a title row of its name and a 添加 button, the button
+  // three wrappers down. The empty section before it must not take it.
+  it('gives the 添加 in a formily phone title row its own section, not that of the empty section above', () => {
+    const empty = (title: string, extra = '') =>
+      `<div class="moduleWrapper moduleWrapper-empty"><div class="moduleWrapper-title"><p class="moduleWrapper-text">${title}</p>` +
+      `<div class="formily-m-item"><div class="formily-m-item-control"><div class="formily-m-item-control-content">` +
+      `<button type="button" class="ud__button">添加</button></div></div></div></div>${extra}</div>`;
+    const filled = (title: string) =>
+      `<div class="moduleWrapper"><div class="moduleWrapper-title"><p class="moduleWrapper-text">${title}</p></div>` +
+      `<div class="formily-m-item" data-form-field-id="name"><input><input></div></div>`;
+    document.body.innerHTML = `<form>${filled('项目经历')}${empty('实习经历')}${filled('作品')}${empty('获奖')}${filled('语言能力')}${empty('社交账号')}</form>`;
+    expect(findAddButtons(document).map((b) => b.section)).toEqual(['internship', 'awards', null]);
+  });
+
   // Feishu's mobile form: the section title holds its name and a "+ 添加" drawn as a span, and a filled section ends
   // in "删除 | 继续添加". Touch pages set no cursor at all, so the pointer cannot say what is clickable there.
   const touchPage = (coarse: boolean) => {
@@ -243,8 +257,11 @@ describe('findAddButtons', () => {
       });
       const need = zh.projects.length;
       expect(need).toBeGreaterThan(1);
-      const [growth] = await ensureCards(document, zh, { timeoutMs: 200 });
+      const onProgress = vi.fn();
+      const [growth] = await ensureCards(document, zh, { timeoutMs: 200, onProgress });
       expect(growth).toMatchObject({ section: 'projects', need, have: need, status: 'ok' });
+      // Each card it adds is a sign it is still at work: adding many can outlast a frame's budget.
+      expect(onProgress).toHaveBeenCalledTimes(need);
     });
 
     it('opens a section whose card is only pickers, with no input behind any of them', async () => {

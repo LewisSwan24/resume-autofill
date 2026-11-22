@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { highlightRun, runFill, runPreview } from '../../../src/fill/runFill';
 import { clearHighlights } from '../../../src/fill/highlight';
 import { createSampleFiles, createSampleProfile } from '../../../src/schema';
+import { mselect } from '../../shared/feishuMobileForm';
 
 const zh = createSampleProfile().resumes.find((r) => r.id === 'sample-zh')!;
 const files = createSampleFiles();
@@ -447,6 +448,45 @@ describe('runFill on a page that already holds answers', () => {
     mount();
     document.getElementById('vc')!.insertAdjacentHTML('afterend', '<label for="av">预计入职时间</label><input id="av">');
   };
+
+  const pickerRow = (title: string, control: string) =>
+    `<div class="atsx-row atsx-form-item"><div class="atsx-form-item-control"><span class="atsx-form-item-children"><div class="atsx-col atsx-form-item-label"><label title="${title}">${title}</label></div></span></div><div class="atsx-col atsx-form-item-control-wrapper">${control}</div></div>`;
+  const FULL_TIME = '是否为全日制在校学生';
+
+  it('keeps a picker that holds an answer of the applicant’s own, and asks about it', async () => {
+    mount();
+    document.getElementById('vc')!.insertAdjacentHTML('afterend', pickerRow(FULL_TIME, mselect('是', ['是', '否'])));
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(document.querySelector('.atsx-mselect-mSelect-content')!.textContent).toBe('是');
+    expect(row(report.fields, FULL_TIME)).toMatchObject({ outcome: 'needs_review', observed: '是', note: 'answer_held' });
+  });
+
+  // The resume says fluent; the list words it 无障碍沟通. Already the resume's answer, in the list's own words.
+  it('a picker already on the option the resume’s answer picks counts as filled', async () => {
+    mount();
+    const languages = `<h2>语言能力</h2><div>${pickerRow('语言', mselect('英语', ['英语', '日语']))}${pickerRow('精通程度', mselect('无障碍沟通', ['一般', '良好', '无障碍沟通', '母语']))}</div>`;
+    document.getElementById('add')!.insertAdjacentHTML('afterend', languages);
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(row(report.fields, '精通程度')).toMatchObject({ outcome: 'filled' });
+  });
+
+  // A plain list shows its first option before anyone picks one: that is no answer of the applicant's.
+  it('fills a plain list that only shows its first option', async () => {
+    mount();
+    document.getElementById('vc')!.insertAdjacentHTML('afterend', `<label for="ft">${FULL_TIME}</label><select id="ft"><option>是</option><option>否</option></select>`);
+    const { report } = await runFill(document, { resume: zh, files });
+    expect(value('ft')).toBe('否');
+    expect(row(report.fields, FULL_TIME).outcome).toBe('filled');
+  });
+
+  it('says it is still at work after each box it fills', async () => {
+    mountWithStart();
+    const onProgress = vi.fn();
+    const { report } = await runFill(document, { resume: zh, files }, { onProgress });
+    const done = report.fields.filter((f) => f.outcome === 'filled').length;
+    expect(done).toBeGreaterThan(1);
+    expect(onProgress.mock.calls.length).toBeGreaterThanOrEqual(done);
+  });
 
   it('keeps an answer of its own and asks about it, and fills the empty boxes beside it', async () => {
     mountWithStart();

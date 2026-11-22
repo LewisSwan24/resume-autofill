@@ -152,7 +152,11 @@ async function fillPeriod(control: Control, intent: FillIntent, ctx: DriverConte
 // ---- one month, or one year ----------------------------------------------------------------------------------------
 
 const MONTH_DRAWER = '.atsx-mdatepicker-popup-content';
-const readMonth = (control: Control): string | null => shown(control.el.querySelector('.atsx-mdatepicker-text'));
+/** A date has a year in it. A page that cannot show the date it holds writes Invalid date there instead. */
+const readMonth = (control: Control): string | null => {
+  const text = shown(control.el.querySelector('.atsx-mdatepicker-text'));
+  return text && /\d{4}/.test(text) ? text : null;
+};
 /** The date, as far as the box shows it: a box that takes only a year (获奖时间) shows the year alone. */
 const holdsDate = (text: string | null, when: DatePart): boolean => {
   const year = /^(\d{4})年?$/.exec((text ?? '').trim());

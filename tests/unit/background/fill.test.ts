@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { loadAttachmentFiles, runFillRequest, type FramePayload } from '../../../src/background/fill';
+import { frameSaysAlive } from '../../../src/background/frames';
 import { loadReport } from '../../../src/background/tabState';
 import type { FieldReport, FillReport } from '../../../src/engine/types';
 import { emptyCounts } from '../../../src/fill/report';
@@ -106,6 +107,21 @@ describe('runFillRequest', () => {
     const res = await runFillRequest(8, { sendNeeds, sendFill, listFrameIds: async () => [0, 1], timeoutMs: 20 });
     expect(res).toEqual({ ok: true });
     expect((await loadReport(8))?.fields.map((f) => f.frameId)).toEqual([1]);
+  });
+
+  it('waits past the budget for a frame that keeps saying it is still filling', async () => {
+    await seedSamplesIfEmpty();
+    vi.spyOn(fakeBrowser.tabs, 'sendMessage').mockResolvedValue(undefined as never);
+    const sendFill = async (tabId: number, frameId: number) => {
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 10));
+        frameSaysAlive(tabId, frameId);
+      }
+      return report('slow', [row('c1', 'filled')]);
+    };
+    const res = await runFillRequest(9, { sendNeeds, sendFill, listFrameIds: async () => [0], timeoutMs: 25 });
+    expect(res).toEqual({ ok: true });
+    expect((await loadReport(9))?.fields.map((f) => f.frameId)).toEqual([0]);
   });
 });
 

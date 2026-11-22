@@ -10,7 +10,7 @@ import { targetOfField, type ProfileTarget } from '../editor/fieldTarget';
 import { openProfileAt } from '../ui/pages';
 import { cancelPreviewRequest, commitPreviewRequest, runFillRequest, type PreviewApproval } from './fill';
 import { isSectionRow } from './merge';
-import { listFrameIds } from './frames';
+import { frameSaysAlive, listFrameIds } from './frames';
 import { relayApply, relayCaptureFingerprint, relayFocus, type ApplyInput } from './relay';
 import { loadScanTotal, recordScan } from './tabState';
 import { clearWizardSession, loadWizardSession } from './wizardSession';
@@ -27,6 +27,8 @@ export interface RouterDeps {
   focus(tabId: number, frameId: number, fieldId: string): Promise<void>;
   apply(input: ApplyInput): Promise<FieldReport | null>;
   captureFingerprint?(tabId: number, frameId: number, fieldId: string): Promise<SiteRecipeFingerprint | null>;
+  /** A content script says it is still filling. */
+  frameAlive?(tabId: number, frameId: number): void;
   /** Record a frame's count; resolves to the tab total. */
   recordScan(tabId: number, frameId: number, count: number): Promise<number>;
   pushTotal(tabId: number, total: number): Promise<void>;
@@ -45,6 +47,7 @@ export const defaultRouterDeps: RouterDeps = {
   fill: (tabId) => runFillRequest(tabId),
   commitPreview: (tabId, approval) => commitPreviewRequest(tabId, approval),
   cancelPreview: (tabId) => cancelPreviewRequest(tabId),
+  frameAlive: (tabId, frameId) => frameSaysAlive(tabId, frameId),
   focus: (tabId, frameId, fieldId) => relayFocus(tabId, frameId, fieldId),
   apply: (input) => relayApply(input),
   captureFingerprint: (tabId, frameId, fieldId) => relayCaptureFingerprint(tabId, frameId, fieldId),
@@ -87,6 +90,12 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
           .recordScan(contentTabId, frameId, Math.floor(message.count))
           .then((total) => deps.pushTotal(contentTabId, total))
           .catch(() => undefined); // frame 0 may not have the FAB (yet)
+        return false;
+      }
+
+      case 'frame:alive': {
+        if (contentTabId === undefined) return false;
+        deps.frameAlive?.(contentTabId, isIndex(sender.frameId) ? sender.frameId : 0);
         return false;
       }
 

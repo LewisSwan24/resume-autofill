@@ -2,7 +2,10 @@
 import { browser } from 'wxt/browser';
 import { isFillReport, type FramePart } from './merge';
 
-/** Per-frame budget for `frame:fill` (a big form with many dropdowns can take a while). */
+/**
+ * Per-frame budget for `frame:fill`. With `alive`, it is the longest silence instead: a form that adds many entries
+ * can take longer than this, and it says it is still filling as it goes.
+ */
 export const FRAME_TIMEOUT_MS = 30_000;
 
 /** Per-frame budget for rame:needs (a scan only; a frame that cannot answer this fast has nothing to fill). */
@@ -21,6 +24,43 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     timer = setTimeout(() => reject(new FrameTimeoutError(ms)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** As `withTimeout`, but every call of the `touch` handed to `watch` starts the budget again. */
+export function withIdleTimeout<T>(promise: Promise<T>, ms: number, watch: (touch: () => void) => () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fail: (e: Error) => void = () => undefined;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fail(new FrameTimeoutError(ms)), ms);
+  };
+  const timeout = new Promise<never>((_, reject) => {
+    fail = reject;
+  });
+  arm();
+  const stop = watch(arm);
+  return Promise.race([promise, timeout]).finally(() => {
+    clearTimeout(timer);
+    stop();
+  });
+}
+
+const watchers = new Map<string, Set<() => void>>();
+const frameKey = (tabId: number, frameId: number) => `${tabId}:${frameId}`;
+
+/** Calls `touch` each time a frame says it is still filling (`frame:alive`); returns how to stop. */
+export function watchFrame(tabId: number, frameId: number, touch: () => void): () => void {
+  const key = frameKey(tabId, frameId);
+  const set = watchers.get(key) ?? new Set();
+  watchers.set(key, set.add(touch));
+  return () => {
+    set.delete(touch);
+    if (set.size === 0 && watchers.get(key) === set) watchers.delete(key);
+  };
+}
+
+export function frameSaysAlive(tabId: number, frameId: number): void {
+  for (const touch of watchers.get(frameKey(tabId, frameId)) ?? []) touch();
 }
 
 export interface FrameInfo {
@@ -60,6 +100,11 @@ ull to skip the frame without calling send; a rejection or timeout skips it too.
    */
   prepare?: (frameId: number) => Promise<P | null>;
   prepareTimeoutMs?: number;
+  /**
+   * Lets a frame say it is still working: `alive(frameId, touch)` calls `touch` each time that frame does, and
+   * returns how to stop. The frame's budget then runs from its last sign of life.
+   */
+  alive?: (frameId: number, touch: () => void) => () => void;
   /** Called for every frame that was skipped (no content script, timeout, malformed answer, nothing to do). */
   onSkip?: (frameId: number, reason: unknown) => void;
 }
@@ -96,7 +141,9 @@ export async function collectFrames<P, R>(
         }
         prepared = answer;
       }
-      const answer = await withTimeout(Promise.resolve().then(() => send(frameId, prepared)), timeoutMs);
+      const sent = Promise.resolve().then(() => send(frameId, prepared));
+      const alive = opts.alive;
+      const answer = await (alive ? withIdleTimeout(sent, timeoutMs, (touch) => alive(frameId, touch)) : withTimeout(sent, timeoutMs));
       if (!validate(answer)) throw new Error('Malformed frame response');
       parts.push({ frameId, result: answer });
     } catch (error) {

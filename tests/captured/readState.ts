@@ -122,6 +122,17 @@ export function inspectInPage(locators: Locators): Inspection {
   const isControl = (el: Element): el is FormEl =>
     /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton) || namedButtons.has(el) || namedEditables.has(el) || shownBoxes.has(el);
   const included = (el: FormEl): boolean => typeOf(el) !== 'hidden' && !/^g-recaptcha-response|^h-captcha-response/.test(el.name || el.id || '');
+  // Feishu's formily form gives its boxes no id or name. The field's id on the row, and the card's place in its own
+  // list, say which box it is, so a card added to one list does not renumber the boxes of the next.
+  const formilyIdentity = (el: Element): string => {
+    const row = el.closest('[data-form-field-id]');
+    if (!row) return '';
+    const card = row.closest('[class*="apply-form-array-card__"]');
+    // A list is named by its id on a computer, and by its section's title on a phone, where it has none.
+    const list = card?.closest('[id^="formily-item-"]')?.id ?? card?.closest('.moduleWrapper')?.querySelector('.moduleWrapper-text')?.textContent ?? '';
+    const place = card ? `${list}[${[...card.parentElement!.children].indexOf(card)}]/` : '';
+    return `%${place}${row.getAttribute('data-form-field-id')}`;
+  };
   const keys = new Map<Element, string>();
   const used = new Map<string, number>();
   const snapshot: Record<string, string> = {};
@@ -129,7 +140,7 @@ export function inspectInPage(locators: Locators): Inspection {
     if (keys.has(el)) continue;
     if (!isControl(el) || !included(el)) continue;
     const type = typeOf(el);
-    const identity = el.id ? `#${el.id}` : el.name ? `@${el.name}` : '';
+    const identity = el.id ? `#${el.id}` : el.name ? `@${el.name}` : formilyIdentity(el);
     const option = type === 'radio' || type === 'checkbox' ? `=${(el as HTMLInputElement).value}` : '';
     const base = `${type}${identity}${option}`;
     const n = used.get(base) ?? 0;
@@ -183,7 +194,7 @@ export function inspectInPage(locators: Locators): Inspection {
     } else if (type === 'checkbox' && els.length > 1) {
       readings[label] = (els as HTMLInputElement[]).filter((el) => el.checked).map(optionLabel);
       read = els;
-    } else if (els.length > 1 && els.every((el) => el.closest('.month-range-select') && typeOf(el) === 'text')) {
+    } else if (els.length > 1 && els.every((el) => el.closest('.month-range-select, .throne-biz-date-range-picker-wrapper') && typeOf(el) === 'text')) {
       // Year and month, or both ends of a span: one answer in several lists, read in order.
       readings[label] = els.map((el) => single(el)).filter((v) => typeof v === 'string' && v).join(' ');
       read = els;

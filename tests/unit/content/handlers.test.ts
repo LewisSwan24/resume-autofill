@@ -88,6 +88,13 @@ describe('fill', () => {
     expect(outline('nm')).toBe('');
   });
 
+  it('hands the fill a way to say it is still at work', async () => {
+    const onProgress = vi.fn();
+    const h = createFrameHandlers({ doc: document, idFor, onProgress });
+    await h.fill({ resume: zh, files });
+    expect(onProgress).toHaveBeenCalled();
+  });
+
   it('releases the busy state when the run fails', async () => {
     const runFill = vi.fn().mockRejectedValue(new Error('boom'));
     const h = createFrameHandlers({ doc: document, idFor, runFill, onIdle: idle });

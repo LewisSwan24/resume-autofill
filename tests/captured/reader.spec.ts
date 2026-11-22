@@ -262,3 +262,39 @@ test('a box that only shows an answer reads as empty while all it shows is its p
   await page.evaluate(() => (document.querySelector('#pick .text')!.innerHTML = '<div class="value">保密</div>'));
   expect((await inspect(page, locators)).readings.pick).toBe('保密');
 });
+
+test('reads a Feishu span of two date boxes as one answer and covers both boxes', async ({ page }) => {
+  const box = '<div class="throne-biz-date-range-picker-input"><label><input type="text"></label></div>';
+  await page.setContent(`<!doctype html><body><div class="throne-biz-date-range-picker-wrapper">${box}${box}</div></body>`);
+  const locators = { span: '.throne-biz-date-range-picker-wrapper input' };
+  await page.locator('input').nth(0).fill('2020-09');
+  await page.locator('input').nth(1).fill('2024-06');
+  const after = await inspect(page, locators);
+  expect(after.readings.span).toBe('2020-09 2024-06');
+  expect(after.coverage.span).toHaveLength(2);
+});
+
+test('a card added to one Feishu list does not renumber the boxes of the next list', async ({ page }) => {
+  const card = (field: string, value: string) =>
+    `<div class="apply-form-array-card__1d"><div data-form-field-id="${field}"><input value="${value}"></div></div>`;
+  await page.setContent(
+    `<!doctype html><body><div id="formily-item-education_list"><div class="cards">${card('school', '甲大学')}</div></div>` +
+      `<div id="formily-item-project_list"><div class="cards">${card('name', '旧项目')}</div></div></body>`,
+  );
+  const before = await inspect(page, {});
+  await page.evaluate((html) => document.querySelector('#formily-item-education_list .cards')!.insertAdjacentHTML('beforeend', html), card('school', '乙大学'));
+  const after = await inspect(page, {});
+  expect(changedControls(before.snapshot, after.snapshot).map((c) => c.after)).toEqual(['乙大学']);
+});
+
+test('on a phone, a card added to one Feishu section does not renumber the boxes of the next section', async ({ page }) => {
+  const card = (field: string, value: string) =>
+    `<div class="resumeEditForm-item apply-form-array-card__76"><div class="formily-m-item" data-form-field-id="${field}"><input value="${value}"></div></div>`;
+  const section = (title: string, cards: string) =>
+    `<div class="moduleWrapper"><div class="moduleWrapper-title"><p class="moduleWrapper-text">${title}</p></div><div class="formily-m-item"><div class="cards">${cards}</div></div></div>`;
+  await page.setContent(`<!doctype html><body>${section('教育经历', card('name', '甲大学'))}${section('项目经历', card('name', '旧项目'))}</body>`);
+  const before = await inspect(page, {});
+  await page.evaluate((html) => document.querySelector('.moduleWrapper .cards')!.insertAdjacentHTML('beforeend', html), card('name', '乙大学'));
+  const after = await inspect(page, {});
+  expect(changedControls(before.snapshot, after.snapshot).map((c) => c.after)).toEqual(['乙大学']);
+});

@@ -4,7 +4,7 @@ import type { HeldFile } from '../adapters/types';
 import { registerAllDrivers } from '../drivers';
 import { intentDisplay, valuesEquivalent } from '../drivers/execute';
 import { getDriver } from '../drivers/registry';
-import type { FileData } from '../drivers/types';
+import type { FileData, FillIntent } from '../drivers/types';
 import { waitFor } from '../drivers/wait';
 import { baseReport, planFill, type CardDemand, type FillStep } from '../engine/plan';
 import { scanDocument, type ScanResult } from '../engine/scan';
@@ -35,6 +35,8 @@ export interface RunFillOptions {
   idFor?: (el: HTMLElement) => string;
   /** Preview exclusions and value overrides chosen by the user. */
   filter?: FillFilter;
+  /** Called as the fill goes on (a card added, a box done, an upload read): it is still at work. */
+  onProgress?: () => void;
 }
 
 export interface FillRun {
@@ -165,8 +167,15 @@ function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
   return { plan, left, cardDemand, entryOf, shown: held.shown };
 }
 
-/** Kinds whose answer a person typed or picked: a list or a radio can start on a default nobody chose. */
+/** Kinds whose answer a person typed or picked: a radio can start on a default nobody chose. */
 const TYPED_KINDS: ReadonlySet<Control['kind']> = new Set<Control['kind']>(['text', 'textarea', 'date']);
+/**
+ * Lists, kept only when drawn by a library: those show nothing until someone picks. A plain <select> shows its first
+ * option before anyone picks one.
+ */
+const PICKED_KINDS: ReadonlySet<Control['kind']> = new Set<Control['kind']>(['select', 'cascader']);
+const holdsAnAnswer = (control: Control): boolean =>
+  TYPED_KINDS.has(control.kind) || (PICKED_KINDS.has(control.kind) && control.lib !== 'native');
 
 /**
  * What a site writes into a fresh form by itself: the account's name and contact details, or a place it guessed from
@@ -181,9 +190,18 @@ const BROUGHT_BY_THE_SITE: ReadonlySet<FieldKey> = new Set<FieldKey>([
 ]);
 const broughtByTheSite = (key: FieldKey): boolean => key.startsWith('contact.') || BROUGHT_BY_THE_SITE.has(key);
 
-/** What a box the applicant types or picks a date in already holds, as its driver reads it; null when empty. */
+/**
+ * Whether what a box holds is the resume's answer already: the same words, or the option the resume's answer picks
+ * from a list (fluent is 无障碍沟通 on Feishu's).
+ */
+function sameAnswer(intent: FillIntent, answer: string): boolean {
+  if (valuesEquivalent(intentDisplay(intent), answer)) return true;
+  return intent.kind === 'choice' && intent.match([{ label: answer }]).status === 'matched';
+}
+
+/** What a box the applicant types, picks a date or an option in already holds, as its driver reads it; null when empty. */
 function heldAnswer(control: Control | undefined): string | null {
-  if (!control || !TYPED_KINDS.has(control.kind)) return null;
+  if (!control || !holdsAnAnswer(control)) return null;
   try {
     const text = getDriver(control)?.read(control)?.trim();
     return text ? text : null;
@@ -206,7 +224,11 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   // Growing sections is best effort: when it throws, carry on with the cards the page already has.
   let growth: SectionGrowth[] = [];
   try {
-    growth = await ensureCards(doc, resume, { idFor, skip: new Set(adapter?.editors?.map((e) => e.section)) });
+    growth = await ensureCards(doc, resume, {
+      idFor,
+      skip: new Set(adapter?.editors?.map((e) => e.section)),
+      ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+    });
   } catch (error) {
     console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
   }
@@ -250,15 +272,17 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     if (uploadBusy && !read && step.intent.kind !== 'file') {
       read = true;
       await waitForUploadRead(doc, uploadBusy, uploaded, resumeTaken ? adapter?.uploadSignMs : undefined);
+      opts.onProgress?.();
     }
     // The page opened with an answer of the applicant's own (a form kept from an earlier application): theirs to change.
     const answer = held.get(step.fieldId);
-    if (answer !== undefined && !valuesEquivalent(intentDisplay(step.intent), answer)) {
+    if (answer !== undefined && !sameAnswer(step.intent, answer)) {
       results.push(heldAnswerReport(step, answer));
       continue;
     }
     if (step.intent.kind === 'file') uploaded = true;
     const result = await runStep(step, controls, doc);
+    opts.onProgress?.();
     if (step.intent.kind === 'file' && step.fieldKey === 'attachments.resume' && result.outcome === 'filled') resumeTaken = true;
     // Filled because the applicant chose to: the row still says it was a sensitive field.
     results.push(result.outcome === 'filled' && isSensitiveFieldKey(step.fieldKey) ? { ...result, note: 'sensitive_filled' } : result);

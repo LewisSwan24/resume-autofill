@@ -136,15 +136,20 @@ function headingOf(s: Element, parent: Element): { title: string; heading: Eleme
     const title = titled ? headingText(titled, MAX_PLAIN_HEADING) : null;
     // A whole section with no entry yet is a title and its 添加: that heads only its own button, not what follows.
     const rest = title ? cleanEvidenceText(textWithoutControls(s), Number.MAX_SAFE_INTEGER).replace(title, '') : '';
-    if (titled && title && matchSection(title) && !isAddButtonText(rest)) return { title, heading: titled };
+    if (titled && title && matchSection(title) && !isAddButtonText(rest) && !emptySection(s)) return { title, heading: titled };
   }
   // Classes that are only build hashes say nothing, but a few bare words naming a part of a resume still head it.
   if (s.querySelectorAll('*').length <= MAX_PLAIN_HEADING_PARTS && fieldCount(parent) >= 2) {
     const title = headingText(s, MAX_PLAIN_HEADING);
-    if (title && matchSection(title)) return { title, heading: s };
+    // An empty section is its title and its 添加 (NIO's phone form): it heads only its own button, not what follows.
+    if (title && matchSection(title) && !emptySection(s)) return { title, heading: s };
   }
   return null;
 }
+
+/** A section with no entry yet (it holds no field): its title and an add button, which it heads alone. */
+const emptySection = (s: Element): boolean =>
+  Array.from(s.querySelectorAll(ADD_BUTTON_SELECTOR)).some((b) => isAddButtonText(cleanEvidenceText(b.textContent ?? '')));
 
 /** A box of advice that says what a section wants, by its class (Moka's phone form: describe-<hash>). */
 const ADVICE_CLASS = /(?:^|\s)describe-/;

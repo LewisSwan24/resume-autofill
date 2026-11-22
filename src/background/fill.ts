@@ -9,7 +9,7 @@ import { materializeResume, type Resume, type SensitiveFieldMode, type SiteRecip
 import { BUILTIN_SITE_RECIPES, matchRecipesForPage } from '../recipes';
 import { isValidPresetId, type MappingPresetId } from '../templates/presets';
 import { VaultLockedError, fileToFileData, getFile, loadProfile } from '../storage';
-import { FRAME_TIMEOUT_MS, NEEDS_TIMEOUT_MS, collectFrameReports, collectFrames, listFrameIds } from './frames';
+import { FRAME_TIMEOUT_MS, NEEDS_TIMEOUT_MS, collectFrameReports, collectFrames, listFrameIds, watchFrame } from './frames';
 import { isFramePreview, mergeFramePreviews, mergeFrameReports } from './merge';
 import { buildResumeSubset } from './subset';
 import { clearPreview, loadPreview, savePreview, saveReport } from './tabState';
@@ -289,6 +289,8 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
       },
       {
         timeoutMs: deps.timeoutMs ?? FRAME_TIMEOUT_MS,
+        // A form that adds many entries fills for longer than the budget: it says so as it goes.
+        alive: (frameId, touch) => watchFrame(tabId, frameId, touch),
         prepareTimeoutMs: deps.needsTimeoutMs ?? NEEDS_TIMEOUT_MS,
         // Frames without a content script reject; frames with nothing recognisable get nothing at all.
         prepare: async (frameId) => {

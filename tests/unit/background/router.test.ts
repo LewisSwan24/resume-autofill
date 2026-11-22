@@ -16,6 +16,7 @@ function makeDeps(): { [K in keyof RouterDeps]: ReturnType<typeof vi.fn> } {
     currentTotal: vi.fn().mockResolvedValue(7),
     openSidePanel: vi.fn(),
     openOptions: vi.fn(),
+    frameAlive: vi.fn(),
   };
 }
 
@@ -82,6 +83,19 @@ describe('scan:result', () => {
   it('ignores senders without a tab', () => {
     route({ type: 'scan:result', count: 1, url: 'u' }, { id: id() }, respond);
     expect(deps.recordScan).not.toHaveBeenCalled();
+  });
+});
+
+describe('frame:alive', () => {
+  it('passes on that a content script is still filling, with its tab and frame', () => {
+    expect(route({ type: 'frame:alive' }, contentSender(11, 4), respond)).toBe(false);
+    expect(deps.frameAlive).toHaveBeenCalledWith(11, 4);
+  });
+
+  it('ignores an extension page and a sender without a tab', () => {
+    route({ type: 'frame:alive' }, pageInTabSender(), respond);
+    route({ type: 'frame:alive' }, { id: id() }, respond);
+    expect(deps.frameAlive).not.toHaveBeenCalled();
   });
 });
 

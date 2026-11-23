@@ -194,10 +194,20 @@ const broughtByTheSite = (key: FieldKey): boolean => key.startsWith('contact.') 
  * Whether what a box holds is the resume's answer already: the same words, or the option the resume's answer picks
  * from a list (fluent is 无障碍沟通 on Feishu's).
  */
-function sameAnswer(intent: FillIntent, answer: string): boolean {
+export function sameAnswer(intent: FillIntent, answer: string): boolean {
   if (valuesEquivalent(intentDisplay(intent), answer)) return true;
+  // A library writes a path or a set of picks in its own way: 浙江省 / 杭州市, 深圳, 杭州.
+  if (intent.kind === 'cascade') return joined(intent.path) === joined(pieces(answer));
+  if (intent.kind === 'multi') {
+    const held = pieces(answer);
+    const wanted = intent.items.map((i) => i.query.trim());
+    return held.length === wanted.length && wanted.every((w) => held.includes(w));
+  }
   return intent.kind === 'choice' && intent.match([{ label: answer }]).status === 'matched';
 }
+
+const pieces = (text: string): string[] => text.split(/\s*[/／>›,，、;；]\s*/).map((p) => p.trim()).filter(Boolean);
+const joined = (parts: readonly string[]): string => parts.map((p) => p.replace(/\s+/g, '')).join('');
 
 /** What a box the applicant types, picks a date or an option in already holds, as its driver reads it; null when empty. */
 function heldAnswer(control: Control | undefined): string | null {

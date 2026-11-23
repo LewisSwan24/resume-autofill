@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { highlightRun, runFill, runPreview } from '../../../src/fill/runFill';
+import { highlightRun, runFill, runPreview, sameAnswer } from '../../../src/fill/runFill';
+import type { FillIntent } from '../../../src/drivers/types';
 import { clearHighlights } from '../../../src/fill/highlight';
 import { createSampleFiles, createSampleProfile } from '../../../src/schema';
 import { mselect } from '../../shared/feishuMobileForm';
@@ -536,5 +537,35 @@ describe('runFill on a page that already holds answers', () => {
     const start = preview.items.find((i) => i.label === '预计入职时间')!;
     await runFill(document, { resume: zh, files }, { idFor: (el) => el.id, filter: { excludedFieldIds: [], overrides: { [start.fieldId]: '2026-07' } } });
     expect(value('av')).toBe('2026-07');
+  });
+});
+
+// A list a library draws shows its picks in its own way: a cascader's path with slashes, a multi-select's picks with
+// commas. A second fill must know its own answer from the first, so these are the resume's answer, not the applicant's.
+describe('sameAnswer', () => {
+  const cascade: FillIntent = { kind: 'cascade', display: '浙江省杭州市', path: ['浙江省', '杭州市'] };
+  const multi: FillIntent = {
+    kind: 'multi',
+    display: '深圳、杭州',
+    items: ['深圳', '杭州'].map((query) => ({ query, match: () => ({ status: 'none' as const }) })) as never,
+  };
+
+  it('takes a cascader path written with slashes as the same place', () => {
+    expect(sameAnswer(cascade, '浙江省 / 杭州市')).toBe(true);
+    expect(sameAnswer(cascade, '浙江省/杭州市')).toBe(true);
+  });
+
+  it('does not take another city of the same province', () => {
+    expect(sameAnswer(cascade, '浙江省 / 宁波市')).toBe(false);
+  });
+
+  it('takes the same picks in any order and with any separator', () => {
+    expect(sameAnswer(multi, '深圳, 杭州')).toBe(true);
+    expect(sameAnswer(multi, '杭州，深圳')).toBe(true);
+  });
+
+  it('does not take only some of the picks', () => {
+    expect(sameAnswer(multi, '深圳')).toBe(false);
+    expect(sameAnswer(multi, '深圳, 杭州, 上海')).toBe(false);
   });
 });

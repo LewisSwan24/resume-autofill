@@ -54,7 +54,9 @@ describe('OUTCOME_STATUS', () => {
 
   it('keeps the status.* key set identical in zh and en, and labels are distinct per icon+word', () => {
     const keys = (d: Readonly<Record<string, string>>) => Object.keys(d).filter((k) => k.startsWith('status.')).sort();
-    const outcomeKeys = (d: Readonly<Record<string, string>>) => keys(d).filter((k) => !k.startsWith('status.group.'));
+    // status.entry_held words a row for an entry the page already holds; it is not an outcome.
+    const outcomeKeys = (d: Readonly<Record<string, string>>) =>
+      keys(d).filter((k) => !k.startsWith('status.group.') && k !== 'status.entry_held');
     expect(keys(DICTIONARIES.zh)).toEqual(keys(DICTIONARIES.en));
     expect(outcomeKeys(DICTIONARIES.en)).toHaveLength(OUTCOMES.length);
     const labels = OUTCOMES.map((o) => DICTIONARIES.en[OUTCOME_STATUS[o].labelKey]);

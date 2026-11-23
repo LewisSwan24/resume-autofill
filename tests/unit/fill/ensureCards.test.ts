@@ -124,10 +124,11 @@ describe('findAddButtons', () => {
 
   // Each empty section is its title and its 添加, one after another: a button takes its own section's title, never the
   // one of the empty section before it.
-  it('gives the add button of each empty section its own section, and none to a section no resume has', () => {
+  // 作品 is where a portfolio file goes, so its button belongs to attachments; attachments take no cards.
+  it('gives the add button of each empty section its own section, 作品 the attachments one', () => {
     document.body.innerHTML = FEISHU_DESKTOP_ENTRIES;
     const empty = findAddButtons(document).filter((b) => b.el.closest('.createFormSection-container-empty'));
-    expect(empty.map((b) => b.section)).toEqual(['internship', 'projects', null, 'awards']);
+    expect(empty.map((b) => b.section)).toEqual(['internship', 'projects', 'attachments', 'awards']);
   });
 
   // Feishu's formily form on a phone (NIO): an empty section is a title row of its name and a 添加 button, the button

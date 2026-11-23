@@ -84,6 +84,7 @@ describe('isValidMessage', () => {
         'frame:focus',
         'field:apply',
         'frame:apply',
+        'frame:alive',
         'field:captureFingerprint',
         'frame:captureFingerprint',
         'ui:openOptions',

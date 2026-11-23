@@ -9,7 +9,9 @@
 ![Android 10+](https://img.shields.io/badge/Android-10%2B-0066cc)
 ![Local first](https://img.shields.io/badge/data-local%20only-00478f)
 
-**English** · [简体中文](README.zh-CN.md) · [Wiki](https://github.com/LewisSwan24/resume-autofill/wiki)
+[![English](https://img.shields.io/badge/English-0066cc?style=for-the-badge)](README.md) [![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-8a8a8e?style=for-the-badge)](README.zh-CN.md)
+
+[Wiki](https://github.com/LewisSwan24/resume-autofill/wiki) · [中文 Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5)
 
 </div>
 

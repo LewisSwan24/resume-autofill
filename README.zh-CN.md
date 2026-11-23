@@ -9,7 +9,9 @@
 ![Android 10+](https://img.shields.io/badge/Android-10%2B-0066cc)
 ![Local first](https://img.shields.io/badge/data-local%20only-00478f)
 
-[English](README.md) · **简体中文** · [Wiki](https://github.com/LewisSwan24/resume-autofill/wiki)
+[![English](https://img.shields.io/badge/English-8a8a8e?style=for-the-badge)](README.md) [![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-0066cc?style=for-the-badge)](README.zh-CN.md)
+
+[中文 Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5) · [English Wiki](https://github.com/LewisSwan24/resume-autofill/wiki)
 
 </div>
 
@@ -94,7 +96,7 @@ pnpm fixtures:preview   # http://localhost:4173：/native/、/antd/、/element/
 - **网申记录**：记录投递状态和截止日期，到期前本地提醒。
 - **加密存储**：简历和文件用 Android Keystore 里的密钥做 AES-256-GCM 加密，不进系统备份。
 
-构建方法、版本区别和真机测试见 Wiki 的 [安卓应用](https://github.com/LewisSwan24/resume-autofill/wiki/Android-App) 页。
+构建方法、版本区别和真机测试见 Wiki 的 [安卓应用](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%AE%89%E5%8D%93%E5%BA%94%E7%94%A8) 页。
 
 ## 工作原理
 
@@ -111,7 +113,7 @@ sequenceDiagram
     C-->>U: 边框、摘要卡片、侧边栏报告
 ```
 
-每个框架先扫描，只拿到自己字段需要的值；文件只发给有上传框的框架。字段匹配靠双语词典、所在区块和站点适配器，不用远程模型。详见 [架构](https://github.com/LewisSwan24/resume-autofill/wiki/Architecture)。
+每个框架先扫描，只拿到自己字段需要的值；文件只发给有上传框的框架。字段匹配靠双语词典、所在区块和站点适配器，不用远程模型。详见 [架构](https://github.com/LewisSwan24/resume-autofill/wiki/%E6%9E%B6%E6%9E%84)。
 
 ## 隐私
 
@@ -120,7 +122,7 @@ sequenceDiagram
 - 内容脚本运行在 Chrome 的隔离环境里，只通过 `chrome.runtime` 通信，简历数据从不经过 `window.postMessage`。
 - 设备间同步直接走局域网，不经过中转服务器，数据离开设备前已经加密。
 
-详见 [隐私与安全](https://github.com/LewisSwan24/resume-autofill/wiki/Privacy-and-Security)。
+详见 [隐私与安全](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%9A%90%E7%A7%81%E4%B8%8E%E5%AE%89%E5%85%A8)。
 
 ## 开发
 
@@ -136,7 +138,7 @@ sequenceDiagram
 | `pnpm test:captured` | 回放录制的页面，逐字段打分 |
 | `pnpm live-check` | 在真实页面上用虚构简历跑一次，所有写入都被拦下 |
 
-录制、期望值和打分怎么配合，见 [开发](https://github.com/LewisSwan24/resume-autofill/wiki/Development)。
+录制、期望值和打分怎么配合，见 [开发](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%BC%80%E5%8F%91)。
 
 ## 目录结构
 
@@ -164,4 +166,4 @@ sequenceDiagram
 
 ## 文档
 
-[Wiki](https://github.com/LewisSwan24/resume-autofill/wiki) 里有：[安装与上手](https://github.com/LewisSwan24/resume-autofill/wiki/Getting-Started)、[填写报告](https://github.com/LewisSwan24/resume-autofill/wiki/Fill-Report)、[简历资料](https://github.com/LewisSwan24/resume-autofill/wiki/Resume-Data)、[支持的网站](https://github.com/LewisSwan24/resume-autofill/wiki/Supported-Sites)、[安卓应用](https://github.com/LewisSwan24/resume-autofill/wiki/Android-App)、[本机 AI](https://github.com/LewisSwan24/resume-autofill/wiki/Local-AI)、[隐私与安全](https://github.com/LewisSwan24/resume-autofill/wiki/Privacy-and-Security)、[架构](https://github.com/LewisSwan24/resume-autofill/wiki/Architecture)、[开发](https://github.com/LewisSwan24/resume-autofill/wiki/Development) 和 [常见问题](https://github.com/LewisSwan24/resume-autofill/wiki/FAQ)。
+[Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5) 里有：[安装与上手](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%AE%89%E8%A3%85%E4%B8%8E%E4%B8%8A%E6%89%8B)、[填写报告](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%A1%AB%E5%86%99%E6%8A%A5%E5%91%8A)、[简历资料](https://github.com/LewisSwan24/resume-autofill/wiki/%E7%AE%80%E5%8E%86%E8%B5%84%E6%96%99)、[支持的网站](https://github.com/LewisSwan24/resume-autofill/wiki/%E6%94%AF%E6%8C%81%E7%9A%84%E7%BD%91%E7%AB%99)、[安卓应用](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%AE%89%E5%8D%93%E5%BA%94%E7%94%A8)、[本机 AI](https://github.com/LewisSwan24/resume-autofill/wiki/%E6%9C%AC%E6%9C%BAAI)、[隐私与安全](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%9A%90%E7%A7%81%E4%B8%8E%E5%AE%89%E5%85%A8)、[架构](https://github.com/LewisSwan24/resume-autofill/wiki/%E6%9E%B6%E6%9E%84)、[开发](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%BC%80%E5%8F%91) 和 [常见问题](https://github.com/LewisSwan24/resume-autofill/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)。

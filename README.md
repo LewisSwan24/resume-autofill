@@ -1,359 +1,167 @@
+<div align="center">
+
 # Resume Autofill
 
-**English** | [简体中文](README.zh-CN.md)
+**Fill job applications from your own resume in one click, with your data kept on your device.**
 
-A local-first job application autofill tool, available as a Chrome extension (Manifest V3) and an Android app with a built-in Resume Keyboard (Capacitor). It fills application forms from your own resume without sending data to any server, covering Chinese campus-recruitment sites as well as Australian and international ATS platforms.
+[![Mobile build](https://github.com/LewisSwan24/resume-autofill/actions/workflows/mobile-build.yml/badge.svg)](https://github.com/LewisSwan24/resume-autofill/actions/workflows/mobile-build.yml)
+![Chrome MV3](https://img.shields.io/badge/Chrome-MV3%20%C2%B7%20114%2B-0066cc)
+![Android 10+](https://img.shields.io/badge/Android-10%2B-0066cc)
+![Local first](https://img.shields.io/badge/data-local%20only-00478f)
 
-## Table of contents
+**English** · [简体中文](README.zh-CN.md) · [Wiki](https://github.com/LewisSwan24/resume-autofill/wiki)
 
-- [Features](#features)
-- [Architecture](#architecture)
-- [Status and roadmap](#status-and-roadmap)
-- [Supported platforms and UI stacks](#supported-platforms-and-ui-stacks)
-- [Chrome extension: install and try locally](#chrome-extension-install-and-try-locally)
-- [Managing resumes and local PDF/Word import](#managing-resumes-and-local-pdfword-import)
-- [Android mobile app and Resume Keyboard (`mobile/`)](#android-mobile-app-and-resume-keyboard-mobile)
-- [Configuration, permissions and environment variables](#configuration-permissions-and-environment-variables)
-- [Development and testing](#development-and-testing)
-- [Project structure](#project-structure)
-- [Known limitations](#known-limitations)
-- [Privacy and security](#privacy-and-security)
-- [Design system](#design-system)
+</div>
 
-An Android app in `mobile/` brings the same fill engine to the phone. It opens application pages in a built-in browser and fills them with one tap, keeps a list of your applications with deadline reminders, and adds a resume keyboard for places the browser cannot reach, such as WeChat mini programs. See [Android app](#android-app).
+Resume Autofill is a Chrome extension and an Android app. Open an application page, press the floating button, and the form is filled from the resume you keep in the extension. It works on Chinese campus-recruitment portals (Moka, Feishu, Beisen) and on international applicant tracking systems (Workday, Greenhouse, Lever, Ashby and more). No account, no server and no API key: resumes live in the browser or in the phone's encrypted storage.
 
-## Features
+When it is not sure, it leaves the field empty and asks rather than guessing.
 
-### Chrome extension (`entrypoints/`, `src/`)
+## Contents
 
-- **One-click fill.** Click the floating button on an application page (drag it anywhere or move it with `Alt` + arrow keys; each site remembers its position). It fills the form from your active resume and leaves fields the site already prefilled untouched.
-- **Never guesses.** Uncertain fields stay empty and are outlined in yellow for confirmation. Captchas, privacy-consent checkboxes, referral/employee IDs and bot traps are skipped.
-- **Summary card and side panel report.** A summary card next to the button shows field counts, jumps to fields on the page, and includes an "Add them to your profile" button that opens the editor straight at the first missing input. The side panel lists all fields by severity (`filled`, `needs_review`, `no_option`, `unmatched`, `action_failed`, `no_data`, `no_control`), where you can pick a suggested candidate or edit a value directly.
-- **Local PDF / `.docx` resume import.** Parses PDF (`pdfjs-dist` with locally bundled worker and CMap tables) and Word (`.docx` via `mammoth`) resumes offline. Every parsed field is shown beside its original source line in `ImportReview`, and you can save it as a new resume or merge it into an existing one with a diff preview.
-- **One-click bilingual switch (`中 | EN`).** Keep separate resumes per locale (`zh-CN`, `en-AU`), optionally paired via `linkedResumeId`. Switch both the interface language and the active resume from the side panel, the options header, or the `中 / EN` tag on the floating button.
-- **Cross-frame and multi-library support.** Works across nested iframes and drives native HTML, Ant Design, Element Plus, `react-select`, ARIA comboboxes and buttons, along with real ATS adapters and Chinese campus-recruitment drivers.
-- **Welcome and help pages.** Includes a first-install welcome page (`entrypoints/welcome`) and an in-extension help page (`entrypoints/help`) covering fill statuses, supported sites, privacy and troubleshooting.
+- [Highlights](#highlights)
+- [Supported sites](#supported-sites)
+- [Quick start](#quick-start)
+- [Android app](#android-app)
+- [How it works](#how-it-works)
+- [Privacy](#privacy)
+- [Development](#development)
+- [Project layout](#project-layout)
+- [Limitations](#limitations)
+- [Documentation](#documentation)
 
-### Android app and Resume Keyboard (`mobile/`)
+## Highlights
 
-- **Encrypted local storage (`ProfileVault`).** Resumes, app state and attachments live in private app storage encrypted with AES-256-GCM under an Android Keystore key (`loggingBehavior: "none"`, system backup and device transfer disabled).
-- **Built-in WebView browser.** Opens job links in an overlay WebView, injects the fill engine across frames, asks for explicit confirmation on an origin sheet before filling cross-origin frames, supports stored attachment uploads, and provides undo.
-- **Link handling and application tracker.** Handles `http(s)` links and shared text, offers copied links on Home, provides launcher shortcuts, and tracks applications (company, position, status, deadline, fill counts) with local deadline alarm notifications.
-- **Offline Resume Keyboard (Android IME).** A system input method in the same package. It displays a module strip, puts entries matching the current field type first, lets you switch resumes/languages, and includes basic English typing. It reads a stripped profile projection without attachments, hides resume content on password/lock-screen/no-learning fields, records nothing, and fails unit tests if bytecode references network, broadcast, service or intent APIs.
+| | |
+|---|---|
+| **One-click fill** | A draggable button on the page fills every frame of the form, adds education, work and project cards as needed, and uploads your resume, photo, transcript or portfolio file to the matching upload boxes. |
+| **Never guesses** | A field it cannot match with confidence stays empty and is outlined for review. Captchas, consent boxes, referral IDs and bot traps are left alone. |
+| **Keeps your answers** | On a form that opens already filled from an earlier application, it keeps what you wrote and shows the resume's value beside it to compare. Names and contact details the site brought in by itself are replaced. |
+| **Report** | A summary card and a side panel list every field as filled, needs review, no option, unmatched, failed, no data or no control. Jump to any field, pick a suggested answer or edit it in place. |
+| **Preview and multi-page forms** | Optionally review and untick values before they are written. On a form split over several pages it can press the page's own Next button, filling each step, and it always stops before the final submit. |
+| **Two languages** | Keep a Chinese and an English resume side by side, paired, and switch both the resume and the interface with one `中 / EN` toggle. |
+| **Local import** | Read a PDF or Word resume on your machine and review each value next to the line it came from before saving. |
+| **Sensitive fields** | Identity numbers are left for you to type unless you choose otherwise in settings. |
+| **More tools** | Resume variants, an encrypted vault, device-to-device sync over your local network, an application tracker, templates, a resume health check and site recipes for custom questions. Optional writing help uses Chrome's built-in AI or a local Ollama on your own machine. |
 
-## Architecture
+## Supported sites
 
-### Extension: per-frame data flow
-
-```mermaid
-sequenceDiagram
-    participant User as "User (FAB / Side Panel)"
-    participant BG as "Background Service Worker"
-    participant CS as "Content Script (ISOLATED World)"
-    participant Engine as "Engine + Adapters + Drivers"
-
-    User->>BG: "Trigger autofill on active tab"
-    BG->>CS: "Scan frame fields (no resume data sent)"
-    CS->>Engine: "Discover controls and resolve ATS adapter"
-    Engine-->>CS: "Matched field keys and frame map"
-    CS-->>BG: "Field summary per frameId"
-    BG->>BG: "Subset active resume per frame (attachments only if file input exists)"
-    BG->>CS: "Send frame-specific values via chrome.runtime"
-    CS->>Engine: "Run drivers and build FillReport"
-    Engine-->>User: "Field highlights + Summary Card + Side Panel Report"
-```
-
-### Shared core and platform isolation
-
-```mermaid
-flowchart TB
-    subgraph Shared["Shared Core (src/)"]
-        Schema["src/schema (19 modules, Zod v4)"]
-        Dict["src/dictionary (Bilingual EN/ZH + Places + Options)"]
-        Engine["src/engine & src/fill (Classify, Plan, Highlight, Report)"]
-        Drivers["src/drivers & src/adapters (Native, AntD, Element, ATS)"]
-        Import["src/import (Offline PDF.js + Mammoth)"]
-        UI["src/ui (Lively Icons tokens and theme.css)"]
-    end
-
-    subgraph Ext["Chrome Extension (WXT 0.21 + React 19, MV3)"]
-        BG["entrypoints/background.ts"]
-        CS["entrypoints/content.ts & fab.content"]
-        Pages["options / sidepanel / welcome / help"]
-        ExtStore["chrome.storage.local + IndexedDB"]
-    end
-
-    subgraph Mobile["Android App (mobile/, Capacitor 8.5.3)"]
-        CapApp["mobile/app (Profile, Tracker, Import, Browser UI)"]
-        Inject["mobile/inject (WebView Frame Engine + Origin Guard)"]
-        Vault["Android ProfileVault (AES-256-GCM Keystore)"]
-        IME["Android Resume Keyboard IME (No Network Permission)"]
-    end
-
-    Shared --> Ext
-    Shared --> Mobile
-    Pages --> ExtStore
-    CapApp --> Vault
-    Vault -->|"Slim sealed projection"| IME
-    CapApp -->|"Origin-scoped fill payload"| Inject
-```
-
-## Status and roadmap
-
-| Milestone | Scope | Status |
+| Kind | Sites | How it is handled |
 |---|---|---|
-| **M1** | Core engine, 19-module resume editor, side panel, floating button and design system. 100% of fields are filled correctly on the synthetic test sites (native HTML, Ant Design, Element Plus). | Done |
-| **M2** | Real ATS and Chinese campus-recruitment support (`Greenhouse`, `Lever`, `Workable`, `Workday`, `Ashby`, `Moka`, `Beisen`, `Feishu Recruiting`), offline snapshot capture and scoring harness, local PDF/Word resume import, one-click bilingual switch, and the Android Capacitor app (`ProfileVault`, WebView browser, application tracker and Resume Keyboard IME). Further ATS pages (`SuccessFactors`, `PageUp`, multi-step `Workday` follow-ups, etc.) are still being added. | In progress (core complete) |
-| **M3** | Optional AI features: drafting answers to open-ended questions, Chinese/English resume translation, and further polish. | Planned |
-| **Mobile** | Android app: profile and attachments, PDF and Word import, the fill browser, the application tracker with reminders, and the resume keyboard. An iOS app is not started. | Android done |
+| Chinese campus portals | **Moka** (desktop and phone), **Feishu Recruiting** (both form generations, desktop and phone), **Beisen** | Platform drivers for their lists, place trees, school searches, date wheels and month spans |
+| Company sites | ByteDance, Nowcoder, Tencent | Portal adapter |
+| Applicant tracking systems | **Workday**, **Greenhouse**, **Lever**, **Workable**, **Ashby**, **Rippling**, PageUp, SmartRecruiters, SuccessFactors | Site adapters on top of the general engine |
+| Everything else | Native HTML, Ant Design, Element Plus, `react-select`, ARIA comboboxes and button groups, Shadow DOM | The general engine and UI-library drivers |
 
-## Supported platforms and UI stacks
+Recorded pages from Moka, Feishu, Beisen, Workday, Greenhouse, Lever, Workable, Ashby, Rippling, Breezy, Gem, Manatal, Pinpoint, Recruitee, Teamtailor and Zoho are replayed offline and scored field by field, with zero wrong fills as the target. The recordings stay on the developer's machine and are not part of the repository.
 
-- **ATS adapters (`src/adapters/`):** Greenhouse, Lever, Workable (multiple education and work entries), Workday. Ashby works with the general engine and ARIA/`react-select` drivers.
-- **Recruitment and UI drivers (`src/drivers/`):**
-  - Chinese campus-recruitment platforms: **Beisen (Phoenix)**, **Moka**, **Feishu Recruiting**.
-  - UI libraries: **Native HTML** (text, select, choice, date, file, richtext), **Ant Design** (`antdSelect`, `antdPicker`), **Element Plus** (`select`, `date`, `cascader`, `upload`), **`react-select`**, and **ARIA** comboboxes, search boxes and yes/no button groups.
+## Quick start
 
-## Chrome extension: install and try locally
-
-### 1. Build and load unpacked
-
-Requires **Node.js (v22+ recommended)**, **pnpm** and **Chrome 114+** (for the `sidePanel` API).
+You need **Node.js 22+**, **pnpm** and **Chrome 114+**.
 
 ```powershell
 pnpm i
-pnpm build        # output goes to .output/chrome-mv3
+pnpm build
 ```
 
-Load it into Chrome:
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode** at the top right.
-3. Click **Load unpacked** and select `.output/chrome-mv3`.
-4. After another `pnpm build`, click the reload icon on the extension card to update.
+1. Open `chrome://extensions` and turn on **Developer mode**.
+2. Click **Load unpacked** and pick `.output/chrome-mv3`.
+3. The welcome page opens with two fictional sample resumes, one Chinese and one English. Replace them with your own in the extension's options page, or import a PDF or Word file.
+4. Open an application page, choose the resume in the side panel, and press the floating button.
 
-On first install, the extension opens the welcome page and seeds two sample resumes: `林知远（中文简历）` (`zh-CN`) and `Zhiyuan (Leo) Lin (English resume)` (`en-AU`).
+Outlines on the page show what happened:
 
-### 2. Try on synthetic test sites
+| Outline | Meaning |
+|---|---|
+| Green, solid | Filled |
+| Yellow, dashed | Needs review: several candidates, no matching option, or your own earlier answer kept |
+| Red, solid | Not recognised, or the fill failed |
+| None | Nothing in your resume for it, or a field left alone on purpose |
 
-The repository includes synthetic application pages covering the three main UI stacks:
+To try it without visiting a real site, run the synthetic test pages:
 
 ```powershell
 pnpm fixtures:build
-pnpm fixtures:preview     # serves on fixed port 4173
+pnpm fixtures:preview   # http://localhost:4173: /native/, /antd/, /element/
 ```
 
-Open <http://localhost:4173/> and pick a page:
+## Android app
 
-| Page | Path | Sample resume |
-|---|---|---|
-| Native HTML (`en-AU`) | `/native/` (with iframe at `/native/frame.html`) | `Zhiyuan (Leo) Lin` |
-| Ant Design (`zh-CN`) | `/antd/` | `林知远` |
-| Element Plus (`zh-CN`) | `/element/` | `林知远` |
+The app in [`mobile/`](mobile) brings the same fill engine to the phone (Capacitor 8, Android 10 and later).
 
-Steps:
-1. Open the side panel from the toolbar icon and choose the matching resume (or use the `中 | EN` switch).
-2. Click the floating button on the test page (it first shows the number of detected fields).
-3. Check the border colors:
-   - **Green (2px solid):** filled.
-   - **Yellow (2px dashed):** needs review (multiple candidates or no matching option); stays empty.
-   - **Red (3px solid):** unrecognized or fill failed.
-   - **No border:** no data in your resume (or an intentional trap such as a captcha, privacy checkbox or referee employee ID).
-4. Use the summary card to locate fields on the page, or click **"Add them to your profile"** to open the editor at the first missing field.
-5. Check the side panel for the full report sorted by severity, candidate adoption, inline editing and direct jumps to missing fields.
+- **Fill browser.** Open a job link, tap fill, review the report, undo if needed. A form embedded from another site gets your data only after you approve that site by name.
+- **Resume keyboard.** A system keyboard that types resume entries anywhere the browser cannot reach, such as WeChat mini programs. It never goes online.
+- **Tracker.** Applications with status, deadlines and local reminders.
+- **Encrypted storage.** Resumes and files are sealed with AES-256-GCM under an Android Keystore key and excluded from backups.
 
-## Managing resumes and local PDF/Word import
+Build steps, flavors and device tests are in the [Android app](https://github.com/LewisSwan24/resume-autofill/wiki/Android-App) wiki page.
 
-Open the **Options / Profile** page from `chrome://extensions`, the side panel toolbar or the summary card:
+## How it works
 
-- **Resume library:** Create (pick `zh-CN` or `en-AU`), duplicate, pair bilingual resumes (`linkedResumeId`), delete and set active.
-- **19-module editor (`src/editor/modules.ts`):**
-  - *Single-object and root modules:* `basics` (including native place, household, student origin and current location), `contact`, `workRights`, `jobIntention`, `emergencyContact`, `diversity`, `about` (`selfIntroduction`, `hobbies`).
-  - *Repeatable array modules:* `education`, `work`, `projects`, `campus`, `awards`, `languages`, `certificates`, `skills`, `family`, `referees`, `customAnswers`.
-  - Changes autosave and invalid values (such as date formats `YYYY-MM` / `YYYY-MM-DD`) are flagged in place.
-- **Local resume import (`src/import/`):** Upload a `.pdf` or `.docx` resume (up to 10 MB). `pdfjs-dist` and `mammoth` parse it offline on your machine, show each recognized value next to its source line in `ImportReview`, and let you create a new resume or merge into an existing one.
-- **Attachments (`attachments`):** Store Resume PDF, ID photo and transcript in IndexedDB (up to 10 MB per file).
-- **JSON backup:** Export all resumes and settings as JSON. Importing replaces existing profile data after confirmation (attachments are not included in JSON).
-- **Settings:** Interface language (`auto` / `zh` / `en`), reset saved floating button positions per site, and the `previewBeforeFill` preference switch.
-
-## Android mobile app and Resume Keyboard (`mobile/`)
-
-The `mobile/` workspace wraps the shared schema, editor logic, bilingual dictionaries, fill engine and local resume importer into a native Android app with **Capacitor 8.5.3**.
-
-The app (`网申简历填写`, package `app.raf.dev`) runs on Android 10 (API 29) and later. It is built with Capacitor 8: the screens are React, and the parts that need the system (the fill browser, encrypted storage, reminders, the keyboard) are native Java.
-
-### Capabilities
-
-- **Home and onboarding:** Paste or tap a recently copied job link, check recent applications and closing-soon reminders, and switch the active resume.
-- **Profile and attachments:** Full 19-module mobile editor with bottom-sheet pickers, tag chips, system date/month pickers, autosave (`500 ms` and on background), and encrypted file storage (`files/attachments`).
-- **Built-in WebView browser:** Injects `mobile/inject` into frames, shows a floating fill button with report and undo, uploads attachments from `ProfileVault`, and guards cross-origin frames with an origin confirmation sheet.
-- **Application tracker and deep links:** Handles shared text or `http(s)` links, tracks status, deadlines and fill counts, and schedules local alarm notifications.
-- **Resume Keyboard IME:** Enabled in Android settings through the in-app setup flow. Provides a module strip, context-prioritized entry chips, resume/language switching and basic English typing without network access.
-
-### Install the APK
-
-1. Copy `app-dev-release.apk` to the phone and open it.
-2. Allow installing apps from the source you opened it with when Android asks. Android warns that the app is not from Google Play; that is expected for an app you install yourself.
-3. To use the resume keyboard, open it from Settings → 简历输入法 in the app, which walks you through turning it on.
-
-The fill browser needs an up-to-date Android System WebView. On a phone whose WebView is too old, the app says so and the resume keyboard still works.
-
-### Build from source
-
-Requires Node.js with pnpm, JDK 21 and the Android SDK (platform 36). The app imports the fill engine from `src/`, so install the root dependencies first.
-
-```powershell
-pnpm i                      # repository root
-cd mobile
-npm ci
-npm run sync                # builds the screens and the page engine, then copies them into the Android project
-cd android
-.\gradlew.bat assembleDevRelease
+```mermaid
+sequenceDiagram
+    participant U as You (button / side panel)
+    participant B as Background
+    participant C as Content script (each frame)
+    U->>B: Fill this tab
+    B->>C: Scan the frame (no resume data sent)
+    C-->>B: Field keys found in this frame
+    B->>C: Only the values this frame asks for
+    C->>C: Plan, add cards, fill through drivers
+    C-->>U: Outlines, summary card, side panel report
 ```
 
-The signed APK lands in `mobile/android/app/build/outputs/apk/dev/release/app-dev-release.apk`. The `dev` flavor keeps the package name `app.raf.dev`, so it installs over the app already on the phone; the `prod` flavor (`assembleProdRelease`) is a separate app, `app.raf.app`, meant for store releases. Release builds are shrunk with R8, and the version comes from `RAF_VERSION_CODE` and `RAF_VERSION_NAME`. The release build reads its signing key from `keystore.properties`, which lives outside the repository (see `mobile/android/app/build.gradle` for where it is looked up and what it holds). Without that file, use `.\gradlew.bat assembleDevDebug` for a debug build.
+Each frame is scanned first and gets only the values its own fields need; files go only to frames with an upload box. Matching is done with bilingual dictionaries, section context and site adapters, never with a remote model. More in [Architecture](https://github.com/LewisSwan24/resume-autofill/wiki/Architecture).
 
-### Mobile commands
+## Privacy
 
-Run inside `mobile/`:
+- Extension data stays in `chrome.storage.local` and IndexedDB. The phone app keeps it in encrypted private storage.
+- Extension pages run under a strict CSP. The only address they may call is a local Ollama on `127.0.0.1:11434`, and only if you turn that on. There is no analytics and no remote fetch.
+- Content scripts run in Chrome's isolated world and talk only over `chrome.runtime`; resume data never crosses `window.postMessage`.
+- Sync between devices goes directly over your local network with no relay server, and the stream is encrypted before it leaves.
 
-```powershell
-cd mobile
-npm install
-npm run dev           # Vite dev server for mobile UI
-npm run build         # Check native theme tokens, build app and WebView inject bundle, copy page assets
-npm run build:inject  # Rebuild WebView injection bundle only
-npm run sync          # Build and run cap sync android
-```
+Details: [Privacy and security](https://github.com/LewisSwan24/resume-autofill/wiki/Privacy-and-Security).
 
-To build the Android debug APK and run device E2E tests (from the repo root):
+## Development
 
-```powershell
-# Inside mobile/android: ./gradlew assembleDevDebug (or gradlew.bat assembleDevDebug on Windows)
-$env:RAF_SERIAL="<adb-device-serial>"
-npx playwright test --config mobile/e2e/playwright.config.ts
-```
-
-### Tests
-
-| Command | Purpose |
+| Command | What it does |
 |---|---|
-| `pnpm vitest run tests/unit/mobile` | Unit tests for the app's screens, models and the page bridge (repository root) |
-| `.\gradlew.bat testDevDebugUnitTest` | JUnit tests for the native code, including the keyboard's no-network check (in `mobile/android`) |
-| `RAF_SERIAL=emulator-5554 npx playwright test --config mobile/e2e/playwright.config.ts` | Device tests on an emulator (repository root). They clear the app's data and switch the keyboard, so never point them at a phone you use |
+| `pnpm dev` | WXT development mode |
+| `pnpm build` / `pnpm zip` | Build to `.output/chrome-mv3` / package it |
+| `pnpm typecheck` | `wxt prepare` and `tsc` for the extension and test sites |
+| `pnpm test` | Unit tests (Vitest, jsdom) |
+| `pnpm test:drivers` | Driver and whole-page tests in Playwright |
+| `pnpm e2e` / `pnpm visual` | End-to-end runs on the test sites / light and dark screenshots |
+| `pnpm capture` | Record a real application page for offline replay (no filling, no clicks) |
+| `pnpm test:captured` | Replay recorded pages and score each field |
+| `pnpm live-check` | One guarded run on a live page with the fictional resume and all writes blocked |
 
-### Limitations
+How recordings, expectations and scoring fit together is in [Development](https://github.com/LewisSwan24/resume-autofill/wiki/Development).
 
-- There is no iOS app yet.
-- Sites that only allow WeChat login cannot be logged into inside the app's browser. Most campus sites also accept a phone number; otherwise use the resume keyboard in WeChat.
-- The resume keyboard has no Chinese input method, and in web pages it cannot tell a verification-code field apart, so it shows the resume entries there too.
-
-## Configuration, permissions and environment variables
-
-This project requires no external API keys, backend servers or `.env` files.
-
-### Extension manifest permissions (`wxt.config.ts`)
-
-| Permission / Setting | Purpose |
-|---|---|
-| `storage`, `unlimitedStorage` | Store resume profiles, settings and local data in `chrome.storage.local` and IndexedDB |
-| `sidePanel` | Render the side panel report and resume switcher (Chrome 114+) |
-| `webNavigation` | List frames in the active tab so data is sent per frame (`tabs` permission is not requested) |
-| `<all_urls>` (host permission) | Recognize and fill job application forms across recruitment sites |
-| `content_security_policy` | `default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self'; form-action 'none'; frame-src 'none'` on extension pages |
-
-### Runtime and test environment variables
-
-| Variable | Scope | Description |
-|---|---|---|
-| `RAF_SERIAL` | `mobile/e2e` | Target ADB device/emulator serial for Playwright Android WebView E2E tests |
-| `RAF_ALLOW_WIPE` | `mobile/e2e` | Must be set to `1` before `mobile/e2e/profile.device.spec.ts` runs on a physical phone |
-
-## Development and testing
-
-| Command | Purpose |
-|---|---|
-| `pnpm dev` | Start WXT development mode |
-| `pnpm build` | Build the extension to `.output/chrome-mv3` |
-| `pnpm zip` | Package the extension with WXT |
-| `pnpm typecheck` | Run `wxt prepare` and `tsc --noEmit` for the extension and synthetic fixtures |
-| `pnpm test` | Run unit tests (Vitest + jsdom) |
-| `pnpm test:watch` | Run unit tests in watch mode |
-| `pnpm harness:build` | Build the in-page driver test harness |
-| `pnpm test:drivers` | Build harness and run Playwright control-driver and whole-page accuracy tests |
-| `pnpm e2e` | Build extension and run headless Playwright E2E across synthetic sites |
-| `pnpm e2e:headed` | Run Playwright E2E with a visible Chromium window |
-| `pnpm visual` | Build extension and run light/dark visual screenshot tests (`tests/visual`) |
-| `pnpm fixtures:dev` | Start Vite dev server for synthetic sites |
-| `pnpm fixtures:build` | Build synthetic test sites |
-| `pnpm fixtures:preview` | Preview synthetic sites on fixed port `4173` |
-| `pnpm capture` | Run `scripts/capture-page.ts` to capture sanitized snapshots of real application pages |
-| `pnpm test:captured` | Build harness and extension, then run Playwright tests on captured snapshots |
-| `pnpm accuracy:table` | Generate accuracy summary table (`scripts/accuracy-table.ts`) |
-| `pnpm live-check` | Build extension and run guarded live-site verification (`scripts/live-check.ts`) |
-
-## Project structure
+## Project layout
 
 | Path | Contents |
 |---|---|
-| `entrypoints/` | Extension entry points: `background.ts`, `content.ts`, `fab.content/`, `options/`, `sidepanel/`, `welcome/`, `help/` |
-| `src/adapters/` | Site-specific ATS adapters (`greenhouse.ts`, `lever.ts`, `workable.ts`, `workday.ts`, `resolve.ts`) |
-| `src/background/` | Message routing, frame discovery, per-frame data subsetting, sample resume seeding |
-| `src/content/` | Per-frame content-script handlers and DOM listeners |
-| `src/dictionary/` | Bilingual field, option, section, place, add-button and similarity dictionaries |
-| `src/drivers/` | UI and platform drivers (`native/`, `element/`, `workday/`, `antd*.ts`, `beisen.ts`, `moka.ts`, `feishu.ts`, `aria.ts`, `searchBox.ts`) |
-| `src/editor/` | Pure module definitions (19 modules), mutations, validation, field jump targets, import/export |
-| `src/engine/` | Field discovery, classification, visibility, grouping, field dependencies, date formatting and fill planning |
-| `src/fill/` | Fill runner, card creation (`ensureCards.ts`), highlights and report generation |
-| `src/import/` | Offline PDF (`pdfjs-dist`) and `.docx` (`mammoth`) extraction and resume draft parsing |
-| `src/messaging/`, `src/i18n/` | Typed `chrome.runtime` message protocol and bilingual UI strings |
-| `src/schema/` | Zod v4 resume model, field keys, migrations and neutral sample data |
-| `src/storage/` | `chrome.storage.local` and IndexedDB persistence for profiles and attachments |
-| `src/ui/` | Shared "Lively Icons" design tokens, themes, bundled fonts, Bootstrap Icons registry and status mapping |
-| `mobile/app/` | The Android app's screens (React): home, resumes, applications, settings, the fill browser's controls |
-| `mobile/android/` | The Android project (Capacitor 8) and the native code: encrypted storage, the fill browser, reminders, shortcuts, the resume keyboard |
-| `mobile/inject/`, `mobile/bridge/` | The fill engine bundled for pages in the fill browser, and the message protocol between those pages and the app |
-| `mobile/e2e/` | Device tests and their local test pages |
-| `fixtures/` | Synthetic test sites (`synthetic/`) and generated sample resume PDFs (`resume-samples/`) |
-| `scripts/` | Icon renderer (`render-icons.mjs`), sample generator, page capture, accuracy table and live check |
-| `tests/` | `unit/`, `drivers/`, `e2e/`, `captured/`, `visual/` and `shared/` test suites |
+| `entrypoints/` | Background, content script, floating button, options, side panel, welcome and help pages |
+| `src/engine/`, `src/fill/` | Scan, classify, group, plan, fill, highlight and report |
+| `src/drivers/`, `src/adapters/` | UI-library and platform drivers; per-site adapters |
+| `src/dictionary/` | Bilingual field, option, section and place dictionaries |
+| `src/schema/`, `src/editor/` | The resume model (19 modules) and the editor's logic |
+| `src/import/` | Offline PDF and Word reading |
+| `src/storage/`, `src/sync/` | Local storage, the vault, local-network sync |
+| `src/ai/`, `src/tailor/`, `src/audit/`, `src/templates/`, `src/recipes/`, `src/tracker/` | Optional on-device helpers |
+| `src/ui/` | Design tokens, theme, fonts and icons |
+| `mobile/` | The Android app, its native code, the page bundle and device tests |
+| `fixtures/synthetic/` | Test sites for the three main UI stacks |
+| `scripts/`, `tests/` | Capture, live check, accuracy table; unit, driver, e2e, captured and visual tests |
 
-## Known limitations
+## Limitations
 
-- **Date range pickers:** Single-control date range pickers (start and end in one input) are not supported yet; single-date and year-month pickers are.
-- **No AI layer yet:** Field recognition relies on dictionaries, rules and adapters. Unrecognized custom employer questions stay empty and are marked red.
-- **No pre-fill preview modal:** Clicking the floating button fills directly and relies on the summary card, side panel and mobile undo for review (the `previewBeforeFill` setting is stored for future use).
-- **Dynamic "Add entry" buttons:** Extra education/work cards are created by matching known "Add ..." button text. If a module has no add button or its text is unrecognized, extra resume entries are skipped.
-- **Gender / diversity defaults:** Gender questions with a decline option default to "Prefer not to say" unless changed in the **Diversity** section of the editor.
-- **More ATS platforms:** Multi-step Workday follow-up pages, SuccessFactors, PageUp and other ATS platforms are still being added under M2.
+- Fields are matched with dictionaries and rules. A company's own unusual question stays empty and is marked for you.
+- A site's school or company search needs the live site; offline replays answer only the searches that were recorded.
+- Extra cards are added through each section's own add button. A section without a recognisable one gets only the cards already on the page.
+- There is no iOS app. Sites that allow only WeChat login cannot be signed into inside the Android app's browser; use the resume keyboard there.
 
-## Privacy and security
+## Documentation
 
-- **Local persistence:** Extension data stays in `chrome.storage.local` and IndexedDB. Mobile data stays in Android private storage encrypted with AES-256-GCM (`ProfileVault` under Android Keystore, with backup and device transfer disabled).
-- **No network requests:** Extension pages enforce a strict CSP (`default-src 'self'; connect-src 'self'; form-action 'none'; frame-src 'none'`). `pdfjs-dist` (worker and CMaps) and `@fontsource/*` fonts are bundled locally; there is no `fetch`, `XMLHttpRequest`, `WebSocket` or analytics in the extension.
-- **ISOLATED world and channel isolation:** Content scripts run in the default `ISOLATED` world. Resume data never passes through `window.postMessage` (WXT's content-script-started announcement is disabled), and components communicate only over `chrome.runtime`.
-- **Per-frame and per-origin minimization:** The background queries recognized field keys first without sending resume values, then sends each frame only matching values (attachments go only to frames with file inputs). On mobile WebView, cross-origin frames require explicit user confirmation on an origin sheet first.
-- **Keyboard IME isolation:** The Android Resume Keyboard reads a stripped projection without attachments, hides resume content on password/lock-screen/no-learning fields, logs nothing, and fails unit tests if bytecode references network, broadcast, service or intent APIs.
-
-On the Android app:
-
-- Resumes, attachments, app state and the application records are encrypted with AES-256-GCM under a key kept in the Android Keystore, and are excluded from cloud backup and device transfer. Delete-all removes the data and the key.
-- The app goes online only to load the pages you open in its browser. A page receives resume data only after you tap fill, and a form from another site embedded in the page only after you agree to that site by name.
-- The resume keyboard reads a slim copy of the resume (no attachments, no ID number) and never goes online. A unit test fails if the keyboard's code refers to any network class.
-- Clipboard: the app looks at a copied link only when you bring it to the front. It keeps only the time of the last clip and short fingerprints of the links you dismissed, never the copied text.
-
-## Design system
-
-All extension surfaces (options page, side panel, welcome/help and floating button) and the mobile app share the **"Lively Icons"** design system: quiet screens, icon first, `paper` / `surface` / `tile` layers separated by 1px borders, and no drop shadows. The core files live in `src/ui/`:
-
-| File (`src/ui/`) | Contents |
-|---|---|
-| `tokens.ts`, `theme.css` | Design tokens (`--raf-*` CSS custom properties) |
-| `fonts.css` | Bundled web fonts for extension pages |
-| `Icon.tsx` | Inline SVG icons registered from `bootstrap-icons` |
-| `status.ts` | Tone, icon and label mapping (`OUTCOME_STATUS`) |
-
-- **Tokens:** Edit `tokens.ts` and `theme.css` together (`tests/unit/ui/tokens.test.ts` checks light/dark parity and forbids hard-coded colors; `mobile/scripts/gen-native-theme.mjs --check` keeps mobile native tokens in sync). Weights are `400` and `600`, shadows are `none`, and motion timings are `320 ms` spring (`--raf-motion-move`), `160 ms` (`--raf-motion-settle`) and `120 ms` (`--raf-motion-duration`).
-- **Dark mode:** Follows the system `prefers-color-scheme` setting with no manual toggle; dark mode uses no hue outside semantic status colors.
-- **Fonts:** Extension pages bundle `Manrope` (`400`, `600`) and `ZCOOL KuaiLe` (display titles) via `@fontsource/*`; the mobile app bundles `Lexend`, `Shantell Sans` and `ZCOOL KuaiLe`. The Shadow DOM floating button falls back to the system font stack (`Noto Sans SC`, `PingFang SC`, `Microsoft YaHei`, `system-ui`).
-- **Status and page highlights:** Status icons always appear next to a label (`OUTCOME_STATUS`). Page field outlines use `HIGHLIGHT_COLORS` in `tokens.ts` with different border styles: `2px solid` (filled), `2px dashed` (needs review) and `3px solid` (failed).
-- **Extension icons:** `public/icon/{16,32,48,128}.png` are rendered from the design system (`#0066cc` accent tile + `file-earmark-check`) with `node scripts/render-icons.mjs`.
+The [wiki](https://github.com/LewisSwan24/resume-autofill/wiki) covers [getting started](https://github.com/LewisSwan24/resume-autofill/wiki/Getting-Started), [the fill report](https://github.com/LewisSwan24/resume-autofill/wiki/Fill-Report), [your resume data](https://github.com/LewisSwan24/resume-autofill/wiki/Resume-Data), [supported sites](https://github.com/LewisSwan24/resume-autofill/wiki/Supported-Sites), [the Android app](https://github.com/LewisSwan24/resume-autofill/wiki/Android-App), [local AI](https://github.com/LewisSwan24/resume-autofill/wiki/Local-AI), [privacy](https://github.com/LewisSwan24/resume-autofill/wiki/Privacy-and-Security), [architecture](https://github.com/LewisSwan24/resume-autofill/wiki/Architecture), [development](https://github.com/LewisSwan24/resume-autofill/wiki/Development) and a [FAQ](https://github.com/LewisSwan24/resume-autofill/wiki/FAQ).

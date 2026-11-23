@@ -26,6 +26,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # The unit tests and the typecheck reach into the app's code, which has its own packages.
+      - name: Install app dependencies
+        working-directory: mobile
+        run: npm ci
       - name: Typecheck
         run: pnpm typecheck
       - name: Unit tests

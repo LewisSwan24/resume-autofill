@@ -47,6 +47,14 @@ describe('long-text questions in the plan', () => {
     expect([...row.value!].length).toBeLessThanOrEqual(20);
   });
 
+  it('drafts nothing for a cover letter asked as a file: text cannot go in a file box', () => {
+    const p = plan(`<div class="field"><label for="clf">Cover letter</label><input type="file" id="clf"></div>`);
+    const row = p.reports.find((r) => r.label === 'Cover letter')!;
+    expect(row.note).not.toBe('draft');
+    expect(row.value).toBeUndefined();
+    expect(p.steps).toHaveLength(0);
+  });
+
   it('has nothing to draft from a blank resume', () => {
     const blank = ResumeSchema.parse({ id: 'b', title: 'B', locale: 'zh-CN' });
     expect(plan(box('s', '个人优势'), blank).reports.find((r) => r.fieldKey === 'answers.strengths')!.outcome).toBe('no_data');

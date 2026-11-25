@@ -258,6 +258,16 @@ export function rowsOf(report: FillReport, label: string, fieldKey?: string): Fi
   });
 }
 
+/**
+ * The report rows of an entry: those its `labelRe` matches when it has one (a label that is part of another, as a
+ * language card's 是否可作为工作语言 inside 英语是否可作为工作语言), else those whose label holds the entry's own.
+ */
+function entryRows(report: FillReport, label: string, labelRe: string | undefined): FillReport['fields'] {
+  if (!labelRe) return rowsOf(report, label);
+  const regex = new RegExp(labelRe, 'i');
+  return report.fields.filter((f) => regex.test(f.label ?? ''));
+}
+
 /** Every selector that gives a control on the page its verdict. */
 export function verdictSelectors(expected: CapturedExpected): string[] {
   const of = (f: CapturedField): string[] => {
@@ -419,15 +429,15 @@ export function scoreSample(
     const now = after.readings[label] ?? null;
     // A card the fill adds brings its own controls: one still empty there was left alone.
     const changed = !(isEmptyReading(was) && isEmptyReading(now)) && JSON.stringify(now) !== JSON.stringify(was);
-    return changed || rowsOf(report, label).some((r) => r.outcome === 'filled');
+    return changed || entryRows(report, label, expected.__leaveEmpty![label]!.labelRe).some((r) => r.outcome === 'filled');
   });
 
-  const named: [string, string | undefined][] = [
-    ...Object.entries(expected.__leaveEmpty ?? {}).map(([label, e]): [string, string | undefined] => [label, e.fieldKey]),
-    ...allGaps.map(([label, g]): [string, string | undefined] => [label, g.fieldKey]),
+  const named: [string, string | undefined, string | undefined][] = [
+    ...Object.entries(expected.__leaveEmpty ?? {}).map(([label, e]): [string, string | undefined, string | undefined] => [label, e.fieldKey, e.labelRe]),
+    ...allGaps.map(([label, g]): [string, string | undefined, string | undefined] => [label, g.fieldKey, g.labelRe]),
   ];
-  const wrongGuesses = named.flatMap(([label, right]) =>
-    rowsOf(report, label)
+  const wrongGuesses = named.flatMap(([label, right, labelRe]) =>
+    entryRows(report, label, labelRe)
       .filter((r) => r.fieldKey && r.fieldKey !== right)
       .map((r) => `${label}: ${r.fieldKey}`),
   );

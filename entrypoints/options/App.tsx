@@ -34,6 +34,7 @@ import { Attachments, MAX_ATTACHMENT_MB, acceptsFile, slotTypeKey } from './Atta
 import { ModuleForm } from './ModuleForm';
 import { ImportReview, type ReviewProblem } from './ImportReview';
 import { ResumeList } from './ResumeList';
+import { AnswerTemplatesPanel } from './AnswerTemplates';
 import { DataPanel, SettingsPanel } from './SidePanels';
 import { TailorPanel } from './TailorPanel';
 import { TemplatesPanel } from './TemplatesPanel';
@@ -549,6 +550,8 @@ function Options({ autosaveDelayMs }: AppProps) {
               onVaultLocked={markLocked}
               onVaultUnlocked={unlocked}
             />
+            <h3 className="raf-heading">{t('options.answers.title')}</h3>
+            <AnswerTemplatesPanel settings={profile.settings} onChange={(settings) => void commit({ ...profile, settings })} />
           </section>
         ) : tab === 'tracker' ? (
           <section className="raf-card" aria-label={t('options.tracker.title')}>

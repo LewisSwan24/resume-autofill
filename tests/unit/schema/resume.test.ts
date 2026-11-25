@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProfileSchema, RegionSchema, ResumeSchema } from '../../../src/schema';
+import { CURRENT_SCHEMA_VERSION, ProfileSchema, RegionSchema, ResumeSchema } from '../../../src/schema';
 
 describe('ResumeSchema defaults', () => {
   const empty = ResumeSchema.parse({ id: 'r1', title: 'Empty', locale: 'zh-CN' });
@@ -104,7 +104,7 @@ describe('ProfileSchema', () => {
   });
 
   it('rejects a wrong schemaVersion', () => {
-    expect(ProfileSchema.safeParse({ schemaVersion: 3 }).success).toBe(false);
+    expect(ProfileSchema.safeParse({ schemaVersion: CURRENT_SCHEMA_VERSION + 1 }).success).toBe(false);
     expect(ProfileSchema.safeParse({}).success).toBe(false);
   });
 });

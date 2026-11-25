@@ -53,7 +53,7 @@ const ENTRY_SCHEMAS: Record<ArrayModuleName, { parse(input: unknown): unknown }>
   referees: RefereeSchema,
 };
 
-const SINGLE_MODULES = ['basics', 'contact', 'workRights', 'jobIntention', 'emergencyContact', 'diversity'] as const;
+const SINGLE_MODULES = ['basics', 'contact', 'workRights', 'jobIntention', 'questions', 'emergencyContact', 'diversity'] as const;
 const MISC_FIELDS = ['selfIntroduction', 'hobbies'] as const;
 
 /** `contact.<key>` → `contact.address.<prop>` (mirrors ADDRESS_FIELDS in engine/values.ts). */

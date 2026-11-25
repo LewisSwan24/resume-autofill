@@ -310,6 +310,110 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'How did you hear about us|How did you hear about this role|How did you hear about this position|How did you hear about this job|Where did you hear about us|How did you find out about this job|Referral source|How did you learn about us|Application source|Where did you find this job|How did you find us',
   ),
 
+  // ------------------------------------------------------------ application questions
+  'questions.canTravel': s(
+    '能否出差|是否接受出差|是否能接受出差|能否接受出差|是否愿意出差|能否适应出差|是否能出差|是否接受短期出差|能否接受经常出差|出差',
+    'Willing to travel|Are you willing to travel|Able to travel|Are you able to travel|Open to travel|Willing to travel for work|Travel required|Can you travel|Are you willing to travel for work',
+    '补贴|费用|报销|住宿|allowance|expense|insurance|time|distance|commute',
+  ),
+  'questions.shiftWork': s(
+    '是否接受轮班|能否接受轮班|是否接受倒班|能否接受倒班|能否倒班|是否接受夜班|是否接受周末上班|能否接受周末工作|是否能接受排班',
+    'Shift work|Are you able to work shifts|Are you available to work shifts|Willing to work shifts|Able to work weekends|Are you available to work weekends|Rotating shifts|Night shifts|Roster',
+  ),
+  'questions.overtime': s(
+    '是否接受加班|能否接受加班|是否能接受加班|是否愿意加班|能否适应加班',
+    'Willing to work overtime|Are you willing to work overtime|Able to work overtime|Overtime|Extra hours|Are you able to work additional hours',
+  ),
+  'questions.canWorkOnsite': s(
+    '是否可以到岗办公|能否到公司办公|是否接受现场办公|能否线下办公|是否能到办公室工作|是否接受驻场',
+    'Can you work on-site|Are you able to work on-site|Able to work on site|Can you work onsite|Can you work from the office|Are you able to work in the office|Willing to work on-site|On-site availability',
+  ),
+  'questions.workArrangement': s(
+    '工作方式|办公方式|期望办公方式|期望工作方式|远程办公|线上或线下',
+    'Work arrangement|Preferred work arrangement|Work arrangements|Working arrangement|Work model|Preferred work model|Remote or hybrid|On-site, hybrid or remote|Workplace type|Working style',
+  ),
+  'questions.earlyInternship': s(
+    '是否需要/可以提前实习|是否可以提前实习|能否提前实习|是否可提前实习|是否接受提前实习|是否愿意提前实习|提前实习',
+    'Can you start your internship early|Available to start the internship early|Early internship|Able to intern before graduation|Can you start an internship before the program begins',
+  ),
+  'questions.internshipDaysPerWeek': s(
+    '每周可实习天数|每周实习天数|每周实习时间|每周能实习几天|每周可到岗天数|每周出勤天数|一周可实习几天|每周实习',
+    'Days per week|How many days per week can you intern|Days available per week|Internship days per week|How many days a week can you work|Days per week available|Weekly availability (days)',
+  ),
+  'questions.internshipMonths': s(
+    '可实习时长|实习时长|实习周期|可实习多久|可实习几个月|实习期限|可持续实习时间|实习持续时间',
+    'Internship duration|How long can you intern|Length of internship|Internship length|How many months can you intern|Duration of internship|Available internship period',
+  ),
+  'questions.offerCount': s(
+    '已获得几份其他公司offer|已获得几份offer|目前已有几个offer|手头offer数量|已有offer数量|已拿到offer数量|已获offer数|获得的offer数量|已获得offer数量',
+    'How many job offers do you currently hold|How many offers do you currently hold|Number of offers|Number of job offers|Offers in hand|How many offers do you have|Current number of offers',
+    '薪资|薪酬|待遇|salary|pay|compensation',
+  ),
+  'questions.offerSalaryRange': s(
+    '已获得offer薪资范围|offer薪资范围|已有offer薪资|已获offer薪资|手头offer薪资|已获得offer的薪资|offer薪酬',
+    'Salary of offers in hand|Offer salary range|Salary range of current offers|What salary are your current offers|Offered salary',
+  ),
+  'questions.currentSalary': s(
+    '目前薪资|当前薪资|当前年薪|目前年薪|目前月薪|当前月薪|现薪资|现在薪资|目前薪酬|当前薪酬',
+    'Current salary|What is your current salary|Current pay|Current base salary|Current compensation|Current remuneration|Current package|Present salary|Current annual salary',
+    '期望|expected|desired|expectation',
+  ),
+  'questions.relativesAtCompany': s(
+    '是否有亲友在本公司就职|是否有亲友就职|是否有亲属在本公司工作|是否有亲友在我司|有无亲友在本公司|是否有亲属在公司任职|是否有亲友在公司工作|亲友是否在本公司',
+    'Do you have any relatives or friends working at the company|Do you have relatives working here|Do you have family members employed by us|Relatives working at the company|Do you know anyone who works here|Any family or friends employed here|Do you have a personal relationship with an employee',
+    '姓名|关系|说明|name|relationship|details|explain',
+  ),
+  'questions.relativesDetail': s(
+    '亲友姓名及关系|亲属姓名及关系|亲友姓名|亲友关系说明|在职亲友姓名|亲友所在部门|如有亲友请说明',
+    'Name and relationship of relatives working here|If yes, please provide their name and relationship|Relative name and relationship|Details of relatives employed here|Name of family member employed here',
+  ),
+  'questions.workedHereBefore': s(
+    '是否曾在本公司工作|是否在我司工作过|是否曾在本公司任职|是否曾就职于本公司|曾在本公司工作|是否为前员工|是否曾在我司实习|是否曾在本集团工作',
+    'Have you previously worked for this company|Have you previously worked for us|Have you worked here before|Have you been employed here before|Previously employed by us|Former employee|Are you a former employee|Have you ever worked for',
+  ),
+  'questions.referrerName': s(
+    '内推人姓名|内推人|内推员工姓名|内推员工|推荐员工姓名|内推人工号|内部推荐人',
+    'Who referred you|Who referred you to this role|Referrer|Referrer name|Referred by|Name of the person who referred you|Employee referral name|Name of referring employee|If you were referred to this role',
+  ),
+  'questions.campusAmbassador': s(
+    '是否愿意成为校园大使|是否愿意担任校园大使|校园大使|是否愿意成为校园推广大使|是否愿意担任校园推广人',
+    'Campus ambassador|Would you like to be a campus ambassador|Student ambassador|Interested in becoming a campus ambassador|University ambassador',
+  ),
+  'questions.graduateStatus': s(
+    '应届/往届|应届往届|应届或往届|毕业生类型|应往届|届别类型|应届/非应届',
+    'Graduate status|New or past graduate|Recent graduate status|Graduate type|Are you a new graduate',
+  ),
+  'questions.furtherStudyPlan': s(
+    '是否计划升学深造或考公/考编|是否计划升学深造或考公|是否计划升学|是否有考研计划|是否考公考编|是否计划读研|是否有深造计划|是否计划出国深造',
+    'Do you plan further study|Plans for further study|Are you planning postgraduate study|Do you intend to pursue further education|Planning to continue studies',
+  ),
+  'questions.securityClearance': s(
+    '安全审查级别|安全许可级别|安全审查|保密资格',
+    'Security clearance|What level of security clearance do you currently hold|Current security clearance|Clearance level|Do you hold a security clearance|AGSVA clearance|Highest security clearance held',
+  ),
+  'questions.driversLicence': s(
+    '是否持有驾驶证|是否有驾照|驾照|驾驶证|是否有驾驶证|有无驾照|驾照类型|是否持有驾照',
+    "Driver's licence|Driver's license|Drivers licence|Do you hold a current driver's licence|Do you have a driver's license|Current driver licence|Valid driver's licence|Full driving licence",
+    '号码|编号|有效期|number|expiry|class',
+  ),
+  'questions.englishWorkingLanguage': s(
+    '英语是否可作为工作语言|英语能否作为工作语言|能否使用英语工作|是否能用英语工作|英文可否作为工作语言|是否可用英语办公',
+    'English as a working language|Can you use English as your working language|Are you comfortable using English as your working language|Can you work in English|Is English your working language',
+  ),
+  'questions.yearsExperience': s(
+    '工作年限|工作年数|工作经验年限|相关工作年限|从业年限|累计工作年限',
+    'Years of experience|How many years of professional experience do you have|Years of professional experience|Total years of experience|Years of work experience|Years of relevant experience|How many years of experience do you have',
+    '团队|带队|管理|leading|lead|managing|manage|management|supervis',
+  ),
+  'questions.yearsLeading': s(
+    '带团队年限|带团队年数|管理团队年限|团队管理年限|管理经验年限|带团队经验|管理岗位年限',
+    'Years leading teams|How many years of experience do you have leading teams|Years of people management|Years managing teams|Years of leadership experience|How many years have you managed people',
+  ),
+  'questions.background': s(
+    '背景描述|您的背景|个人背景|专业背景描述|最符合您的背景|以下哪项最符合您的背景',
+    'Which best describes your background|Background|Your background|Professional background|Which of the following best describes you|Describe your background',
+  ),
+
   // ------------------------------------------------------------ diversity
   'diversity.indigenous': s(
     '原住民|澳洲原住民|原住民身份|是否原住民|原住民或托雷斯海峡岛民',

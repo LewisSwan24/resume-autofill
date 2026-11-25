@@ -1,4 +1,4 @@
-// Profile migrations. Table-driven: add `{ from: 1, run }` here when the schema moves to v2.
+// Profile migrations. Table-driven: add `{ from: N, run }` here when the schema moves to version N + 1.
 import { CURRENT_SCHEMA_VERSION, ProfileSchema, type Profile } from './resume';
 import { migrateHiddenIndices } from './variant';
 import { migrateLanguageTests } from './languageTests';
@@ -40,6 +40,13 @@ export const MIGRATIONS: readonly Migration[] = [
     from: 1,
     run(raw) {
       return { ...raw, schemaVersion: 2 };
+    },
+  },
+  {
+    // v2 → v3: resumes gain the application questions, every answer empty; parsing fills them in.
+    from: 2,
+    run(raw) {
+      return { ...raw, schemaVersion: 3 };
     },
   },
 ];

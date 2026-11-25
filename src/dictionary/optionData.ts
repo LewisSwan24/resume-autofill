@@ -111,8 +111,8 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
   }),
 
   yesNo: g({
-    yes: '是|是的|有|Yes|Y|True|接受|愿意|服从|同意|Yes, I do|Yes, I am|Yes, I will|Yes I do|Yes I am',
-    no: '否|不是|无|没有|No|N|False|不接受|不愿意|不服从|不同意|No, I do not|No, I don\'t|No, I am not|No I do not|No I am not',
+    yes: '是|是的|有|Yes|Y|True|接受|愿意|服从|同意|可以|能|可|能够|会|Yes, I can|Yes I can|I can|I am able|I am willing|Yes, I do|Yes, I am|Yes, I will|Yes I do|Yes I am',
+    no: '否|不是|无|没有|No|N|False|不接受|不愿意|不服从|不同意|不可以|不能|不可|不能够|不会|No, I cannot|No I cannot|I cannot|I am not able|I am not willing|No, I do not|No, I don\'t|No, I am not|No I do not|No I am not',
   }),
 
   salaryCurrency: g({
@@ -124,6 +124,25 @@ export const OPTION_SYNONYMS: Record<string, Record<string, string[]>> = {
   salaryPeriod: g({
     month: '月|月薪|每月|每月薪资|按月|月度|元/月|/月|Month|Monthly|Per month|A month|/month|Per mo',
     year: '年|年薪|每年|按年|年度|元/年|/年|Year|Yearly|Annual|Annually|Per year|Per annum|p.a.|PA|Annum|/year',
+  }),
+
+  workArrangement: g({
+    onsite: '现场办公|线下办公|到岗办公|坐班|全职到岗|驻场|On-site|Onsite|On site|In office|In-office|Office based|Office-based|Fully on-site|Work from the office',
+    hybrid: '混合办公|混合|部分远程|线上线下结合|Hybrid|Hybrid work|Hybrid working|Partly remote|Flexible|Mix of office and home',
+    remote: '远程办公|远程|居家办公|线上办公|Remote|Fully remote|Work from home|WFH|Remote only|Home based|Home-based',
+  }),
+
+  graduateStatus: g({
+    fresh_graduate: '应届|应届生|应届毕业生|应届届|今年毕业|本届毕业生|校招应届|New graduate|Recent graduate|Graduating this year|Class of this year|Fresh graduate',
+    past_graduate: '往届|往届生|往届毕业生|非应届|非应届生|已毕业|社会人士|Past graduate|Previous graduate|Graduated before|Not a recent graduate|Experienced',
+  }),
+
+  securityClearance: g({
+    none: '无|没有|暂无|未持有|None|No clearance|No|Not held|I do not hold a clearance|Nil',
+    baseline: '基础安全审查|基线审查|Baseline|Baseline clearance|Baseline Vetting|AGSVA Baseline|Baseline security clearance',
+    nv1: '一级负面审查|NV1|Negative Vetting 1|Negative Vetting Level 1|NV 1|Negative Vetting One',
+    nv2: '二级负面审查|NV2|Negative Vetting 2|Negative Vetting Level 2|NV 2|Negative Vetting Two',
+    pv: '正面审查|绝密级审查|PV|Positive Vetting|Positive Vetting (PV)|TSPV|Top Secret Positive Vetting',
   }),
 
   // ---- extra domains (not in ENUM_VALUES)

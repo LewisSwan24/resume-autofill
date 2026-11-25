@@ -78,9 +78,13 @@ describe('question-style labels', () => {
     expect(cls[1]!.fieldKey).toBe('referees.email');
   });
 
-  it('leaves alone a name that belongs to someone else, and questions that ask for no field', () => {
+  it('gives the name of the person who referred you to the referrer, never to the applicant', () => {
+    const [c] = scan([['What is the full name of the person who referred you?']]);
+    expect(c!.fieldKey).toBe('questions.referrerName');
+  });
+
+  it('leaves alone questions that ask for no field', () => {
     const cls = scan([
-      ['What is the full name of the person who referred you?'],
       ['What is the country of origin of your passport?'],
       ['Is there anything else you would like to tell us about your application?'],
     ]);

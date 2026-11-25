@@ -92,7 +92,7 @@ describe('import', () => {
     const read = readImport(old);
     expect(read.kind).toBe('profile');
     if (read.kind === 'profile') {
-      expect(read.profile.schemaVersion).toBe(2);
+      expect(read.profile.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(read.profile.activeResumeId).toBe('old');
     }
   });

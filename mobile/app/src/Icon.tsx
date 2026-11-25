@@ -202,6 +202,7 @@ export const MODULE_ICONS: Record<ModuleName, IconName> = {
   contact: 'telephone',
   workRights: 'passport',
   jobIntention: 'bullseye',
+  questions: 'list-check',
   education: 'mortarboard',
   work: 'briefcase',
   projects: 'kanban',

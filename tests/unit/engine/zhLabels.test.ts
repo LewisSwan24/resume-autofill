@@ -98,7 +98,7 @@ describe('labels about something else that merely start with a field’s name', 
     expect(read(label).key ?? '').not.toContain(wrong);
   });
 
-  it.each(['公司规模', '公司性质', '户籍类型', '专业类别', '工作年限', '工作经验', '职位类别', '学校类型'])('%s fills nothing and asks nothing', (label) => {
+  it.each(['公司规模', '公司性质', '户籍类型', '专业类别', '工作经验', '职位类别', '学校类型'])('%s fills nothing and asks nothing', (label) => {
     const { key, confidence } = read(label);
     expect(key === null || confidence < REVIEW_THRESHOLD, `${label}: ${key} ${confidence}`).toBe(true);
   });

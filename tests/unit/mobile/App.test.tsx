@@ -113,7 +113,7 @@ describe('Profile page – module list', () => {
       .getAllByRole('button')
       .map((b) => b.querySelector('.m-row__name')!.textContent);
     expect(names).toEqual(MODULES.map((m) => zh(m.labelKey)));
-    expect(MODULES).toHaveLength(19);
+    expect(MODULES).toHaveLength(20);
     expect(names.at(-1)).toBe('附件');
   });
 

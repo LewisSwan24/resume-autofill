@@ -1,4 +1,5 @@
 export * from './resume';
+export * from './questions';
 export * from './migrate';
 export * from './fieldKeys';
 export * from './variant';

@@ -6,6 +6,7 @@ import {
   MARITAL_STATUSES, POLITICAL_STATUSES, PROFICIENCIES, RELATIONSHIPS, SALARY_CURRENCIES, SALARY_PERIODS,
   WORK_KINDS, WORK_RIGHTS_STATUSES,
 } from './resume';
+import { APPLICATION_QUESTIONS, QUESTION_ENUM_VALUES } from './questions';
 
 export type FieldKey = string;
 export type SectionKey =
@@ -40,6 +41,7 @@ export const ENUM_VALUES: Readonly<Record<string, readonly string[]>> = {
   yesNo: ['yes', 'no'],
   salaryCurrency: SALARY_CURRENCIES,
   salaryPeriod: SALARY_PERIODS,
+  ...QUESTION_ENUM_VALUES,
 };
 
 /** Every enum domain used by FIELD_KEYS (the option dictionary must cover each). */
@@ -109,6 +111,11 @@ export const FIELD_KEYS: FieldKeyDef[] = [
     salaryPeriod: ['enum', 'salaryPeriod'], availableFrom: 'date', noticePeriod: 'text',
     acceptAdjustment: yesNo(), acceptRelocation: yesNo(), howDidYouHear: 'text',
   }),
+
+  // Asked anywhere on a form: next to the job, among the basics, or in a block of its own.
+  ...module('questions', ['jobIntention', 'basics', 'other'], Object.fromEntries(
+    APPLICATION_QUESTIONS.map((q): [string, ValueType | [ValueType, string]] => [q.key, q.type === 'bool' ? yesNo() : q.enumDomain ? [q.type, q.enumDomain] : q.type]),
+  )),
 
   ...module('education', ['education'], {
     school: 'text', schoolEn: 'text', country: 'text', city: 'text', degree: ['enum', 'degree'],

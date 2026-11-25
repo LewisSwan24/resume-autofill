@@ -1,5 +1,5 @@
 // Fictional sample resumes (same person, zh-CN + en-AU). Fixture tests derive expected values from these.
-import { ResumeSchema, type Profile, type Resume, type ResumeInput } from './resume';
+import { CURRENT_SCHEMA_VERSION, ResumeSchema, type Profile, type Resume, type ResumeInput } from './resume';
 
 const SAMPLE_TIME = Date.UTC(2026, 0, 1);
 const stamps = { createdAt: SAMPLE_TIME, updatedAt: SAMPLE_TIME };
@@ -172,7 +172,7 @@ const enInput: ResumeInput = {
 export function createSampleProfile(): Profile {
   const resumes: Resume[] = [ResumeSchema.parse(zhInput), ResumeSchema.parse(enInput)];
   return {
-    schemaVersion: 2,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     resumes,
     activeResumeId: 'sample-zh',
     settings: { uiLanguage: 'auto', previewBeforeFill: false, sensitiveFields: 'remind' },

@@ -14,7 +14,7 @@ import {
   upsertResume,
   watchProfile,
 } from '../../../src/storage';
-import { ProfileMigrationError, ProfileSchema, ResumeSchema, createSampleProfile } from '../../../src/schema';
+import { CURRENT_SCHEMA_VERSION, ProfileMigrationError, ProfileSchema, ResumeSchema, createSampleProfile } from '../../../src/schema';
 
 const T0 = Date.UTC(2026, 5, 1);
 
@@ -36,7 +36,7 @@ describe('loadProfile', () => {
     expect(ProfileSchema.safeParse(p).success).toBe(true);
     expect(p.resumes).toEqual([]);
     expect(p.activeResumeId).toBeNull();
-    expect(p.schemaVersion).toBe(2);
+    expect(p.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     // Loading must not write anything.
     expect(await fakeBrowser.storage.local.get(PROFILE_STORAGE_KEY)).toEqual({});
   });
@@ -46,7 +46,7 @@ describe('loadProfile', () => {
       [PROFILE_STORAGE_KEY]: { resumes: [{ id: 'a', title: 'A', locale: 'zh-CN' }] },
     });
     const p = await loadProfile();
-    expect(p.schemaVersion).toBe(2);
+    expect(p.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(p.activeResumeId).toBe('a');
     expect(p.resumes[0]?.basics.familyName).toBe('');
   });

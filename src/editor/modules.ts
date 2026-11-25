@@ -14,6 +14,8 @@ import {
   RefereeSchema,
   SkillSchema,
   WorkEntrySchema,
+  APPLICATION_QUESTIONS,
+  type QuestionType,
   type Resume,
 } from '../schema';
 
@@ -31,7 +33,7 @@ export interface FieldMeta {
 }
 
 export type ModuleName =
-  | 'basics' | 'contact' | 'workRights' | 'jobIntention' | 'education' | 'work' | 'projects' | 'campus'
+  | 'basics' | 'contact' | 'workRights' | 'jobIntention' | 'questions' | 'education' | 'work' | 'projects' | 'campus'
   | 'awards' | 'languages' | 'certificates' | 'skills' | 'family' | 'emergencyContact' | 'referees'
   | 'diversity' | 'about' | 'customAnswers' | 'attachments';
 
@@ -76,6 +78,8 @@ const area = (key: string, labelName = key) => f(key, labelName, 'textarea');
 const select = (key: string, enumDomain: string, labelName = key) => f(key, labelName, 'select', { enumDomain });
 const month = (key: string, labelName = key) => f(key, labelName, 'month');
 const endMonth = (key = 'endDate') => f(key, 'endDate', 'month', { currentKey: 'current' });
+
+const QUESTION_INPUT: Record<QuestionType, InputKind> = { bool: 'bool', number: 'number', text: 'text', enum: 'select' };
 
 const mod = (
   module: ModuleName,
@@ -131,6 +135,9 @@ export const MODULES: readonly ModuleMeta[] = [
     f('acceptRelocation', 'acceptRelocation', 'bool'),
     text('howDidYouHear'),
   ]),
+  mod('questions', 'object', APPLICATION_QUESTIONS.map((q) =>
+    f(q.key, q.key, QUESTION_INPUT[q.type], q.enumDomain ? { enumDomain: q.enumDomain } : {}),
+  )),
   mod('education', 'array', [
     text('school'), text('schoolEn'), text('country'), text('city'),
     select('degree', 'degree'), select('educationType', 'educationType'),

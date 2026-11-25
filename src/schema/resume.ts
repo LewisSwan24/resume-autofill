@@ -2,6 +2,7 @@
 // `ResumeSchema.parse({ id, title, locale })` yields a complete, empty resume.
 import { z } from 'zod';
 import { DEFAULT_SENSITIVE_FIELD_MODE, SENSITIVE_FIELD_MODES } from './sensitive';
+import { QuestionsSchema } from './questions';
 
 // ---------------------------------------------------------------- primitives
 
@@ -369,6 +370,7 @@ export const ResumeSchema = z.object({
   contact: ContactSchema.prefault({}),
   workRights: WorkRightsSchema.prefault({}),
   jobIntention: JobIntentionSchema.prefault({}),
+  questions: QuestionsSchema.prefault({}),
   education: z.array(EducationSchema).default([]),
   work: z.array(WorkEntrySchema).default([]),
   projects: z.array(ProjectSchema).default([]),
@@ -387,7 +389,7 @@ export const ResumeSchema = z.object({
   customAnswers: z.array(CustomAnswerSchema).default([]),
 });
 
-export const CURRENT_SCHEMA_VERSION = 2 as const;
+export const CURRENT_SCHEMA_VERSION = 3 as const;
 
 export const SettingsSchema = z.object({
   uiLanguage: z.enum(['auto', 'zh', 'en']).default('auto'),
@@ -405,7 +407,7 @@ export const SettingsSchema = z.object({
 });
 
 export const ProfileSchema = z.object({
-  schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  schemaVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   resumes: z.array(ResumeSchema).default([]),
   activeResumeId: z.string().nullable().default(null),
   settings: SettingsSchema.prefault({}),

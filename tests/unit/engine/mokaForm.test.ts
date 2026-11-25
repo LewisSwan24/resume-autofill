@@ -60,8 +60,8 @@ describe('every question on the form is read', () => {
     const { at } = scan();
     expect(at('推荐码').key).toBeNull();
     expect(at('上传附件').key).toBeNull();
-    // Starting an internship early is not a visa.
-    expect(at('是否需要/可以提前实习').key).toBeNull();
+    // Starting an internship early is not a visa: it is an application question of its own.
+    expect(at('是否需要/可以提前实习').key).toBe('questions.earlyInternship');
   });
 
   it.each([

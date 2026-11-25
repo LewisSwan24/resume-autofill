@@ -111,6 +111,14 @@ describe('a span of months', () => {
     expect(page.opened).toEqual(['period']);
   });
 
+  it('reads the month again when the year changed the months on offer', async () => {
+    page.stop();
+    // 2020 offers September on only (a page with an earliest date), and the wheels take a moment to settle.
+    page = behave(document, [2026, 11], { settleMs: 120, monthsOf: (y) => (y === 2020 ? ['9', '10', '11', '12'] : Array.from({ length: 12 }, (_, i) => String(i + 1))) });
+    const control = only(mperiod());
+    expect(await fill(control, span([2020, 9], [2024, 7]))).toMatchObject({ ok: true, observed: '2020-09 – 2024-07' });
+  });
+
   it('a span already there is left alone', async () => {
     const control = only(mperiod('2020-09', '2024-07'));
     expect(await fill(control, span([2020, 9], [2024, 7]))).toMatchObject({ ok: true });

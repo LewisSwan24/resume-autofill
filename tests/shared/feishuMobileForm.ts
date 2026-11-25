@@ -74,20 +74,32 @@ interface Wheel {
   items: string[];
   index: number;
   set(i: number): void;
+  /** New rows (a month wheel whose months depend on the year), keeping the row of the same words where there is one. */
+  relist(items: string[]): void;
+  /** Called each time a finger's turn has settled onto a row: what the page hears. */
+  settled: (() => void)[];
 }
 
-function wheel(doc: Document, items: string[], index: number, extra = ''): Wheel {
+function wheel(doc: Document, items: string[], index: number, extra = '', settleMs = 0): Wheel {
   const el = doc.createElement('div');
   el.className = `${extra} rmc-picker`.trim();
+  const rows = (list: string[]) => list.map((t) => `<div class="rmc-picker-item">${t}</div>`).join('');
   el.innerHTML =
     `<div class="rmc-picker-mask" style="background-size: 100% ${ROW}px;"></div><div class="rmc-picker-indicator" style="top: ${ROW}px;"></div>` +
-    `<div class="rmc-picker-content" style="padding: ${ROW}px 0px;">${items.map((t) => `<div class="rmc-picker-item">${t}</div>`).join('')}</div>`;
+    `<div class="rmc-picker-content" style="padding: ${ROW}px 0px;">${rows(items)}</div>`;
   const w: Wheel = {
     el,
     items,
     index,
+    settled: [],
+    relist(next) {
+      const words = w.items[w.index];
+      w.items = next;
+      el.querySelector('.rmc-picker-content')!.innerHTML = rows(next);
+      w.set(Math.max(0, next.indexOf(words!)));
+    },
     set(i) {
-      w.index = Math.max(0, Math.min(items.length - 1, i));
+      w.index = Math.max(0, Math.min(w.items.length - 1, i));
       el.querySelectorAll('.rmc-picker-item').forEach((it, k) => it.classList.toggle('rmc-picker-item-selected', k === w.index));
       el.querySelector<HTMLElement>('.rmc-picker-content')!.style.transform = `translate3d(0px, ${-w.index * ROW}px, 0px)`;
     },
@@ -112,7 +124,13 @@ function wheel(doc: Document, items: string[], index: number, extra = ''): Wheel
       el.querySelector<HTMLElement>('.rmc-picker-content')!.style.transform = `translate3d(0px, ${-(startIndex + Math.round(rows)) * ROW}px, 0px)`;
       return;
     }
-    w.set(startIndex + Math.round(rows));
+    // The wheel takes a moment to settle onto the row, and only then does the page hear of it.
+    const settle = () => {
+      w.set(startIndex + Math.round(rows));
+      for (const heard of w.settled) heard();
+    };
+    if (settleMs > 0) setTimeout(settle, settleMs);
+    else settle();
   });
   return w;
 }
@@ -160,7 +178,11 @@ export interface MobilePage {
  * live page, a span's drawer slides in for that long (an animation it reports), and what its wheels are turned to
  * before then goes unheard.
  */
-export function behave(doc: Document, now: [number, number] = [2026, 11], opts: { slideMs?: number } = {}): MobilePage {
+export function behave(
+  doc: Document,
+  now: [number, number] = [2026, 11],
+  opts: { slideMs?: number; settleMs?: number; monthsOf?: (year: number) => string[] } = {},
+): MobilePage {
   const page: MobilePage = { opened: [], stop: () => doc.removeEventListener('click', onClick, true) };
   const onClick = (e: Event) => {
     const t = e.target as Element;
@@ -223,15 +245,17 @@ export function behave(doc: Document, now: [number, number] = [2026, 11], opts: 
     );
     const ends: Record<'start' | 'end', [number, number]> = { start: [...now], end: [...now] };
     let side: 'start' | 'end' = 'start';
-    const year = wheel(doc, YEARS, YEARS.indexOf(String(now[0])), 'atsx-mperiod-popup-year-picker');
-    const month = wheel(doc, MONTHS, now[1] - 1, 'atsx-mperiod-popup-month-picker');
+    const year = wheel(doc, YEARS, YEARS.indexOf(String(now[0])), 'atsx-mperiod-popup-year-picker', opts.settleMs);
+    const month = wheel(doc, MONTHS, now[1] - 1, 'atsx-mperiod-popup-month-picker', opts.settleMs);
+    // Some pages offer only the months of a year that may be chosen: the month wheel follows the year.
+    if (opts.monthsOf) year.settled.push(() => month.relist(opts.monthsOf!(Number(year.items[year.index]))));
     d.querySelector('.rmc-multi-picker')!.append(year.el, month.el);
     // What the page heard each wheel settle on: a turn while the drawer is still sliding in is not heard.
     let heard = !opts.slideMs;
     if (opts.slideMs) slideIn(d, opts.slideMs, () => (heard = true));
     const heardAt = { year: year.index, month: month.index };
-    year.el.addEventListener('touchend', () => heard && (heardAt.year = year.index));
-    month.el.addEventListener('touchend', () => heard && (heardAt.month = month.index));
+    year.settled.push(() => heard && (heardAt.year = year.index));
+    month.settled.push(() => heard && (heardAt.month = month.index));
     const keep = () => (ends[side] = [Number(year.items[heardAt.year]), Number(month.items[heardAt.month])]);
     const show = () => {
       year.set(YEARS.indexOf(String(ends[side][0])));

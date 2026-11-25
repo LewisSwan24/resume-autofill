@@ -8,10 +8,14 @@ import { waitFor } from './wait';
 
 const ITEM = '.rmc-picker-item';
 const SELECTED = 'rmc-picker-item-selected';
-/** Steps of the drag, the time between them, and the stand-still before lifting so the wheel gets no speed. */
-const STEPS = 8;
+/**
+ * Steps of the drag, the time between them, and the stand-still before lifting so the wheel gets no speed. The wheel
+ * takes its speed from the moves of the last 100 ms before the finger lifts, so a stand-still longer than that leaves it
+ * none, however quick the drag before it (checked on the Feishu phone replays: same answers, a third less time).
+ */
+const STEPS = 3;
 const STEP_MS = 25;
-const STILL_MS = 150;
+const STILL_MS = 120;
 /** Drags to land on the row: the wheel can stop one short, and the next drag puts it right. */
 const TRIES = 3;
 /** What a row measured on the phone, for when the page cannot say. */
@@ -80,7 +84,11 @@ async function drag(picker: HTMLElement, dy: number, signal?: AbortSignal): Prom
 }
 
 /** Turn the wheel until row `target` is the chosen one. False when it would not get there. */
-export async function turnWheel(picker: HTMLElement, target: number, opts: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<boolean> {
+export async function turnWheel(
+  picker: HTMLElement,
+  target: number,
+  opts: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<boolean> {
   for (let attempt = 0; attempt < TRIES; attempt++) {
     if (wheelIndex(picker) === target) return true;
     const row = rowHeight(picker);

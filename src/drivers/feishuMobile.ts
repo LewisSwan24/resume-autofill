@@ -6,7 +6,7 @@ import type { Control, OptionInfo } from '../engine/types';
 import { fireInput, focusElement, setNativeValue, simulateClick } from './events';
 import type { DatePart, Driver, DriverContext, FillIntent, FillResult } from './types';
 import { ANSWER_SETTLE_MS, animationsDone, waitFor, watchAnswers } from './wait';
-import { turnWheel, wheelTexts } from './wheel';
+import { turnWheel, wheelIndex, wheelTexts } from './wheel';
 
 const OPEN = '.atsx-drawer-open';
 const OPENS_MS = 1500;
@@ -119,11 +119,25 @@ async function setMonth(drawer: HTMLElement, when: DatePart, ctx: DriverContext)
   const year = drawer.querySelector<HTMLElement>('[class*="year-picker"]') ?? pickers[0];
   const month = drawer.querySelector<HTMLElement>('[class*="month-picker"]') ?? pickers[1];
   if (!year || !month) return false;
-  const y = wheelTexts(year).findIndex((t) => Number(t) === when.year);
-  const m = wheelTexts(month).findIndex((t) => Number(t) === when.month);
-  if (y < 0 || m < 0) return false;
-  // The months a wheel offers can depend on the year, so the year goes first.
-  return (await turnWheel(year, y, { signal: ctx.signal })) && (await turnWheel(month, m, { signal: ctx.signal }));
+  const rowOf = (wheel: HTMLElement, n: number) => wheelTexts(wheel).findIndex((t) => Number(t) === n);
+  const holds = () => Number(wheelTexts(year)[wheelIndex(year)]) === when.year && Number(wheelTexts(month)[wheelIndex(month)]) === when.month;
+  const y = rowOf(year, when.year);
+  if (y < 0) return false;
+  const m = rowOf(month, when.month);
+  // A month not on offer yet may be once the year is turned: the year, then the month as it is offered then.
+  if (m < 0) return (await turnWheel(year, y, { signal: ctx.signal })) && (await turnMonthAgain());
+  // The year goes first: a month turned while the year still settles goes wrong on the live page.
+  const yearOk = await turnWheel(year, y, { signal: ctx.signal });
+  const monthOk = yearOk && (await turnWheel(month, m, { signal: ctx.signal }));
+  if (yearOk && monthOk && holds()) return true;
+  // The months on offer can depend on the year: the month's row is found again now that the year has settled.
+  if (!yearOk && !(await turnWheel(year, rowOf(year, when.year), { signal: ctx.signal }))) return false;
+  return turnMonthAgain();
+
+  async function turnMonthAgain(): Promise<boolean> {
+    const again = rowOf(month!, when.month);
+    return again >= 0 && (await turnWheel(month!, again, { signal: ctx.signal })) && holds();
+  }
 }
 
 async function toSide(drawer: HTMLElement, side: 'start' | 'end', ctx: DriverContext): Promise<boolean> {

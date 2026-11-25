@@ -241,3 +241,61 @@ export function matchOption(
   }
   return NONE;
 }
+
+// ------------------------------------------------------------------ numbers
+
+/** A span of numbers an option stands for; an open end leaves its own number out. */
+interface Span {
+  lo: number;
+  hi: number;
+  loOpen?: boolean;
+  hiOpen?: boolean;
+}
+
+const NUMBER = String.raw`(\d+(?:\.\d+)?)\s*(k|千|万|w)?`;
+const RANGE = new RegExp(String.raw`${NUMBER}[^\d]{0,4}?\s*(?:-|–|—|~|～|至|到|\bto\b)\s*${NUMBER}`);
+const ONE_NUMBER = new RegExp(NUMBER, 'g');
+const SCALE: Record<string, number> = { k: 1e3, 千: 1e3, 万: 1e4, w: 1e4 };
+/** An option that means none at all, once its unit is gone: 无, 暂无, None. */
+const NOTHING = /^(?:无|没有|暂无|零|none|nil|zero)$/;
+const UNIT_WORDS = /份|个|家|年|月|天|日|周|人|次|years?|months?|days?|weeks?|offers?|\s/g;
+const AT_MOST = /及以下|或以下|以内|or less|or fewer|at most|up to|≤|<=/;
+const BELOW = /以下|不足|少于|不到|未满|less than|fewer than|under|below|</;
+const AT_LEAST = /及以上|或以上|以上|or more|and above|and over|at least|\+|≥|>=/;
+const ABOVE = /超过|大于|多于|more than|over|>/;
+
+const scaled = (n: string, unit: string | undefined): number => Number(n) * (unit ? SCALE[unit]! : 1);
+
+function spanOf(label: string): Span | null {
+  const t = label.normalize('NFKC').toLowerCase().trim();
+  const range = RANGE.exec(t);
+  if (range) {
+    // "10-20万": the unit written once at the end is the unit of both.
+    const unit = range[4] ?? range[2];
+    return { lo: scaled(range[1]!, range[2] ?? unit), hi: scaled(range[3]!, unit) };
+  }
+  const numbers = [...t.matchAll(ONE_NUMBER)];
+  if (numbers.length === 0) return NOTHING.test(t.replace(UNIT_WORDS, '')) ? { lo: 0, hi: 0 } : null;
+  if (numbers.length > 1) return null;
+  const n = scaled(numbers[0]![1]!, numbers[0]![2]);
+  if (AT_MOST.test(t)) return { lo: -Infinity, hi: n };
+  if (BELOW.test(t)) return { lo: -Infinity, hi: n, hiOpen: true };
+  if (AT_LEAST.test(t)) return { lo: n, hi: Infinity };
+  if (ABOVE.test(t)) return { lo: n, hi: Infinity, loOpen: true };
+  return { lo: n, hi: n };
+}
+
+const holds = (s: Span, n: number): boolean =>
+  (s.loOpen ? n > s.lo : n >= s.lo) && (s.hiOpen ? n < s.hi : n <= s.hi);
+
+/**
+ * The option whose count or range holds `n`: "2" or "1-2份" for 2, "5年以上" or "5+ years" for 7, 无 for 0. Two ranges
+ * that both hold it, as "1-3年" and "3-5年" for 3, are ambiguous, never a guess.
+ */
+export function matchNumber(n: number, options: OptionInfo[]): OptionMatch {
+  const hits = candidates(options).filter((c) => {
+    const span = spanOf(options[c.index]!.label);
+    return span !== null && holds(span, n);
+  });
+  return result(hits, CONF_EXACT) ?? NONE;
+}

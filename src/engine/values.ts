@@ -1,6 +1,6 @@
 // Values: resume data for a field key (resolveValue) and its translation into a driver intent (toIntent).
 import { formatByPattern, isDatePattern } from './dateFormat';
-import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchOption, namesOtherState, namesPlace, placeOptions, placeSpellings } from '../dictionary';
+import { OPTION_SYNONYMS, hasCjk, isInOtherCountry, isPlaceholderOption, matchNumber, matchOption, namesOtherState, namesPlace, placeOptions, placeSpellings } from '../dictionary';
 import { asksBesidesEnglish, asksPartScore, bestEnglish, isEnglishTest, languageNamed, languageOf, testOf, testsNamed } from './languageAsked';
 import type { FileData, FillIntent, OptionMatch, OptionMatcher } from '../drivers/types';
 import type { GenderAnswer, LanguageEntry, Locale, Region, Resume } from '../schema';
@@ -791,6 +791,10 @@ export function toIntent(
           return { status: 'none' };
         };
         return { kind: 'choice', display: text, query: text, match };
+      }
+      // A count on a list of counts or ranges: "1-2份" holds 2, "5年以上" holds 7.
+      if (def.type === 'number' && typeof raw === 'number' && hasPickList(control) && !control.multiple) {
+        return { kind: 'choice', display: text, query: text, match: (options) => matchNumber(raw, options) };
       }
       if (hasPickList(control)) return multiOrChoice(domain, [text], control);
       if (kind === 'cascader') return { kind: 'cascade', display: text, path: [text] };

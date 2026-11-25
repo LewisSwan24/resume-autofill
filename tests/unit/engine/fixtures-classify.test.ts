@@ -15,7 +15,7 @@ import { planFill } from '../../../src/engine/plan';
 import { scanDocument } from '../../../src/engine/scan';
 import { createSampleProfile } from '../../../src/schema';
 import { evaluate, loadExpected, type FixtureName, type Row } from './fixtureAsserts';
-import { mountAntd, mountElement, mountNative, mountNativeFrame, mountQuestions } from './fixtureDom';
+import { mountAntd, mountElement, mountNative, mountLanguagesWorks, mountNativeFrame, mountQuestions } from './fixtureDom';
 
 // Whole-page scans are slow in jsdom (evidence collection clones DOM); allow for a loaded CI box.
 vi.setConfig({ testTimeout: 60_000 });
@@ -361,5 +361,24 @@ describe('screening questions, en-AU (sample-en)', () => {
   it('answers every question as expected.json says, and leaves the code and the call alone', () => {
     mountQuestions('en');
     verify('questions-en', 'sample-en', rows);
+  });
+});
+
+describe('language levels asked apart and a works card, zh-CN (sample-zh)', () => {
+  const rows: Row[] = [
+    { state: 'language', label: '语种', key: 'languages.language' },
+    { state: 'proficiency', label: '熟练程度', key: 'languages.proficiency' },
+    { state: 'listeningSpeaking', label: '听说能力', key: 'languages.listeningSpeaking' },
+    { state: 'readingWriting', label: '读写能力', key: 'languages.readingWriting' },
+    { state: 'workTitle', label: '作品名称', key: 'works.title' },
+    { state: 'workLink', label: '作品链接', key: 'works.link' },
+    { state: 'workDescription', label: '作品描述', key: 'works.description' },
+    // The sample holds no portfolio file and its work none of its own: the box stays empty.
+    { label: '作品附件', key: 'works.fileId' },
+  ];
+
+  it('answers each level by its own or the overall one, and fills the work from the first works entry', () => {
+    mountLanguagesWorks();
+    verify('languages-works', 'sample-zh', rows);
   });
 });

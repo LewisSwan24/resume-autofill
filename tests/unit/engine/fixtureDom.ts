@@ -41,6 +41,11 @@ export function mountQuestions(lang: 'zh' | 'en'): void {
   document.body.innerHTML = bodyOf(`questions-${lang}/index.html`);
 }
 
+/** Language levels asked apart and a works card (languages-works), as served. */
+export function mountLanguagesWorks(): void {
+  document.body.innerHTML = bodyOf('languages-works/index.html');
+}
+
 /** The same-origin iframe document of the native fixture (own frame → own scan). */
 export function mountNativeFrame(): void {
   document.body.innerHTML = bodyOf('native/frame.html');

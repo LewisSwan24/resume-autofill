@@ -43,7 +43,7 @@ export function locate(scan: ScanResult, row: Row): number {
   return hits[0]!;
 }
 
-export type FixtureName = 'native' | 'antd' | 'element' | 'questions-zh' | 'questions-en';
+export type FixtureName = 'native' | 'antd' | 'element' | 'questions-zh' | 'questions-en' | 'languages-works';
 
 export function loadExpected(fixture: FixtureName): Record<string, unknown> {
   const file = resolve(__dirname, '../../../fixtures/synthetic', fixture, 'expected.json');

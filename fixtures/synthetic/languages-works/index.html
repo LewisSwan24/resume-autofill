@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>语言能力与作品（合成页）</title>
+  </head>
+  <body>
+    <h1>语言能力与作品</h1>
+    <form id="application" novalidate>
+      <section>
+        <h2>语言能力</h2>
+        <div class="row">
+          <label for="lang">语种</label>
+          <select id="lang" data-state="language">
+            <option value="">请选择</option>
+            <option>英语</option>
+            <option>日语</option>
+            <option>法语</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="level">熟练程度</label>
+          <select id="level" data-state="proficiency">
+            <option value="">请选择</option>
+            <option>精通</option>
+            <option>熟练</option>
+            <option>良好</option>
+            <option>一般</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="ls">听说能力</label>
+          <select id="ls" data-state="listeningSpeaking">
+            <option value="">请选择</option>
+            <option>精通</option>
+            <option>熟练</option>
+            <option>良好</option>
+            <option>一般</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="rw">读写能力</label>
+          <select id="rw" data-state="readingWriting">
+            <option value="">请选择</option>
+            <option>精通</option>
+            <option>熟练</option>
+            <option>良好</option>
+            <option>一般</option>
+          </select>
+        </div>
+      </section>
+
+      <section>
+        <h2>作品</h2>
+        <div class="row">
+          <label for="wt">作品名称</label>
+          <input id="wt" type="text" data-state="workTitle" autocomplete="off" />
+        </div>
+        <div class="row">
+          <label for="wl">作品链接</label>
+          <input id="wl" type="text" data-state="workLink" autocomplete="off" />
+        </div>
+        <div class="row">
+          <label for="wd">作品描述</label>
+          <textarea id="wd" data-state="workDescription"></textarea>
+        </div>
+        <div class="row">
+          <label for="wf">作品附件</label>
+          <input id="wf" type="file" data-state="workFile" />
+        </div>
+      </section>
+
+      <button type="submit">提交</button>
+    </form>
+    <script type="module" src="../shared/questions.ts"></script>
+  </body>
+</html>

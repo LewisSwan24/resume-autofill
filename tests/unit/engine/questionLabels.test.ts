@@ -75,3 +75,17 @@ describe('the questions they must not be taken for', () => {
     expect(classify(label).fieldKey).toBe(key);
   });
 });
+
+describe('fields the resume already had, asked in longer words', () => {
+  it('"Your earliest availability to start employment" is the start date', () => {
+    const c = classify('Your earliest availability to start employment');
+    expect(c.fieldKey).toBe('jobIntention.availableFrom');
+    expect(c.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+  });
+
+  it('an availability for a call or an interview is not the start date', () => {
+    for (const label of ['Earliest availability for a video call', 'When are you available for an interview?']) {
+      expect(classify(label).fieldKey, label).not.toBe('jobIntention.availableFrom');
+    }
+  });
+});

@@ -290,8 +290,8 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'jobIntention.availableFrom': s(
     '可实习时间|到岗时间|最快到岗时间|可到岗时间|期望到岗时间|可入职时间|预计入职时间|最早入职时间|期望入职时间|最早到岗日期',
-    'Earliest start date|Available from|Availability date|Available start date|Date available|When can you start|Available to start|Earliest availability|Commencement date|Preferred start date|Availability',
-    '毕业|学校|每周|每月|每天|天数|时长|多久|graduat|school|education|per week|hours',
+    'Earliest start date|Available from|Availability date|Available start date|Date available|When can you start|Available to start|Earliest availability|Commencement date|Preferred start date|Availability|Earliest availability to start|Your earliest availability to start employment|Earliest availability to start employment|When could you start|Earliest date you could start',
+    '毕业|学校|每周|每月|每天|天数|时长|多久|面试|电话|视频|graduat|school|education|per week|hours|interview|call|video|chat|meeting',
   ),
   'jobIntention.noticePeriod': s(
     '通知期|离职通知期|离职交接期|到岗通知期|需提前通知时间|提前通知期|离职通知时间',

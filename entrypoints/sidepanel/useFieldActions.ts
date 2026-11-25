@@ -1,4 +1,5 @@
-// Messages the side panel sends about a single field: focus it, or apply a text / option to it.
+// Messages the side panel sends about a single field: focus it, apply a text / option to it, or fill it with the
+// resume's answer for a key.
 import { useCallback } from 'react';
 import type { FieldReport, Outcome } from '../../src/engine/types';
 import { sendToBackground } from '../../src/messaging';
@@ -44,5 +45,22 @@ export function useFieldActions(tabId: number | null, onUpdated: (field: FieldRe
     [tabId, onUpdated],
   );
 
-  return { focus, apply };
+  /** Fill the box with the resume's answer for a key: its own ("fill this one") or a candidate ("use as"). */
+  const fillOne = useCallback(
+    async (field: FieldReport, key: string): Promise<ApplyResult> => {
+      if (tabId === null) return { ok: false };
+      try {
+        const result = await sendToBackground({ type: 'field:fill', tabId, frameId: field.frameId ?? 0, fieldId: field.fieldId, fieldKey: key });
+        if (!result || typeof result !== 'object') return { ok: false };
+        const updated: FieldReport = { ...result, frameId: result.frameId ?? field.frameId };
+        onUpdated(updated);
+        return updated.outcome === 'filled' ? { ok: true, field: updated } : { ok: false, outcome: updated.outcome };
+      } catch (error) {
+        return { ok: false, message: messageOf(error) };
+      }
+    },
+    [tabId, onUpdated],
+  );
+
+  return { focus, apply, fillOne };
 }

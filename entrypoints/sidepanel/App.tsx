@@ -8,6 +8,7 @@ import { Icon } from '../../src/ui/Icon';
 import { LanguageToggle } from '../../src/ui/LanguageToggle';
 import { HELP_PAGE, openExtensionPage, openProfilePage } from '../../src/ui/pages';
 import type { StatusGroupId } from '../../src/ui/status';
+import { isRetryable } from '../../src/fill/report';
 import { FilterChips } from './FilterChips';
 import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
 import { EmptyState, IconButton, LoadingList, Notice, Toast } from './parts';
@@ -48,7 +49,8 @@ export default function App() {
   const tabId = useActiveTab();
   const preview = usePreview(tabId, Boolean(profile?.settings.previewBeforeFill));
   const { report, loading, error, reload, patchField } = useReport(tabId);
-  const { focus, apply } = useFieldActions(tabId, patchField);
+  const { focus, apply, fillOne } = useFieldActions(tabId, patchField);
+  const [retryBusy, setRetryBusy] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<StatusGroupId>>(new Set());
   const [switchFailed, setSwitchFailed] = useState(false);
   const [inspectorActive, setInspectorActive] = useState(false);
@@ -89,6 +91,20 @@ export default function App() {
         : failed > 0
           ? t('panel.summaryFailed', { filled, failed })
           : t('panel.summaryClear', { filled });
+
+  const retryCount = useMemo(() => fields.filter(isRetryable).length, [fields]);
+  const retry = useCallback(async () => {
+    if (tabId === null) return;
+    setRetryBusy(true);
+    try {
+      const res = await sendToBackground({ type: 'fill:retry', tabId });
+      setToast({ id: Date.now(), text: res?.ok ? t('panel.retryDone') : t('panel.retryFailed', { message: res?.error ?? t('panel.noResponse') }) });
+    } catch (error) {
+      setToast({ id: Date.now(), text: t('panel.retryFailed', { message: error instanceof Error ? error.message : String(error) }) });
+    } finally {
+      setRetryBusy(false);
+    }
+  }, [tabId, t]);
 
   const commitPreview = useCallback(
     async (payload: PreviewCommitPayload) => {
@@ -465,6 +481,12 @@ export default function App() {
             <section className="raf-overview">
               <div className="raf-overview-head">
                 <p className="raf-summary">{summary}</p>
+                {retryCount > 0 ? (
+                  <button type="button" className="raf-btn" disabled={retryBusy} onClick={() => void retry()}>
+                    <Icon name="arrow-clockwise" size={14} />
+                    <span>{t('panel.retryRows', { n: retryCount })}</span>
+                  </button>
+                ) : null}
                 {report && isHttpUrl(report.url) ? (
                   <button type="button" className="raf-btn" onClick={() => void saveReportToTracker()}>
                     <Icon name="check-circle" size={14} />
@@ -490,6 +512,7 @@ export default function App() {
                 settings={profile?.settings}
                 onFocus={focus}
                 onApply={apply}
+                onFillOne={fillOne}
                 onSaveCustomAnswer={saveCustomAnswer}
                 onRecordRecipe={report?.url ? recordFieldRecipe : undefined}
                 onApplied={onApplied}

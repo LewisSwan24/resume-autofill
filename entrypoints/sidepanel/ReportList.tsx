@@ -31,6 +31,8 @@ export interface ReportListProps {
   settings?: Settings;
   onFocus: (field: FieldReport) => void;
   onApply: (field: FieldReport, input: ApplyInput) => Promise<ApplyResult>;
+  /** Fill the box with the resume's answer for a key ("fill this one", "use as"). */
+  onFillOne?: (field: FieldReport, fieldKey: string) => Promise<ApplyResult>;
   onSaveCustomAnswer?: (question: string, answer: string) => Promise<void>;
   onRecordRecipe?: (field: FieldReport, answerText: string) => Promise<void>;
   /** Called after a field was applied successfully (the app shows a Toast). */
@@ -43,6 +45,7 @@ function FieldItem({
   settings,
   onFocus,
   onApply,
+  onFillOne,
   onSaveCustomAnswer,
   onRecordRecipe,
   onApplied,
@@ -109,7 +112,10 @@ function FieldItem({
         {t('panel.source', { source: sourceLabel })}
       </p>
     ) : null;
-  const candidates = hasCandidateChoices(field) ? (field.candidates ?? []).filter((c) => c.label.trim() !== '') : [];
+  const choices = hasCandidateChoices(field) ? (field.candidates ?? []).filter((c) => c.label.trim() !== '') : [];
+  // A candidate with a key is a field the box may be, filled by that key; one without is an option of the box's list.
+  const keyChoices = onFillOne ? choices.filter((c) => c.fieldKey) : [];
+  const candidates = choices.filter((c) => !c.fieldKey);
   // Confidence only where it means something (filled / needs_review with a number): badge + bar.
   const percent = hasConfidence(field) ? confidencePercent(field.confidence) : null;
   // A card the page already held keeps its outcome for the counts, and says what happened in its own word.
@@ -117,13 +123,25 @@ function FieldItem({
   const word = held ? ('status.entry_held' as const) : picked ? ('panel.picked.word' as const) : undefined;
   const statusWord = t(word ?? OUTCOME_STATUS[field.outcome].labelKey);
 
-  const run = async (input: ApplyInput) => {
+  // A box left alone that the resume answers (one that held its own answer, a sensitive one, one that failed).
+  const canFillThis =
+    Boolean(onFillOne && field.fieldKey) &&
+    !isDraft &&
+    !held &&
+    keyChoices.length === 0 &&
+    (field.outcome === 'needs_review' || field.outcome === 'action_failed') &&
+    field.note !== 'same_file_held';
+
+  const run = (input: ApplyInput) => perform(() => onApply(field, input), input);
+  const fillBy = (key: string) => perform(() => onFillOne!(field, key));
+
+  const perform = async (action: () => Promise<ApplyResult>, input?: ApplyInput) => {
     setBusy(true);
     setError(null);
-    const result = await onApply(field, input);
+    const result = await action();
     setBusy(false);
     if (result.ok) {
-      if (saveCustom && onSaveCustomAnswer && 'text' in input && input.text.trim() && field.label.trim()) {
+      if (saveCustom && onSaveCustomAnswer && input && 'text' in input && input.text.trim() && field.label.trim()) {
         await onSaveCustomAnswer(field.label.trim(), input.text.trim());
       }
       onApplied?.();
@@ -173,6 +191,33 @@ function FieldItem({
           {field.note === 'sensitive_held' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveHeld')}</p> : null}
           {field.note === 'sensitive_filled' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveFilled')}</p> : null}
           {held ? <p className="raf-help raf-field-note">{t('panel.note.entryHeld')}</p> : null}
+
+          {canFillThis ? (
+            <button type="button" className="raf-btn raf-btn-small" disabled={busy} onClick={() => void fillBy(field.fieldKey!)}>
+              <Icon name="check-circle" size={14} />
+              <span className="raf-btn-text">{t('panel.fillThis')}</span>
+            </button>
+          ) : null}
+
+          {keyChoices.length > 0 ? (
+            <div className="raf-field" role="group" aria-label={t('panel.keyCandidates')}>
+              <span className="raf-field-label">{t('panel.keyCandidates')}</span>
+              <div className="raf-chips">
+                {keyChoices.map((c) => (
+                  <button
+                    key={c.fieldKey}
+                    type="button"
+                    className="raf-btn raf-btn-small"
+                    disabled={busy}
+                    title={c.label}
+                    onClick={() => void fillBy(c.fieldKey!)}
+                  >
+                    <span className="raf-btn-text">{t('panel.useKey', { field: c.label })}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {picked ? (
             <div className="raf-picked">
@@ -441,7 +486,7 @@ function FieldItem({
   );
 }
 
-export function ReportList({ fields, resume, settings, onFocus, onApply, onSaveCustomAnswer, onRecordRecipe, onApplied }: ReportListProps) {
+export function ReportList({ fields, resume, settings, onFocus, onApply, onFillOne, onSaveCustomAnswer, onRecordRecipe, onApplied }: ReportListProps) {
   return (
     <ul className="raf-list" role="list">
       {fields.map((field) => (
@@ -452,6 +497,7 @@ export function ReportList({ fields, resume, settings, onFocus, onApply, onSaveC
           settings={settings}
           onFocus={onFocus}
           onApply={onApply}
+          {...(onFillOne ? { onFillOne } : {})}
           onSaveCustomAnswer={onSaveCustomAnswer}
           onRecordRecipe={onRecordRecipe}
           onApplied={onApplied}

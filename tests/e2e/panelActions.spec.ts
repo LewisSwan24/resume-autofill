@@ -36,14 +36,15 @@ test('side panel: fill this one, and retry a box named late', async ({ context, 
   await expect(page.locator('#raf-held')).toHaveValue(heldRow!.value!);
   await expect.poll(async () => (await storedReport(serviceWorker, tabId))?.fields.find((f) => f.fieldId === heldRow!.fieldId)?.outcome).toBe('filled');
 
-  // Retry: the page names the box now, and only the boxes left over are filled again.
+  // Retry: the page names the box now, and only the boxes left over are filled again. (Not 邮箱: after the referral
+  // questions that could be the referrer's as well, and rightly waits for the applicant.)
   await page.evaluate(() => {
-    document.getElementById('raf-late-label')!.textContent = '邮箱';
+    document.getElementById('raf-late-label')!.textContent = '民族';
   });
   const filledBefore = (await storedReport(serviceWorker, tabId))!.counts.filled;
   await panel.getByRole('button', { name: /重试 \d+ 格|Retry \(\d+\)/ }).click();
   await expect.poll(async () => (await storedReport(serviceWorker, tabId))?.fields.find((f) => f.fieldId === lateRow!.fieldId)?.outcome).toBe('filled');
-  await expect(page.locator('#raf-late')).toHaveValue(/@/);
+  await expect(page.locator('#raf-late')).toHaveValue('汉族');
   const after = (await storedReport(serviceWorker, tabId))!;
   expect(after.fields).toHaveLength(report.fields.length);
   expect(after.counts.filled).toBe(filledBefore + 1);

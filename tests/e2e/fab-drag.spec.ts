@@ -137,8 +137,9 @@ test('a smaller window never pushes the FAB out of sight', async ({ context }) =
   // Dragging past the edge stops at the margin.
   await drag(page, 2000, 2000);
   const b = await fabBox(page);
-  expect(Math.round(b.x + b.width)).toBe(700 - MARGIN);
-  expect(Math.round(b.y + b.height)).toBe(420 - MARGIN);
+  // Within a pixel: the button's width can be fractional (188.5) while its left edge lands on a whole pixel.
+  expect(Math.abs(b.x + b.width - (700 - MARGIN))).toBeLessThanOrEqual(1);
+  expect(Math.abs(b.y + b.height - (420 - MARGIN))).toBeLessThanOrEqual(1);
   await page.close();
 });
 

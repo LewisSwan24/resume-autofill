@@ -16,6 +16,9 @@ const FILLED_PROBE: Record<string, string> = {
   antd: '.ant-form-item:has(.ant-form-item-label label[title="姓名"]) input',
   element: '.el-form-item:has(> .el-form-item__label:text-is("姓名")) input',
   aria: '#first_name',
+  'questions-zh': '#shift',
+  'questions-en': '#arrangement',
+  'languages-works': '#wt',
 };
 const GREEN = 'rgb(34, 197, 94)'; // HIGHLIGHT_COLORS.filled = #22c55e
 

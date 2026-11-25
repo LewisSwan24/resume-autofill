@@ -436,8 +436,27 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
 
   // ------------------------------------------------------------ free text + files
   'misc.selfIntroduction': s(
-    '自我评价|自我介绍|个人简介|个人介绍|自我描述|个人总结|个人优势|个人陈述|个人特点|自荐|自荐信|个人评价',
+    '自我评价|自我介绍|个人简介|个人介绍|自我描述|个人总结|个人陈述|个人特点|个人评价',
     'Tell us about yourself|About you|About me|Introduce yourself|Personal statement|Professional summary|Personal summary|Bio|Short bio|Describe yourself|Self introduction|Self-introduction|Self assessment',
+  ),
+  // Long-text answers: drafted from the resume, shown in the side panel, written only when the applicant says so.
+  'answers.coverLetter': s(
+    '求职信|自荐信|求职信内容|附信|致招聘方的信|求职自荐信',
+    'Cover letter|Covering letter|Cover note|Letter of application|Motivation letter|Motivational letter|Letter of motivation',
+    '上传|附件|upload|attach|file',
+  ),
+  'answers.whyUs': s(
+    '为什么选择我们|为什么选择本公司|为什么想加入我们|为什么加入我们|为何选择我们|为什么选择我司|为什么应聘该岗位|为什么申请这个职位|你为什么想加入|选择我们的理由|应聘动机|求职动机|申请动机|加入我们的原因',
+    'Why do you want to work for us|Why do you want to work here|Why do you want to join us|Why are you interested in this role|Why are you interested in this position|Why this role|Why us|Why do you want this job|Why are you applying|What attracted you to this role|What interests you about this role|Motivation for applying',
+  ),
+  'answers.strengths': s(
+    '个人优势|你的优势|我的优势|核心优势|主要优势|个人亮点|优势特长|你的长处|个人长处|你有哪些优势',
+    'What are your key strengths|What are your strengths|Key strengths|Your strengths|Strengths|Main strengths|What makes you a strong candidate|What sets you apart|Why should we hire you',
+    '劣势|缺点|不足|weakness|weaknesses',
+  ),
+  'answers.careerPlan': s(
+    '职业规划|职业发展规划|个人职业规划|未来规划|职业目标|未来五年规划|未来三到五年规划|职业生涯规划|发展规划|个人发展规划',
+    'Where do you see yourself in five years|Where do you see yourself in 5 years|Career goals|Career plan|Career aspirations|Career objectives|Long-term goals|Future plans|Professional goals|Career development goals',
   ),
   'misc.hobbies': s(
     '兴趣爱好|爱好|兴趣|特长爱好|兴趣特长|业余爱好|个人爱好|爱好特长',

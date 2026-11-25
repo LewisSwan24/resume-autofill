@@ -102,6 +102,12 @@ const ADDRESS_KEYS = [
   'contact.addressStreet', 'contact.postcode',
 ];
 
+const DRAFT_KEYS = [
+  'misc.selfIntroduction', 'basics.familyName', 'basics.givenName', 'basics.englishName',
+  'work.company', 'work.position', 'work.description', 'projects.name', 'projects.role', 'projects.description',
+  'skills.name', 'awards.name', 'jobIntention.positions', 'jobIntention.industry',
+];
+
 /**
  * Field key → the other keys whose leaves its value is computed from (beyond its own leaf).
  *  - derived keys: see `derived()` in values.ts;
@@ -129,6 +135,12 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'work.period': ['work.startDate', 'work.endDate', 'work.current'],
   'projects.period': ['projects.startDate', 'projects.endDate', 'projects.current'],
   'campus.period': ['campus.startDate', 'campus.endDate', 'campus.current'],
+  // Long-text drafts (src/answers/draft.ts) read the introduction, the first work entry or project, skills, awards
+  // and the job intention.
+  ...Object.fromEntries(
+    ['answers.coverLetter', 'answers.whyUs', 'answers.strengths', 'answers.careerPlan'].map((key) => [key, DRAFT_KEYS]),
+  ),
+  'projects.duties': ['projects.role', 'projects.description'],
   'education.endDate': ['education.current'],
   'work.endDate': ['work.current'],
   'projects.endDate': ['projects.current'],

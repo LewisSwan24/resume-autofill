@@ -183,6 +183,12 @@ export const FIELD_KEYS: FieldKeyDef[] = [
 
   def('misc.selfIntroduction', 'longtext', ['selfIntro', 'other']),
   def('misc.hobbies', 'longtext', ['selfIntro', 'other']),
+  // Long-text answers drafted from the resume and the page's job, never filled without the applicant (src/answers).
+  def('answers.coverLetter', 'longtext', ['selfIntro', 'other', 'jobIntention'], { derived: true }),
+  def('answers.whyUs', 'longtext', ['selfIntro', 'other', 'jobIntention'], { derived: true }),
+  def('answers.strengths', 'longtext', ['selfIntro', 'other', 'jobIntention'], { derived: true }),
+  def('answers.careerPlan', 'longtext', ['selfIntro', 'other', 'jobIntention'], { derived: true }),
+  def('projects.duties', 'longtext', ['projects'], { derived: true }),
 
   ...module('attachments', ['attachments', 'other'], { resume: 'file', photo: 'file', transcript: 'file', portfolio: 'file' }),
 ];

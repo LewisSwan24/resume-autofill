@@ -7,7 +7,7 @@ import { applyHighlights, clearHighlights, focusField } from '../fill/highlight'
 import { highlightRun, runFill, runPreview, type FillPayload, type FillRun, type RunFillOptions } from '../fill/runFill';
 import { collectEvidence } from '../engine/evidence';
 import { captureFieldFingerprint } from '../recipes';
-import type { Resume, SensitiveFieldMode, SiteRecipe, SiteRecipeFingerprint } from '../schema';
+import type { AnswerTemplates, Resume, SensitiveFieldMode, SiteRecipe, SiteRecipeFingerprint } from '../schema';
 import type { MappingPresetId } from '../templates/presets';
 import type { FrameNeeds } from '../engine/fieldDeps';
 import { createFieldInspector, type InspectorTargetInfo } from './inspector';
@@ -40,8 +40,8 @@ export interface ApplyRequest {
 export interface FrameHandlers {
   /** What this frame could fill (scan only; touches neither the page nor any resume data). */
   needs(): FrameNeeds;
-  preview(payload: { resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode }): FramePreview;
-  fill(payload: { resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode }): Promise<FillReport>;
+  preview(payload: { resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }): FramePreview;
+  fill(payload: { resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }): Promise<FillReport>;
   focus(fieldId: string): boolean;
   apply(request: ApplyRequest): Promise<FieldReport>;
   captureFingerprint?(fieldId: string): SiteRecipeFingerprint | null;

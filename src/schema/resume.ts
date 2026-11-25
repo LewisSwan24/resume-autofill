@@ -391,6 +391,17 @@ export const ResumeSchema = z.object({
 
 export const CURRENT_SCHEMA_VERSION = 3 as const;
 
+const templateText = () => z.string().max(4000).optional();
+/** One language's long-text templates (src/answers/templates.ts); a kind left out uses the default. */
+export const AnswerTemplateSetSchema = z.object({
+  coverLetter: templateText(),
+  whyUs: templateText(),
+  strengths: templateText(),
+  careerPlan: templateText(),
+});
+export const AnswerTemplatesSchema = z.object({ zh: AnswerTemplateSetSchema.optional(), en: AnswerTemplateSetSchema.optional() });
+export type AnswerTemplates = z.infer<typeof AnswerTemplatesSchema>;
+
 export const SettingsSchema = z.object({
   uiLanguage: z.enum(['auto', 'zh', 'en']).default('auto'),
   previewBeforeFill: z.boolean().default(false),
@@ -404,6 +415,10 @@ export const SettingsSchema = z.object({
   sensitiveFields: z.enum(SENSITIVE_FIELD_MODES).default(DEFAULT_SENSITIVE_FIELD_MODE),
   /** When sensitiveFields was last chosen, so that sync keeps the newer choice. Absent: never chosen here. */
   sensitiveFieldsUpdatedAt: z.number().int().nonnegative().optional(),
+  /** The applicant's own long-text templates. Absent: the defaults. */
+  answerTemplates: AnswerTemplatesSchema.optional(),
+  /** Whether a drafted long-text answer offers a rewrite by the local AI. Absent: off. */
+  longTextAiRewrite: z.boolean().optional(),
 });
 
 export const ProfileSchema = z.object({

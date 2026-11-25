@@ -29,11 +29,17 @@ const SAME_AS: Readonly<Record<string, string>> = {
   'contact.addressFull': 'address.country',
   'contact.inNamedCountry': 'address.country',
   'education.classYear': 'endDate',
+  'projects.duties': 'description',
 };
 
 /** Field keys worked out from another module's entries: the module and the input there. */
 const ELSEWHERE: Readonly<Record<string, { module: ModuleName; field: string }>> = {
   'education.supervisor': { module: 'referees', field: 'name' },
+  // A drafted answer is built mostly from the introduction, which is where the applicant improves it.
+  'answers.coverLetter': { module: 'about', field: 'selfIntroduction' },
+  'answers.whyUs': { module: 'about', field: 'selfIntroduction' },
+  'answers.strengths': { module: 'about', field: 'selfIntroduction' },
+  'answers.careerPlan': { module: 'about', field: 'selfIntroduction' },
 };
 
 /** In every list module: a span of dates starts at the start date; "Present" is the box under the end date. */
@@ -47,7 +53,10 @@ function entryOf(module: string, source: string | undefined): number {
 
 export function targetOfField(fieldKey: string, source?: string): ProfileTarget | null {
   const away = ELSEWHERE[fieldKey];
-  if (away) return { module: away.module, entry: entryOf(away.module, source), field: away.field };
+  if (away) {
+    const repeatable = MODULES.find((m) => m.module === away.module)?.repeatable;
+    return repeatable ? { module: away.module, entry: entryOf(away.module, source), field: away.field } : { module: away.module, field: away.field };
+  }
   const dot = fieldKey.indexOf('.');
   if (dot <= 0) return null;
   const head = fieldKey.slice(0, dot);

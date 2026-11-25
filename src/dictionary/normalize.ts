@@ -52,6 +52,10 @@ const NOISE_PHRASES: RegExp[] = [
   /\((?:填写|书写)?格式(?:为)?:[^)]*\)/g,
   // What to do, in brackets after the question: 是否为全日制在校学生（非全日制、非在校不可参加实习，请联系您的招聘HR）.
   /\([^)]*(?:请|不可|不能|须|如有|若有)[^)]*\)/g,
+  // How long the answer may be: 自我评价（200字以内）, 限500字, (max 500 characters), in no more than 150 words.
+  /(?:不超过|不少于|不多于|限|最多|至少|字数)?\s*\d+\s*(?:[-~至到]\s*\d+\s*)?个?字(?:以内|以下|以上|左右|内)?/g,
+  /\b(?:(?:answer|respond|reply)\s+)?(?:in\s+)?(?:no more than|not more than|not exceeding|max(?:imum)?\.?(?:\s+of)?|up to|under|within|less than|fewer than|at most|limit(?:ed)? to)\s*\d+\s*(?:words?|characters?|chars?)\b/g,
+  /\b\d+\s*(?:-\s*\d+\s*)?(?:words?|characters?|chars?)(?:\s*(?:max(?:imum)?|limit|or less|or fewer))?\b/g,
 ];
 
 // ( ) [ ] * : plus sentence punctuation. Full-width forms are already folded by NFKC.

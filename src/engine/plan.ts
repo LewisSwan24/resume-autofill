@@ -1,5 +1,8 @@
 // Plan: turn contexts + classifications + resume into fill steps, reports for everything that will not
 // be filled, and the number of cards each repeated section needs.
+import {
+  draftLongText, isDraftKind, langOf, lengthLimitOf, longTextKindOf, type JobContext, type TemplateLang, type Templates,
+} from '../answers';
 import { countryAskedAbout, livesInCountry } from '../dictionary/places';
 import { FIELD_SYNONYMS } from '../dictionary';
 import type { FillStep } from '../drivers/execute';
@@ -74,6 +77,10 @@ export function planFill(
     recipes?: readonly SiteRecipe[];
     /** Absent means the default: remind. */
     sensitiveFields?: SensitiveFieldMode;
+    /** The page's company and job, for long-text drafts (jobContextOf). */
+    job?: JobContext;
+    /** The applicant's own long-text templates, per language. */
+    answerTemplates?: Partial<Record<TemplateLang, Templates>>;
   } = {},
 ): FillPlan {
   const hasInternshipSection = classifications.some((c) => c.section === 'internship');
@@ -153,6 +160,28 @@ export function planFill(
     }
 
     const entryIndex = ctx.group?.index ?? 0;
+
+    // A long-text question gets a draft the applicant reads in the side panel first; only a self evaluation that
+    // fits whole is filled straight from the resume, as before.
+    const kind = longTextKindOf(cls.fieldKey);
+    if (kind) {
+      const templates = opts.answerTemplates?.[langOf(resume)];
+      const draft = draftLongText(kind, resume, {
+        job: opts.job ?? {},
+        entryIndex,
+        limit: lengthLimitOf(ctx.control.el, ctx.evidence[0]?.text ?? ''),
+        ...(templates ? { templates } : {}),
+      });
+      if (!draft) {
+        reports.push({ ...report, outcome: 'no_data' });
+        return;
+      }
+      if (isDraftKind(kind) || draft.cut) {
+        reports.push({ ...report, outcome: 'needs_review', note: 'draft', value: draft.text, source: draft.source });
+        return;
+      }
+    }
+
     const resolved =
       cls.fieldKey === 'contact.inNamedCountry'
         ? inNamedCountry(ctx, resume)

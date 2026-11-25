@@ -22,7 +22,7 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
         return true;
       }
       case 'frame:preview': {
-        const { resume, files, presetId, recipes, sensitiveFields } = message;
+        const { resume, files, presetId, recipes, sensitiveFields, answerTemplates } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
         Promise.resolve()
           .then(() =>
@@ -32,13 +32,14 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
               ...(presetId ? { presetId } : {}),
               ...(Array.isArray(recipes) ? { recipes } : {}),
               ...(sensitiveFields === 'fill' ? { sensitiveFields } : {}),
+              ...(answerTemplates && typeof answerTemplates === 'object' ? { answerTemplates } : {}),
             }),
           )
           .then(sendResponse, () => sendResponse(undefined));
         return true;
       }
       case 'frame:fill': {
-        const { resume, files, filter, presetId, recipes, sensitiveFields } = message;
+        const { resume, files, filter, presetId, recipes, sensitiveFields, answerTemplates } = message;
         if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
         handlers
           .fill({
@@ -48,6 +49,7 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
             ...(presetId ? { presetId } : {}),
             ...(Array.isArray(recipes) ? { recipes } : {}),
             ...(sensitiveFields === 'fill' ? { sensitiveFields } : {}),
+            ...(answerTemplates && typeof answerTemplates === 'object' ? { answerTemplates } : {}),
           })
           .then(sendResponse, () => sendResponse(undefined));
         return true;

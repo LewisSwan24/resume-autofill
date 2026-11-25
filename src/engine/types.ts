@@ -155,8 +155,9 @@ export interface FieldReport {
    * (`value`), and was left as it is.
    * `sensitive_held`: a sensitive field the settings say to leave to the applicant. `sensitive_filled`: one they
    * said to fill, and it was.
+   * `draft`: a long-text answer drafted from the resume (`value`), written only when the applicant says so.
    */
-  note?: 'same_file_held' | 'entry_held' | 'answer_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled';
+  note?: 'same_file_held' | 'entry_held' | 'answer_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled' | 'draft';
   /** Which entry of its section (0-based, in the resume's order for that section) this field belongs to. */
   entry?: number;
 }

@@ -184,6 +184,12 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '项目描述|项目内容|项目简介|项目介绍|项目职责|项目成果|项目业绩|项目经历描述|主要工作',
     'Project description|Project details|Project summary|Project overview|Description|Responsibilities|Outcomes|Describe the project',
   ),
+  // What the applicant did in the project, asked apart from what the project was: drafted from the role and the
+  // description, written only when the applicant says so. A plain 项目职责 stays the description, filled as before.
+  'projects.duties': s(
+    '项目中职责|项目中的职责|项目中承担的职责|个人职责|本人职责|个人负责内容|本人负责内容|你在项目中的职责|你在项目中负责什么|承担工作',
+    'Your responsibilities in the project|Your responsibilities|Your contribution|Your contributions|What was your contribution|What did you do on this project|My responsibilities|Personal contribution',
+  ),
   'projects.link': s(
     '项目链接|项目地址|项目网址|项目主页|作品链接|代码链接|仓库地址',
     'Project link|Project URL|Project link/URL|Demo link|Repository|Repository URL|Link|URL',

@@ -5,7 +5,7 @@ import type { FileData } from '../drivers/types';
 import { ATTACHMENT_PROP, isEmptyNeeds, parseFrameNeeds, type AttachmentKey, type FrameNeeds } from '../engine/fieldDeps';
 import type { FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
 import { sendToFrame, type FillRequestResponse } from '../messaging';
-import { materializeResume, type Resume, type SensitiveFieldMode, type SiteRecipe } from '../schema';
+import { materializeResume, type AnswerTemplates, type Resume, type SensitiveFieldMode, type SiteRecipe } from '../schema';
 import { BUILTIN_SITE_RECIPES, matchRecipesForPage } from '../recipes';
 import { isValidPresetId, type MappingPresetId } from '../templates/presets';
 import { VaultLockedError, fileToFileData, getFile, loadProfile } from '../storage';
@@ -65,6 +65,8 @@ export interface FramePayload {
   recipes?: SiteRecipe[];
   /** Sent only as 'fill': a frame told nothing reminds, which is the default. */
   sensitiveFields?: SensitiveFieldMode;
+  /** settings.answerTemplates: the applicant's own long-text templates. */
+  answerTemplates?: AnswerTemplates;
 }
 
 const defaultSendFill = (tabId: number, frameId: number, p: FramePayload): Promise<unknown> =>
@@ -79,6 +81,7 @@ const defaultSendPreview = (tabId: number, frameId: number, p: FramePayload): Pr
     ...(p.presetId ? { presetId: p.presetId } : {}),
     ...(p.recipes ? { recipes: p.recipes } : {}),
     ...(p.sensitiveFields ? { sensitiveFields: p.sensitiveFields } : {}),
+    ...(p.answerTemplates ? { answerTemplates: p.answerTemplates } : {}),
   });
 
 const defaultSendNeeds = (tabId: number, frameId: number): Promise<unknown> =>
@@ -185,6 +188,7 @@ async function runPreviewInternal(
   recipes: SiteRecipe[] | undefined,
   deps: FillDeps,
   sensitiveFields?: SensitiveFieldMode,
+  answerTemplates?: AnswerTemplates,
 ): Promise<FillRequestResponse> {
   const runId = crypto.randomUUID();
   const frameIds = await (deps.listFrameIds ?? listFrameIds)(tabId);
@@ -199,6 +203,7 @@ async function runPreviewInternal(
         files: await loadAttachmentMeta(resume, needs.attachmentKeys),
         ...(presetId ? { presetId } : {}),
         ...(sensitiveFields ? { sensitiveFields } : {}),
+        ...(answerTemplates ? { answerTemplates } : {}),
         ...(recipes && recipes.length > 0 ? { recipes } : {}),
       };
       if (deps.expectOrigin !== undefined && (await tabOrigin(tabId)) !== deps.expectOrigin) throw new OriginChangedError();
@@ -250,6 +255,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
       ? profile.settings.mappingPresetId
       : undefined;
     const sensitiveFields = profile.settings.sensitiveFields === 'fill' ? ('fill' as const) : undefined;
+    const answerTemplates = profile.settings.answerTemplates;
 
     const tabInfo = await browser.tabs.get(tabId).catch(() => null);
     const tabUrl = typeof tabInfo?.url === 'string' ? tabInfo.url : '';
@@ -263,7 +269,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     const pageRecipes = tabUrl ? matchRecipesForPage(allRecipes, tabUrl) : undefined;
 
     if (profile.settings.previewBeforeFill && !deps.forceFill) {
-      return await runPreviewInternal(tabId, resume, presetId, pageRecipes, deps, sensitiveFields);
+      return await runPreviewInternal(tabId, resume, presetId, pageRecipes, deps, sensitiveFields, answerTemplates);
     }
 
     const runId = crypto.randomUUID();
@@ -283,6 +289,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
           ...(filter ? { filter } : {}),
           ...(presetId ? { presetId } : {}),
           ...(sensitiveFields ? { sensitiveFields } : {}),
+          ...(answerTemplates ? { answerTemplates } : {}),
           ...(pageRecipes && pageRecipes.length > 0 ? { recipes: pageRecipes } : {}),
         };
         return sendFill(tabId, frameId, payload);

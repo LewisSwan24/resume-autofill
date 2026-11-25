@@ -10,7 +10,8 @@ import { baseReport, planFill, type CardDemand, type FillStep } from '../engine/
 import { scanDocument, type ScanResult } from '../engine/scan';
 import type { Classification, Control, FieldContext, FieldKey, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { isVisible } from '../engine/visibility';
-import type { Resume, SiteRecipe } from '../schema';
+import { jobContextOf } from '../answers';
+import type { AnswerTemplates, Resume, SiteRecipe } from '../schema';
 import { isSensitiveFieldKey, type SensitiveFieldMode } from '../schema/sensitive';
 import type { MappingPresetId } from '../templates/presets';
 import { ensureCards, REPEATED, type SectionGrowth } from './ensureCards';
@@ -28,6 +29,8 @@ export interface FillPayload {
   recipes?: SiteRecipe[];
   /** settings.sensitiveFields. Absent: the default, remind. */
   sensitiveFields?: SensitiveFieldMode;
+  /** settings.answerTemplates: the applicant's own long-text templates. Absent: the defaults. */
+  answerTemplates?: AnswerTemplates;
 }
 
 export interface RunFillOptions {
@@ -154,6 +157,8 @@ function planPage(doc: Document, scan: ScanResult, payload: FillPayload) {
       ...(payload.presetId ? { presetId: payload.presetId } : {}),
       ...(payload.recipes ? { recipes: payload.recipes } : {}),
       ...(payload.sensitiveFields ? { sensitiveFields: payload.sensitiveFields } : {}),
+      ...(payload.answerTemplates ? { answerTemplates: payload.answerTemplates } : {}),
+      job: jobContextOf(doc),
       ...(doc.title ? { pageTitle: doc.title } : {}),
       ...(doc.location?.href ? { pageUrl: doc.location.href } : {}),
     },

@@ -19,6 +19,7 @@ import {
   type SampleScore,
   verdictSelectors,
 } from '../shared/capturedExpectations';
+import { recordTriage, triageCounts, triageSample, untaggedEntries } from '../shared/coverageTriage';
 import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
 import { answerSearches } from '../shared/searchAnswers';
 import { replayFromHar, sameDocument } from '../shared/harReplay';
@@ -117,6 +118,10 @@ for (const sample of samples) {
       }
     });
 
+    test('every control left empty says why: a field key, or a triage tag', () => {
+      expect(untaggedEntries(sample.expected)).toEqual([]);
+    });
+
     test(`${sample.readInPlace ? 'snapshot' : 'replay'}: filling gives exactly what expected.json says`, async ({ browser }) => {
       test.setTimeout(180_000);
       const { page, uploads } = await openForFill(browser, sample);
@@ -153,6 +158,9 @@ for (const sample of samples) {
         await uploads.settled();
         const after = await inspect(page, locators);
         score = scoreSample(sample, 'harness', before, after, report, reached);
+        const triage = triageSample(sample, score, report);
+        score.triage = triageCounts(triage);
+        recordTriage(score.sample, triage);
         if (process.env.CAPTURED_DEBUG) {
           for (const f of report.fields) {
             console.log(`  · ${f.outcome} ${f.fieldKey ?? '-'} (${f.confidence}) "${f.label}" [${f.source ?? ''}] -> ${f.observed ?? f.value ?? ''}`);

@@ -23,6 +23,7 @@
     "capture": "node scripts/capture-page.ts",
     "test:captured": "pnpm harness:build && pnpm build && playwright test --project=captured",
     "accuracy:table": "node scripts/accuracy-table.ts",
+    "coverage:triage": "node scripts/coverage-triage.ts",
     "live-check": "pnpm build && node scripts/live-check.ts"
   },
   "dependencies": {

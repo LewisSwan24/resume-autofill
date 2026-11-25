@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FillReport } from '../../src/engine/types';
 import { DEFAULT_LOCALE, parseDevice, type CaptureDevice } from '../../scripts/capture/device.ts';
+import { coverageOf, type TriageCounts, type TriageTag } from './coverageTriage.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const CAPTURED_DIR = path.join(ROOT, 'fixtures', 'captured');
@@ -62,6 +63,9 @@ export interface KnownGap extends CapturedField {
   reason: string;
   /** Answers come from a search service a replay does not have: a gap in a replay, a field on the live page. */
   live?: true;
+  /** As on `LeaveEmpty`, for a gap with no `fieldKey`. */
+  triage?: TriageTag;  /** Matches its report row's label, when the page words it so that the entry's own label is not part of it. */
+  labelRe?: string;
 }
 
 /** A control that is right to leave alone. Every control on a sample's page needs a verdict. */
@@ -69,6 +73,9 @@ export interface LeaveEmpty extends LocatedEntry {
   reason: string;
   /** The field this really is, when the resume just has nothing for it. Any other key is a wrong guess. */
   fieldKey?: string;
+  /** Why it stays empty, for an entry with no `fieldKey`; see `coverageTriage.ts`. */
+  triage?: TriageTag;  /** Matches its report row's label, when the page words it so that the entry's own label is not part of it. */
+  labelRe?: string;
 }
 
 /**
@@ -226,6 +233,8 @@ export interface SampleScore {
    */
   wrongGuesses: string[];
   outcomes: FillReport['counts'];
+  /** How many of the page's controls fell in each triage category; rows recorded before triage have none. */
+  triage?: TriageCounts;
 }
 
 export const isEmptyReading = (r: Reading): boolean => r === null || r === '' || r === false || (Array.isArray(r) && r.length === 0);
@@ -236,10 +245,10 @@ function matches(field: CapturedField, actual: Reading): boolean {
   return JSON.stringify(actual) === JSON.stringify(field.expect);
 }
 
-const squashLabel = (s: string): string => s.replace(/[*\s]+/g, ' ').trim().toLowerCase();
+export const squashLabel = (s: string): string => s.replace(/[*\s]+/g, ' ').trim().toLowerCase();
 
 /** The report's row for a field: by field key, or else by its label. A filled row wins over a later failed one. */
-function rowsOf(report: FillReport, label: string, fieldKey?: string): FillReport['fields'] {
+export function rowsOf(report: FillReport, label: string, fieldKey?: string): FillReport['fields'] {
   const wanted = squashLabel(label);
   return report.fields.filter((f) => {
     if (fieldKey && f.fieldKey === fieldKey) return true;
@@ -568,6 +577,13 @@ export function phoneShortfalls(rows: SampleScore[]): PhoneShortfall[] {
   });
 }
 
+/** Page controls, those a resume could answer, and the share of those filled; dashes on a row recorded before triage. */
+function coverageCells(r: SampleScore): string {
+  if (!r.triage) return '— | — | —';
+  const c = coverageOf(r.triage);
+  return `${c.controls} | ${c.answerable} | ${c.rate}%`;
+}
+
 const NO_RATIO: Record<NoPartner, string> = { no_desktop: '无电脑版', several_desktops: '电脑版不止一个' };
 
 /**
@@ -582,7 +598,7 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
   for (const [phone, p] of paired) if ('desktop' in p) phonesOf.set(p.desktop, [...(phonesOf.get(p.desktop) ?? []), phone]);
   const ratioCell = (x: number | undefined): string => (x === undefined ? '—' : percent(x));
   const line = (r: SampleScore, phoneRate: string, ratio: string): string =>
-    `| ${r.sample} | ${deviceOf(r) === 'mobile' ? '手机' : '电脑'} | ${r.mode} | ${totalOf(r)} | ${r.correct} | ${accuracyOf(r)}% | ${r.revealedOnly?.length ?? 0} | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${(r.fillMs / 1000).toFixed(1)} | ${phoneRate} | ${ratio} |`;
+    `| ${r.sample} | ${deviceOf(r) === 'mobile' ? '手机' : '电脑'} | ${r.mode} | ${totalOf(r)} | ${r.correct} | ${accuracyOf(r)}% | ${r.revealedOnly?.length ?? 0} | ${wrongCount(r)} | ${r.missing.length + r.gaps.length} | ${r.gaps.length} | ${falseReports(r)} | ${r.leaveEmpty} | ${r.touched.length} | ${r.wrongGuesses.length} | ${r.outcomes.needs_review} | ${r.outcomes.action_failed} | ${coverageCells(r)} | ${r.outcomes.unmatched} | ${r.outcomes.no_data} | ${(r.fillMs / 1000).toFixed(1)} | ${phoneRate} | ${ratio} |`;
 
   const body = rows.map((r) => {
     if (deviceOf(r) === 'mobile') {
@@ -603,8 +619,8 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
     return 0;
   });
   const lines = [
-    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 代答后才填 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
-    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 代答后才填 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 页面栏位 | 可答 | 覆盖率 | 未识别 | 简历没有 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
+    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
     ...body.map((b) => b.line),
   ];
   return `${lines.join('\n')}\n`;

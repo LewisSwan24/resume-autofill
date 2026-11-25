@@ -20,7 +20,7 @@ import { entriesInPlace } from './entryProgress';
 import { entryName, heldEntries, placeInCard } from './heldEntries';
 import { runStep } from './runStep';
 import { applyHighlights } from './highlight';
-import { countOutcomes } from './report';
+import { countOutcomes, emptyTiming } from './report';
 
 export interface FillPayload {
   resume: Resume;
@@ -236,6 +236,14 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const { resume, files } = payload;
   const adapter = resolveAdapter(doc);
 
+  // Where the time goes: each lap adds the time since the last one to a phase.
+  const timing = emptyTiming();
+  let mark = performance.now();
+  const lap = (phase: keyof typeof timing): void => {
+    const now = performance.now();
+    timing[phase] += Math.round(now - mark);
+    mark = now;
+  };
   // A retry of some boxes leaves the page's cards as they are.
   const only = opts.filter?.onlyFieldIds ? new Set(opts.filter.onlyFieldIds) : null;
   // Growing sections is best effort: when it throws, carry on with the cards the page already has.
@@ -251,6 +259,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
       console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
     }
   }
+  lap('cards');
   const scan: ScanResult = scanDocument(doc, idFor);
   const { plan, left, entryOf, shown } = planPage(doc, scan, payload);
 
@@ -267,6 +276,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
         : s,
     );
 
+  lap('scan');
   // Read before anything is written: a page that reads an uploaded resume writes its own answers in a moment.
   const held = new Map<string, string>();
   for (const step of plannedSteps) {
@@ -290,7 +300,9 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     }
     if (uploadBusy && !read && step.intent.kind !== 'file') {
       read = true;
+      lap('steps');
       await waitForUploadRead(doc, uploadBusy, uploaded, resumeTaken ? adapter?.uploadSignMs : undefined);
+      lap('uploadWait');
       opts.onProgress?.();
     }
     // The page opened with an answer of the applicant's own (a form kept from an earlier application): theirs to change.
@@ -300,7 +312,8 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
       continue;
     }
     if (step.intent.kind === 'file') uploaded = true;
-    const result = await runStep(step, controls, doc);
+    const started = performance.now();
+    const result = { ...(await runStep(step, controls, doc)), ms: Math.round(performance.now() - started) };
     opts.onProgress?.();
     if (step.intent.kind === 'file' && step.fieldKey === 'attachments.resume' && result.outcome === 'filled') resumeTaken = true;
     // Filled because the applicant chose to: the row still says it was a sensitive field.
@@ -315,6 +328,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const hasInternshipSection = scan.classifications.some((c) => c.section === 'internship');
   const entries = entriesInPlace(growth, results, shown, (section, index) => entryName(resume, section, index, hasInternshipSection));
 
+  lap('steps');
   // After the rest of the page: on a page with `uploadBusy`, the upload has been read by now, and it may list entries.
   const editorRun = !only && adapter?.editors?.length
     ? await fillEntryEditors(doc, adapter.editors, { resume, files, idFor })
@@ -326,6 +340,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     for (const [id, control] of editorRun.controls) controls.set(id, control);
   }
 
+  lap('editors');
   // Document order of the controls; section-level rows last.
   const order = new Map<string, number>();
   scan.contexts.forEach((ctx, i) => order.set(ctx.control.id, i));
@@ -339,6 +354,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     fields,
     counts: countOutcomes(fields),
     ...(entries.length > 0 && !only ? { entries } : {}),
+    timing,
   };
   return { report, controls, growth };
 }

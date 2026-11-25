@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { FillReport } from '../../src/engine/types';
+import type { FillReport, FillTiming } from '../../src/engine/types';
 import { DEFAULT_LOCALE, parseDevice, type CaptureDevice } from '../../scripts/capture/device.ts';
 import { coverageOf, type TriageCounts, type TriageTag } from './coverageTriage.ts';
 
@@ -200,6 +200,8 @@ export interface SampleScore {
   url?: string;
   /** From the click to the last field, as the fill itself reports it. */
   fillMs: number;
+  /** Where that time went, as the fill reports it. */
+  timing?: FillTiming;
   fields: number;
   correct: number;
   /** Stayed empty although a value was expected. */
@@ -432,6 +434,7 @@ export function scoreSample(
 
   return {
     fillMs: report.finishedAt - report.startedAt,
+    ...(report.timing ? { timing: report.timing } : {}),
     sample: `${sample.ats}/${sample.name}`,
     mode,
     device: sample.device ?? 'desktop',
@@ -627,7 +630,18 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
 }
 
 /** One line per sample and mode, printed by the specs and used for the accuracy table. */
+const seconds = (ms: number): string => (ms / 1000).toFixed(1);
+
+/** The phases of a fill that took any time: ` (cards 5.5s, boxes 8.0s)`. */
+export function timingNote(timing: FillTiming | undefined): string {
+  if (!timing) return '';
+  const parts = (
+    [['cards', timing.cards], ['scan', timing.scan], ['upload read', timing.uploadWait], ['boxes', timing.steps], ['editors', timing.editors]] as const
+  ).filter(([, ms]) => ms >= 50);
+  return parts.length ? ` (${parts.map(([name, ms]) => `${name} ${seconds(ms)}s`).join(', ')})` : '';
+}
+
 export function scoreLine(score: SampleScore): string {
   const revealed = score.revealedOnly?.length ? ` (${score.revealedOnly.length} only once the held-back steps were shown)` : '';
-  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%${revealed}, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}, took ${(score.fillMs / 1000).toFixed(1)}s`;
+  return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%${revealed}, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}, took ${(score.fillMs / 1000).toFixed(1)}s${timingNote(score.timing)}`;
 }

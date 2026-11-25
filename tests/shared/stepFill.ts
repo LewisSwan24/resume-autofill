@@ -2,6 +2,7 @@
 // does, and fill again, until the page has no Next, needs the applicant, or stops moving. Never the send button.
 import type { Page } from '@playwright/test';
 import type { FillReport } from '../../src/engine/types';
+import { addTimings, emptyTiming } from '../../src/fill/report';
 
 export interface StepRun {
   report: FillReport;
@@ -35,6 +36,7 @@ export function mergeReports(reports: FillReport[]): FillReport {
     finishedAt: Math.max(...reports.map((r) => r.finishedAt)),
     fields,
     counts,
+    ...(reports.some((r) => r.timing) ? { timing: reports.reduce((t, r) => addTimings(t, r.timing), emptyTiming()) } : {}),
   };
 }
 

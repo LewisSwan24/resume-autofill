@@ -1,6 +1,6 @@
 // Pure helpers: guards for frame responses, merging per-frame reports, patching one field.
 import type { CardDemandSummary, FieldReport, FillPreview, FillReport, FramePreview, PreviewItem } from '../engine/types';
-import { countOutcomes } from '../fill/report';
+import { addTimings, countOutcomes, emptyTiming } from '../fill/report';
 
 export interface FramePart {
   frameId: number;
@@ -75,7 +75,16 @@ export function mergeFrameReports(parts: readonly FramePart[]): FillReport {
   const startedAt = parts.length ? Math.min(...parts.map((p) => p.report.startedAt)) : Date.now();
   const finishedAt = parts.length ? Math.max(...parts.map((p) => p.report.finishedAt)) : startedAt;
   const entries = parts.flatMap((p) => p.report.entries ?? []);
-  return { url: top?.report.url ?? '', startedAt, finishedAt, fields, counts: countOutcomes(fields), ...(entries.length > 0 ? { entries } : {}) };
+  const timing = parts.some((p) => p.report.timing) ? parts.reduce((t, p) => addTimings(t, p.report.timing), emptyTiming()) : undefined;
+  return {
+    url: top?.report.url ?? '',
+    startedAt,
+    finishedAt,
+    fields,
+    counts: countOutcomes(fields),
+    ...(entries.length > 0 ? { entries } : {}),
+    ...(timing ? { timing } : {}),
+  };
 }
 
 /** Does this stored row belong to (frameId, fieldId)? Rows without a frameId count as frame 0. */

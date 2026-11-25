@@ -162,6 +162,8 @@ for (const sample of samples) {
         score.triage = triageCounts(triage);
         recordTriage(score.sample, triage);
         if (process.env.CAPTURED_DEBUG) {
+          const slow = report.fields.filter((f) => (f.ms ?? 0) >= 300).sort((a, b) => b.ms! - a.ms!);
+          for (const f of slow.slice(0, 10)) console.log(`  slow ${f.ms}ms ${f.outcome} ${f.fieldKey ?? '-'} "${f.label}"`);
           for (const f of report.fields) {
             console.log(`  · ${f.outcome} ${f.fieldKey ?? '-'} (${f.confidence}) "${f.label}" [${f.source ?? ''}] -> ${f.observed ?? f.value ?? ''}`);
           }

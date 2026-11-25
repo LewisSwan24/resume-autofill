@@ -160,6 +160,17 @@ export interface FieldReport {
   note?: 'same_file_held' | 'entry_held' | 'answer_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled' | 'draft';
   /** Which entry of its section (0-based, in the resume's order for that section) this field belongs to. */
   entry?: number;
+  /** How long filling this box took, in ms (rows the fill wrote to, or tried to). */
+  ms?: number;
+}
+
+/** Where a fill's time went, in ms: adding cards, scanning and planning, waiting for an upload to be read, the boxes, entry editors. */
+export interface FillTiming {
+  cards: number;
+  scan: number;
+  uploadWait: number;
+  steps: number;
+  editors: number;
 }
 
 /**
@@ -187,6 +198,8 @@ export interface FillReport {
   counts: Record<Outcome, number>;
   /** Per entry of each repeated section this fill met. */
   entries?: EntryProgress[];
+  /** Where the time went (absent in reports from older builds). */
+  timing?: FillTiming;
 }
 
 export interface FillFilter {

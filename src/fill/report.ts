@@ -1,5 +1,5 @@
 // Report helpers: outcome counts and label selection.
-import { OUTCOMES, type Evidence, type FieldReport, type Outcome } from '../engine/types';
+import { OUTCOMES, type Evidence, type FieldReport, type FillTiming, type Outcome } from '../engine/types';
 
 export function emptyCounts(): Record<Outcome, number> {
   return Object.fromEntries(OUTCOMES.map((o) => [o, 0])) as Record<Outcome, number>;
@@ -10,6 +10,14 @@ export function countOutcomes(fields: readonly Pick<FieldReport, 'outcome'>[]): 
   const counts = emptyCounts();
   for (const f of fields) counts[f.outcome] += 1;
   return counts;
+}
+
+export const emptyTiming = (): FillTiming => ({ cards: 0, scan: 0, uploadWait: 0, steps: 0, editors: 0 });
+
+/** Two timings added phase by phase (frames of one tab, steps of one form). */
+export function addTimings(a: FillTiming, b: FillTiming | undefined): FillTiming {
+  if (!b) return a;
+  return { cards: a.cards + b.cards, scan: a.scan + b.scan, uploadWait: a.uploadWait + b.uploadWait, steps: a.steps + b.steps, editors: a.editors + b.editors };
 }
 
 /** Text a user would recognise the field by: the strongest evidence, or the control id as a last resort. */

@@ -36,6 +36,11 @@ export function mountNative(employmentCards = 2): void {
   list.innerHTML = Array.from({ length: employmentCards }, (_, i) => employmentCard(i + 1)).join('');
 }
 
+/** An application-question page (questions-zh / questions-en), as served: plain controls, no script needed to scan. */
+export function mountQuestions(lang: 'zh' | 'en'): void {
+  document.body.innerHTML = bodyOf(`questions-${lang}/index.html`);
+}
+
 /** The same-origin iframe document of the native fixture (own frame → own scan). */
 export function mountNativeFrame(): void {
   document.body.innerHTML = bodyOf('native/frame.html');

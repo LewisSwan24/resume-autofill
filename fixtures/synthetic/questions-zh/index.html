@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>校园招聘补充问题（合成页）</title>
+  </head>
+  <body>
+    <h1>校园招聘补充问题</h1>
+    <form id="application" novalidate>
+      <fieldset data-state="canTravel">
+        <legend>能否出差</legend>
+        <label><input type="radio" name="travel" value="1" />是</label>
+        <label><input type="radio" name="travel" value="0" />否</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="shift">是否接受轮班</label>
+        <select id="shift" data-state="shiftWork">
+          <option value="">请选择</option>
+          <option value="1">可以</option>
+          <option value="0">不可以</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <span id="l-overtime">是否接受加班</span>
+        <div class="answers" role="group" aria-labelledby="l-overtime" data-state="overtime">
+          <button type="button" aria-pressed="false">是</button>
+          <button type="button" aria-pressed="false">否</button>
+        </div>
+      </div>
+
+      <fieldset data-state="earlyInternship">
+        <legend>是否需要/可以提前实习</legend>
+        <label><input type="radio" name="early" value="1" />能</label>
+        <label><input type="radio" name="early" value="0" />不能</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="days">每周可实习天数</label>
+        <select id="days" data-state="internshipDaysPerWeek">
+          <option value="">请选择</option>
+          <option>3天</option>
+          <option>4天</option>
+          <option>5天</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="months">可实习时长（月）</label>
+        <select id="months" data-state="internshipMonths">
+          <option value="">请选择</option>
+          <option>1-2个月</option>
+          <option>3-5个月</option>
+          <option>6个月及以上</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="offers">已获得几份其他公司offer</label>
+        <select id="offers" data-state="offerCount">
+          <option value="">请选择</option>
+          <option>无</option>
+          <option>1-2份</option>
+          <option>3份及以上</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="offer-pay">已获得offer薪资范围</label>
+        <input id="offer-pay" type="text" data-state="offerSalaryRange" autocomplete="off" />
+      </div>
+
+      <fieldset data-state="relativesAtCompany">
+        <legend>是否有亲友在本公司就职</legend>
+        <label><input type="radio" name="relatives" value="1" />是</label>
+        <label><input type="radio" name="relatives" value="0" />否</label>
+      </fieldset>
+
+      <div class="row">
+        <span id="l-worked">是否曾在本公司工作</span>
+        <div class="answers" role="group" aria-labelledby="l-worked" data-state="workedHereBefore">
+          <button type="button" aria-pressed="false">是</button>
+          <button type="button" aria-pressed="false">否</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="ambassador">是否愿意成为校园大使</label>
+        <select id="ambassador" data-state="campusAmbassador">
+          <option value="">请选择</option>
+          <option>愿意</option>
+          <option>不愿意</option>
+        </select>
+      </div>
+
+      <fieldset data-state="graduateStatus">
+        <legend>应届/往届</legend>
+        <label><input type="radio" name="graduate" value="1" />应届</label>
+        <label><input type="radio" name="graduate" value="0" />往届</label>
+      </fieldset>
+
+      <fieldset data-state="furtherStudyPlan">
+        <legend>是否计划升学深造或考公/考编</legend>
+        <label><input type="radio" name="study" value="1" />是</label>
+        <label><input type="radio" name="study" value="0" />否</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="english">英语是否可作为工作语言</label>
+        <select id="english" data-state="englishWorkingLanguage">
+          <option value="">请选择</option>
+          <option>可以</option>
+          <option>不可以</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <span id="l-licence">是否持有驾驶证</span>
+        <div class="answers" role="group" aria-labelledby="l-licence" data-state="driversLicence">
+          <button type="button" aria-pressed="false">是</button>
+          <button type="button" aria-pressed="false">否</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="years">工作年限</label>
+        <select id="years" data-state="yearsExperience">
+          <option value="">请选择</option>
+          <option>0年</option>
+          <option>1-3年</option>
+          <option>3年以上</option>
+        </select>
+      </div>
+
+      <!-- Traps: a staff number and a code are never the referrer's name. -->
+      <div class="row">
+        <label for="staff-no">推荐人工号</label>
+        <input id="staff-no" type="text" data-state="referrerStaffNumber" autocomplete="off" />
+      </div>
+      <div class="row">
+        <label for="code">推荐码</label>
+        <input id="code" type="text" data-state="referralCode" autocomplete="off" />
+      </div>
+
+      <button type="submit">提交</button>
+    </form>
+    <script type="module" src="../shared/questions.ts"></script>
+  </body>
+</html>

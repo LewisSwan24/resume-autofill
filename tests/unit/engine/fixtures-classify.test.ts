@@ -14,8 +14,8 @@ import { FILL_THRESHOLD } from '../../../src/engine/classify';
 import { planFill } from '../../../src/engine/plan';
 import { scanDocument } from '../../../src/engine/scan';
 import { createSampleProfile } from '../../../src/schema';
-import { evaluate, loadExpected, type Row } from './fixtureAsserts';
-import { mountAntd, mountElement, mountNative, mountNativeFrame } from './fixtureDom';
+import { evaluate, loadExpected, type FixtureName, type Row } from './fixtureAsserts';
+import { mountAntd, mountElement, mountNative, mountNativeFrame, mountQuestions } from './fixtureDom';
 
 // Whole-page scans are slow in jsdom (evidence collection clones DOM); allow for a loaded CI box.
 vi.setConfig({ testTimeout: 60_000 });
@@ -31,7 +31,7 @@ const file = (name: string): FileData => ({ name, type: 'application/octet-strea
 
 /** Runs scan → plan and checks every row against classification and expected.json. */
 function verify(
-  fixture: 'native' | 'antd' | 'element',
+  fixture: FixtureName,
   resumeId: string,
   rows: Row[],
   files: Record<string, FileData> = {},
@@ -305,5 +305,61 @@ describe('Element Plus fixture (zh-CN, sample-zh)', () => {
     expect(internship.need).toBe(2);
     expect(plan.cardDemand.find((d) => d.section === 'education')).toMatchObject({ have: 2, need: 2 });
     expect(plan.cardDemand.find((d) => d.section === 'family')).toMatchObject({ have: 2, need: 2 });
+  });
+});
+
+// ------------------------------------------------------------------------------------ application questions
+
+describe('application questions, zh-CN (sample-zh)', () => {
+  const rows: Row[] = [
+    { state: 'canTravel', label: '能否出差', key: 'questions.canTravel' },
+    { state: 'shiftWork', label: '是否接受轮班', key: 'questions.shiftWork' },
+    { state: 'overtime', label: '是否接受加班', key: 'questions.overtime' },
+    { state: 'earlyInternship', label: '是否需要/可以提前实习', key: 'questions.earlyInternship' },
+    { state: 'internshipDaysPerWeek', label: '每周可实习天数', key: 'questions.internshipDaysPerWeek' },
+    { state: 'internshipMonths', label: '可实习时长（月）', key: 'questions.internshipMonths' },
+    { state: 'offerCount', label: '已获得几份其他公司offer', key: 'questions.offerCount' },
+    { state: 'offerSalaryRange', label: '已获得offer薪资范围', key: 'questions.offerSalaryRange' },
+    { state: 'relativesAtCompany', label: '是否有亲友在本公司就职', key: 'questions.relativesAtCompany' },
+    { state: 'workedHereBefore', label: '是否曾在本公司工作', key: 'questions.workedHereBefore' },
+    { state: 'campusAmbassador', label: '是否愿意成为校园大使', key: 'questions.campusAmbassador' },
+    { state: 'graduateStatus', label: '应届/往届', key: 'questions.graduateStatus' },
+    { state: 'furtherStudyPlan', label: '是否计划升学深造或考公/考编', key: 'questions.furtherStudyPlan' },
+    { state: 'englishWorkingLanguage', label: '英语是否可作为工作语言', key: 'questions.englishWorkingLanguage' },
+    { state: 'driversLicence', label: '是否持有驾驶证', key: 'questions.driversLicence' },
+    { state: 'yearsExperience', label: '工作年限', key: 'questions.yearsExperience' },
+    { label: '推荐人工号', key: null },
+    { label: '推荐码', key: null },
+  ];
+
+  it('answers every question as expected.json says, and leaves the staff number and the code alone', () => {
+    mountQuestions('zh');
+    verify('questions-zh', 'sample-zh', rows);
+  });
+});
+
+describe('screening questions, en-AU (sample-en)', () => {
+  const rows: Row[] = [
+    { state: 'canTravel', label: 'Are you willing to travel for work?', key: 'questions.canTravel' },
+    { state: 'shiftWork', label: 'Are you able to work shifts, including weekends?', key: 'questions.shiftWork' },
+    { state: 'overtime', label: 'Are you willing to work overtime?', key: 'questions.overtime' },
+    { state: 'canWorkOnsite', label: 'Can you work on-site?', key: 'questions.canWorkOnsite' },
+    { state: 'workArrangement', label: 'Preferred work arrangement', key: 'questions.workArrangement' },
+    { state: 'offerCount', label: 'How many job offers do you currently hold?', key: 'questions.offerCount' },
+    { state: 'relativesAtCompany', label: 'Do you have any relatives or friends working at the company?', key: 'questions.relativesAtCompany' },
+    { state: 'workedHereBefore', label: 'Have you previously worked for this company?', key: 'questions.workedHereBefore' },
+    { state: 'securityClearance', label: 'What level of security clearance do you currently hold?', key: 'questions.securityClearance' },
+    { state: 'driversLicence', label: "Do you hold a current driver's licence?", key: 'questions.driversLicence' },
+    { state: 'yearsExperience', label: 'How many years of professional experience do you have?', key: 'questions.yearsExperience' },
+    { state: 'yearsLeading', label: 'How many years of experience do you have leading teams?', key: 'questions.yearsLeading' },
+    { state: 'englishWorkingLanguage', label: 'Are you comfortable using English as your working language?', key: 'questions.englishWorkingLanguage' },
+    { state: 'graduateStatus', label: 'Graduate status', key: 'questions.graduateStatus' },
+    { label: 'Referral code', key: null },
+    { label: 'Earliest availability for a video call', key: null },
+  ];
+
+  it('answers every question as expected.json says, and leaves the code and the call alone', () => {
+    mountQuestions('en');
+    verify('questions-en', 'sample-en', rows);
   });
 });

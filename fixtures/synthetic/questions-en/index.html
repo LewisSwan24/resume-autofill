@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Screening questions (synthetic page)</title>
+  </head>
+  <body>
+    <h1>Screening questions</h1>
+    <form id="application" novalidate>
+      <fieldset data-state="canTravel">
+        <legend>Are you willing to travel for work?</legend>
+        <label><input type="radio" name="travel" value="yes" />Yes</label>
+        <label><input type="radio" name="travel" value="no" />No</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="shifts">Are you able to work shifts, including weekends?</label>
+        <select id="shifts" data-state="shiftWork">
+          <option value="">Select...</option>
+          <option>Yes</option>
+          <option>No</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <span id="l-overtime">Are you willing to work overtime?</span>
+        <div class="answers" role="group" aria-labelledby="l-overtime" data-state="overtime">
+          <button type="button" aria-pressed="false">Yes</button>
+          <button type="button" aria-pressed="false">No</button>
+        </div>
+      </div>
+
+      <fieldset data-state="canWorkOnsite">
+        <legend>Can you work on-site?</legend>
+        <label><input type="radio" name="onsite" value="yes" />Yes, I can</label>
+        <label><input type="radio" name="onsite" value="no" />No, I cannot</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="arrangement">Preferred work arrangement</label>
+        <select id="arrangement" data-state="workArrangement">
+          <option value="">Select...</option>
+          <option>On-site</option>
+          <option>Hybrid</option>
+          <option>Remote</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="offers">How many job offers do you currently hold?</label>
+        <select id="offers" data-state="offerCount">
+          <option value="">Select...</option>
+          <option>None</option>
+          <option>1-2</option>
+          <option>3+</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <span id="l-relatives">Do you have any relatives or friends working at the company?</span>
+        <div class="answers" role="group" aria-labelledby="l-relatives" data-state="relativesAtCompany">
+          <button type="button" aria-pressed="false">Yes</button>
+          <button type="button" aria-pressed="false">No</button>
+        </div>
+      </div>
+
+      <fieldset data-state="workedHereBefore">
+        <legend>Have you previously worked for this company?</legend>
+        <label><input type="radio" name="worked" value="yes" />Yes</label>
+        <label><input type="radio" name="worked" value="no" />No</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="clearance">What level of security clearance do you currently hold?</label>
+        <select id="clearance" data-state="securityClearance">
+          <option value="">Select...</option>
+          <option>None</option>
+          <option>Baseline</option>
+          <option>NV1</option>
+          <option>NV2</option>
+          <option>PV</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <span id="l-licence">Do you hold a current driver's licence?</span>
+        <div class="answers" role="group" aria-labelledby="l-licence" data-state="driversLicence">
+          <button type="button" aria-pressed="false">Yes</button>
+          <button type="button" aria-pressed="false">No</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="years">How many years of professional experience do you have?</label>
+        <select id="years" data-state="yearsExperience">
+          <option value="">Select...</option>
+          <option>Less than 1 year</option>
+          <option>1-2 years</option>
+          <option>3-5 years</option>
+          <option>More than 5 years</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="leading">How many years of experience do you have leading teams?</label>
+        <select id="leading" data-state="yearsLeading">
+          <option value="">Select...</option>
+          <option>None</option>
+          <option>1-2 years</option>
+          <option>3+ years</option>
+        </select>
+      </div>
+
+      <fieldset data-state="englishWorkingLanguage">
+        <legend>Are you comfortable using English as your working language?</legend>
+        <label><input type="radio" name="english" value="yes" />Yes</label>
+        <label><input type="radio" name="english" value="no" />No</label>
+      </fieldset>
+
+      <div class="row">
+        <label for="graduate">Graduate status</label>
+        <select id="graduate" data-state="graduateStatus">
+          <option value="">Select...</option>
+          <option>New graduate</option>
+          <option>Past graduate</option>
+        </select>
+      </div>
+
+      <!-- Traps: a code is never the referrer's name, and an availability for a call is not the start date. -->
+      <div class="row">
+        <label for="code">Referral code</label>
+        <input id="code" type="text" data-state="referralCode" autocomplete="off" />
+      </div>
+      <div class="row">
+        <label for="call">Earliest availability for a video call</label>
+        <input id="call" type="text" data-state="videoCall" autocomplete="off" />
+      </div>
+
+      <button type="submit">Submit</button>
+    </form>
+    <script type="module" src="../shared/questions.ts"></script>
+  </body>
+</html>

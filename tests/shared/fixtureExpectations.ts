@@ -26,7 +26,7 @@ export function emptyLike(v: unknown): unknown {
 export const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 export interface FixtureSpec {
-  name: 'native' | 'antd' | 'element' | 'aria';
+  name: 'native' | 'antd' | 'element' | 'aria' | 'questions-zh' | 'questions-en';
   /** Review field state key → the label its control is reported under. */
   review: Record<string, RegExp>;
   /** Controls that must never be reported as filled. */
@@ -51,6 +51,8 @@ export const FIXTURE_SPECS: FixtureSpec[] = [
     review: { currentLocation: /current location/i, visaType: /visa type/i },
     traps: [/privacy policy/i, /autofill from resume/i],
   },
+  { name: 'questions-zh', review: {}, traps: [/推荐人工号/, /推荐码/] },
+  { name: 'questions-en', review: {}, traps: [/referral code/i, /video call/i] },
 ];
 
 export interface KeyRow {

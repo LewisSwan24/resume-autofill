@@ -156,8 +156,13 @@ const MIN_HAN_OVERLAP = 0.5;
  * Chinese puts what a phrase is about at its end: 公司规模 is a size and 工作年限 a number of years, whatever they start
  * with. So words at the start of a label name its subject only if nothing but a word like 名称 comes after them.
  */
+/** A measure, and the unit a form writes after it in brackets: 实习时长（月）, 工作年限（年）, 期望月薪（元）. */
+const MEASURE_END = /(?:时长|天数|年限|年数|月数|数量|人数|个数|月薪|年薪|薪资|薪酬|工资|期限|周期)$/;
+const UNIT_TAIL = /^(?:年|月|天|日|周|小时|元|万|万元|千元|份|个|人)$/;
+
 function endsOnAnotherSubject(longer: string, shorter: string): boolean {
   const tail = longer.slice(longer.lastIndexOf(shorter) + shorter.length);
+  if (UNIT_TAIL.test(tail) && MEASURE_END.test(shorter)) return false;
   return HAN.test(tail) && !SAME_SUBJECT_TAIL.test(tail);
 }
 

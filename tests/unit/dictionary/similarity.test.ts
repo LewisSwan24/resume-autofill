@@ -125,3 +125,22 @@ describe('a long phrase inside a much longer question', () => {
   });
 });
 
+
+describe('a unit written after a measure, as 实习时长（月）', () => {
+  it.each([
+    ['可实习时长（月）', '可实习时长'],
+    ['工作年限（年）', '工作年限'],
+    ['每周实习天数（天）', '每周实习天数'],
+    ['目前月薪（元）', '目前月薪'],
+  ])('"%s" still contains "%s"', (label, synonym) => {
+    expect(labelSimilarity(label, synonym)).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it.each([
+    ['出生年月', '出生年'],
+    ['开始时间年', '开始时间'],
+    ['公司规模', '公司'],
+  ])('"%s" is still about something other than "%s"', (label, synonym) => {
+    expect(labelSimilarity(label, synonym)).toBeLessThan(0.75);
+  });
+});

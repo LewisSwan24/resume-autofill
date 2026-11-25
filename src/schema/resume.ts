@@ -215,6 +215,9 @@ export const LanguageEntrySchema = z.object({
   id: entryId(),
   language: text(),
   proficiency: nullableEnum(PROFICIENCIES),
+  /** Levels asked apart on some forms (听说能力, 读写能力). Empty: the overall level answers them. */
+  listeningSpeaking: nullableEnum(PROFICIENCIES),
+  readingWriting: nullableEnum(PROFICIENCIES),
   /** Free text, as written before the test list existed. Kept: older resumes and other surfaces still read it. */
   certificate: text(),
   score: text(),

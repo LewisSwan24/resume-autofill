@@ -409,6 +409,10 @@ export function resolveValue(
     if (field === 'endDate' && entry.current === true && !entry.endDate) return null;
     if (field === 'period') return periodOf(entry, source);
     if (field === 'supervisor') return supervisorAt(entry, resume);
+    // A level asked apart that the applicant left empty is answered by the overall level.
+    if ((field === 'listeningSpeaking' || field === 'readingWriting') && clean(entry[field]) === null) {
+      return wrap(entry.proficiency, `${module}[${row.index}].proficiency`);
+    }
     return wrap(entry[field], source);
   }
   const single = (resume as unknown as Record<string, Record<string, unknown> | undefined>)[module];

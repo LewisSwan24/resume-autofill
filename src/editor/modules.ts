@@ -169,7 +169,9 @@ export const MODULES: readonly ModuleMeta[] = [
   ]),
   {
     ...mod('languages', 'array', [
-      text('language'), select('proficiency', 'proficiency'), text('certificate'), text('score'),
+      text('language'), select('proficiency', 'proficiency'),
+      select('listeningSpeaking', 'proficiency'), select('readingWriting', 'proficiency'),
+      text('certificate'), text('score'),
     ]),
     subLists: [{
       key: 'tests',

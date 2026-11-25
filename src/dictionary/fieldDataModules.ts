@@ -251,9 +251,20 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     '等级|水平|证书|成绩|level|proficiency|certificate|score|test',
   ),
   'languages.proficiency': s(
-    '精通程度|熟练程度|掌握程度|语言水平|语言能力|外语水平|掌握情况|听说能力|读写能力|水平|熟练度|语言熟练度|外语能力',
-    'Proficiency|Language proficiency|Proficiency level|Fluency|Level|Language level|Speaking level|Skill level',
-    '证书|考试|成绩|certificate|test|exam|score',
+    '精通程度|熟练程度|掌握程度|语言水平|语言能力|外语水平|掌握情况|水平|熟练度|语言熟练度|外语能力',
+    'Proficiency|Language proficiency|Proficiency level|Fluency|Level|Language level|Skill level',
+    '证书|考试|成绩|听说|读写|certificate|test|exam|score|speaking|listening|reading|writing',
+  ),
+  // Asked apart from the overall level; the overall level answers them when the applicant gave none.
+  'languages.listeningSpeaking': s(
+    '听说能力|听说水平|听说|听说程度|口语能力|口语水平|口语|听力口语|听说熟练程度',
+    'Speaking and listening|Listening and speaking|Speaking|Spoken|Oral|Speaking level|Spoken proficiency|Oral proficiency|Listening/Speaking|Speaking/Listening',
+    '读写|阅读|写作|reading|writing|written',
+  ),
+  'languages.readingWriting': s(
+    '读写能力|读写水平|读写|读写程度|书面能力|书面表达|阅读写作|读写熟练程度',
+    'Reading and writing|Writing and reading|Reading|Writing|Written|Written proficiency|Reading/Writing|Writing/Reading',
+    '听说|口语|speaking|listening|spoken|oral',
   ),
   'languages.certificate': s(
     '英语等级|外语等级|语言等级|语言证书|外语证书|英语证书|等级证书|语言考试|语言考试类型|英语考试|考试类型|英语水平考试|英语四六级|四六级|所获证书|已获证书|获得证书',

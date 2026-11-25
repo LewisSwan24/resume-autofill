@@ -179,7 +179,7 @@ describe('what the form is given', () => {
 
   it('a block for other languages still takes one that is not English', () => {
     const { at } = scan((r) => {
-      r.languages = [...r.languages, { language: '日语', proficiency: 'basic', certificate: 'JLPT N2', score: '', tests: [] }];
+      r.languages = [...r.languages, { language: '日语', proficiency: 'basic', listeningSpeaking: null, readingWriting: null, certificate: 'JLPT N2', score: '', tests: [] }];
     });
     expect(at('语言类型').step?.intent).toMatchObject({ kind: 'choice', query: '日语' });
   });

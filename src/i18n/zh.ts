@@ -230,6 +230,8 @@ export const zh = {
   'options.field.issuer': '颁发单位',
   'options.field.language': '语言',
   'options.field.proficiency': '熟练程度',
+  'options.field.listeningSpeaking': '听说程度（不填同上）',
+  'options.field.readingWriting': '读写程度（不填同上）',
   'options.field.certificate': '语言证书',
   'options.field.score': '分数',
   'options.field.tests': '考试成绩',

@@ -231,6 +231,8 @@ export const en: Record<MessageKey, string> = {
   'options.field.issuer': 'Issuer',
   'options.field.language': 'Language',
   'options.field.proficiency': 'Proficiency',
+  'options.field.listeningSpeaking': 'Listening and speaking (empty: as above)',
+  'options.field.readingWriting': 'Reading and writing (empty: as above)',
   'options.field.certificate': 'Certificate',
   'options.field.score': 'Score',
   'options.field.tests': 'Test scores',

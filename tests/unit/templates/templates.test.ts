@@ -47,8 +47,8 @@ describe('offline resume HTML & Word templates', () => {
   it('writes each test of a language with its score, and an older certificate the list repeats only once', () => {
     const resume = zhResume();
     resume.languages = [
-      { language: '英语', proficiency: 'fluent', certificate: 'CET-6', score: '520', tests: [{ test: 'cet6', score: '520', date: '' }, { test: 'cet4', score: '560', date: '' }] },
-      { language: '日语', proficiency: null, certificate: 'JLPT N2', score: '', tests: [] },
+      { language: '英语', proficiency: 'fluent', listeningSpeaking: null, readingWriting: null, certificate: 'CET-6', score: '520', tests: [{ test: 'cet6', score: '520', date: '' }, { test: 'cet4', score: '560', date: '' }] },
+      { language: '日语', proficiency: null, listeningSpeaking: null, readingWriting: null, certificate: 'JLPT N2', score: '', tests: [] },
     ];
     const html = renderResumeHtml(resume, RESUME_TEMPLATES[0]!.id);
     expect(html).toContain('英语 CET-6 520, CET-4 560 · 日语 JLPT N2');

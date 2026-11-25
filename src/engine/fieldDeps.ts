@@ -141,6 +141,8 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
     ['answers.coverLetter', 'answers.whyUs', 'answers.strengths', 'answers.careerPlan'].map((key) => [key, DRAFT_KEYS]),
   ),
   'projects.duties': ['projects.role', 'projects.description'],
+  'languages.listeningSpeaking': ['languages.proficiency'],
+  'languages.readingWriting': ['languages.proficiency'],
   'education.endDate': ['education.current'],
   'work.endDate': ['work.current'],
   'projects.endDate': ['projects.current'],

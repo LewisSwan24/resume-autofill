@@ -157,6 +157,7 @@ export const FIELD_KEYS: FieldKeyDef[] = [
 
   ...module('languages', ['languages'], {
     language: 'text', proficiency: ['enum', 'proficiency'], certificate: 'text', score: 'text',
+    listeningSpeaking: ['enum', 'proficiency'], readingWriting: ['enum', 'proficiency'],
   }),
 
   ...module('certificates', ['certificates'], { name: 'text', date: 'date', issuer: 'text', number: 'text' }),

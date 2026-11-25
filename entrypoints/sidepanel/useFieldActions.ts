@@ -3,7 +3,8 @@ import { useCallback } from 'react';
 import type { FieldReport, Outcome } from '../../src/engine/types';
 import { sendToBackground } from '../../src/messaging';
 
-export type ApplyInput = { text: string } | { optionLabel: string };
+/** `undo`: put back what the box held before the side panel first wrote to it. */
+export type ApplyInput = { text: string } | { optionLabel: string } | { undo: true };
 /** ok: false carries the outcome the page reported, or an error message; neither = nobody answered. */
 export type ApplyResult = { ok: true; field: FieldReport } | { ok: false; outcome?: Outcome; message?: string };
 
@@ -33,7 +34,9 @@ export function useFieldActions(tabId: number | null, onUpdated: (field: FieldRe
         if (!result || typeof result !== 'object') return { ok: false };
         const updated: FieldReport = { ...result, frameId: result.frameId ?? field.frameId };
         onUpdated(updated);
-        return updated.outcome === 'filled' ? { ok: true, field: updated } : { ok: false, outcome: updated.outcome };
+        // A taken-back row goes back to what the fill left, which is not a failure.
+        const done = updated.outcome === 'filled' || 'undo' in input;
+        return done ? { ok: true, field: updated } : { ok: false, outcome: updated.outcome };
       } catch (error) {
         return { ok: false, message: messageOf(error) };
       }

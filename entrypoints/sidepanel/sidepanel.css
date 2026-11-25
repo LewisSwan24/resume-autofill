@@ -447,6 +447,15 @@ select {
 .raf-input:hover {
   border-color: var(--raf-color-text);
 }
+/* A drafted answer runs to several sentences: a box that grows downward, read and edited in place. */
+.raf-textarea {
+  flex: none;
+  width: 100%;
+  padding: var(--raf-space-2) var(--raf-space-3);
+  line-height: 1.6;
+  resize: vertical;
+  font: inherit;
+}
 .raf-btn {
   position: relative;
   display: inline-flex;

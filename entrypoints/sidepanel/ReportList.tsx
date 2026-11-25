@@ -21,6 +21,7 @@ import { openProfileAt } from '../../src/ui/pages';
 import { OUTCOME_STATUS } from '../../src/ui/status';
 import { confidencePercent, displayValue, fieldKey, formatConfidence, hasCandidateChoices, hasConfidence } from './model';
 import { ConfidenceBadge, IconButton, StatusBadge, StatusIcon } from './parts';
+import { DraftBox } from './DraftBox';
 import { describeSource } from './sourceLabel';
 import type { ApplyInput, ApplyResult } from './useFieldActions';
 
@@ -65,7 +66,9 @@ function FieldItem({
     setDraft(field.value ?? field.observed ?? '');
   }, [field.value, field.observed]);
 
+  const isDraft = field.note === 'draft';
   const supportsAiDraft =
+    !isDraft &&
     Boolean(resume) &&
     Boolean(field.label.trim()) &&
     (field.outcome === 'unmatched' || field.outcome === 'needs_review' || field.outcome === 'no_data');
@@ -369,6 +372,17 @@ function FieldItem({
             </div>
           ) : null}
 
+          {isDraft ? (
+            <>
+              <DraftBox field={field} label={label} resume={resume} settings={settings} busy={busy} run={run} />
+              {error ? (
+                <span className="raf-help raf-help-error" role="alert">
+                  <Icon name="exclamation-triangle" size={14} />
+                  {error}
+                </span>
+              ) : null}
+            </>
+          ) : (
           <form
             className="raf-field"
             onSubmit={(event) => {
@@ -420,6 +434,7 @@ function FieldItem({
               </span>
             ) : null}
           </form>
+          )}
         </div>
       </details>
     </li>

@@ -32,10 +32,12 @@ jobs:
         run: ./gradlew testDevDebugUnitTest testProdReleaseUnitTest --no-daemon
       - name: Build R8 minified Release APK & AAB
         working-directory: mobile/android
+        # The version name is the app's own (mobile/package.json); the run number only counts builds.
         env:
           RAF_VERSION_CODE: ${{ github.run_number }}
-          RAF_VERSION_NAME: 0.1.${{ github.run_number }}
-        run: ./gradlew assembleProdRelease bundleProdRelease --no-daemon
+        run: |
+          export RAF_VERSION_NAME="$(node -p "require('../package.json').version")"
+          ./gradlew assembleProdRelease bundleProdRelease --no-daemon
       - name: Upload unsigned/CI Release artifacts
         uses: actions/upload-artifact@v4
         with:

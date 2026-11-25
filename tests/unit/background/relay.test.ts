@@ -62,6 +62,12 @@ describe('relayApply', () => {
     expect(send).toHaveBeenCalledWith(4, 0, { type: 'frame:apply', fieldId: 'c1', text: 'hello' });
   });
 
+  it('relays an undo', async () => {
+    const send = vi.fn().mockResolvedValue(row('c1', 0, 'needs_review'));
+    await relayApply({ tabId: 4, frameId: 0, fieldId: 'c1', undo: true }, { send });
+    expect(send).toHaveBeenCalledWith(4, 0, { type: 'frame:apply', fieldId: 'c1', undo: true });
+  });
+
   it('resolves null for section rows and malformed answers, and leaves the report alone', async () => {
     await saveReport(4, stored);
     const send = vi.fn().mockResolvedValue({ nonsense: true });

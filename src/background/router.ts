@@ -142,7 +142,7 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
 
       case 'field:apply': {
         if (!fromPage) return false;
-        const { tabId, frameId, fieldId, text, optionLabel } = message;
+        const { tabId, frameId, fieldId, text, optionLabel, undo } = message;
         if (!isIndex(tabId) || !isIndex(frameId) || typeof fieldId !== 'string') return false;
         if (!optionalString(text) || !optionalString(optionLabel)) return false;
         if (isSectionRow(fieldId)) {
@@ -152,6 +152,7 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
         const input: ApplyInput = { tabId, frameId, fieldId };
         if (text !== undefined) input.text = text;
         if (optionLabel !== undefined) input.optionLabel = optionLabel;
+        if (undo === true) input.undo = true;
         deps.apply(input).then(
           (field) => sendResponse(field ?? undefined),
           () => sendResponse(undefined),

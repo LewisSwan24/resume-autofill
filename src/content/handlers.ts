@@ -35,7 +35,13 @@ export interface ApplyRequest {
   fieldId: string;
   text?: string;
   optionLabel?: string;
+  /** Put back what the box held before the first text written to it from the side panel. */
+  undo?: boolean;
 }
+
+/** What a text box holds now: its value, or the text of an editable element. */
+const textIn = (el: HTMLElement): string =>
+  el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : (el.textContent ?? '');
 
 export interface FrameHandlers {
   /** What this frame could fill (scan only; touches neither the page nor any resume data). */
@@ -56,6 +62,8 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
   const exec = deps.executeStep ?? executeStep;
   let controls = new Map<string, Control>();
   let reports = new Map<string, FieldReport>();
+  /** Per box written from the side panel: the text it held and its row before the first such write, for undo. */
+  const before = new Map<string, { text: string; report: FieldReport | undefined }>();
   let busy = 0;
   let filling: Promise<FillReport> | null = null;
 
@@ -77,8 +85,29 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
     if (--busy === 0) deps.onIdle?.();
   };
 
+  /** Undo: the box gets its old text back and the row goes back to what it was; with nothing kept, nothing changes. */
+  async function takeBack(fieldId: string, current: FieldReport | undefined): Promise<FieldReport> {
+    const kept = before.get(fieldId);
+    const control = controls.get(fieldId);
+    const unchanged: FieldReport = current ?? { fieldId, label: '', fieldKey: null, section: null, outcome: 'no_control', confidence: 0 };
+    if (!kept || !control || !control.el.isConnected) return unchanged;
+    registerAllDrivers();
+    await exec(
+      { fieldId, fieldKey: current?.fieldKey ?? '', intent: { kind: 'text', text: kept.text }, confidence: 1, label: unchanged.label, section: unchanged.section },
+      control,
+      deps.doc,
+    );
+    before.delete(fieldId);
+    const restored = kept.report ?? { ...unchanged, outcome: 'unmatched' as const };
+    reports.set(fieldId, restored);
+    applyHighlights([{ el: control.el, outcome: restored.outcome }]);
+    discard();
+    return restored;
+  }
+
   async function doFill(payload: FillPayload, filter?: FillFilter): Promise<FillReport> {
     clearHighlights();
+    before.clear();
     const result = await run(deps.doc, payload, {
       idFor: deps.idFor,
       ...(filter ? { filter } : {}),
@@ -118,11 +147,12 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
       return true;
     },
 
-    async apply({ fieldId, text, optionLabel }) {
+    async apply({ fieldId, text, optionLabel, undo }) {
       if (filling) await filling.catch(() => undefined);
       enter();
       try {
         const previous = reports.get(fieldId);
+        if (undo) return await takeBack(fieldId, previous);
         const base: FieldReport = {
           fieldId,
           label: previous?.label ?? '',
@@ -150,6 +180,7 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
         };
         if (previous?.source !== undefined) step.source = previous.source;
 
+        if (text !== undefined && !before.has(fieldId)) before.set(fieldId, { text: textIn(control.el), report: previous });
         const executed = await exec(step, control, deps.doc);
         // executeStep reports what it was given; restore what the scan knew about the field.
         const updated: FieldReport = {
@@ -160,6 +191,8 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
           confidence: base.confidence || executed.confidence,
         };
         if (previous?.source !== undefined) updated.source = previous.source;
+        // A written draft stays marked as one, so the side panel can offer to take it back.
+        if (previous?.note === 'draft') updated.note = 'draft';
         reports.set(fieldId, updated);
         applyHighlights([{ el: control.el, outcome: updated.outcome }]);
         discard();

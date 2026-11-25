@@ -28,7 +28,7 @@ export type BgToFrame =
   | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }
   | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }
   | { type: 'frame:focus'; fieldId: string }
-  | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string }
+  | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string; undo?: boolean }
   | { type: 'frame:captureFingerprint'; fieldId: string }
   /** Top frame: which step is showing and whether it can be left on its own (auto-advance). */
   | { type: 'frame:stepState' }
@@ -57,7 +57,7 @@ export type UiToBg =
   | { type: 'inspector:start'; tabId: number }
   | { type: 'inspector:stop'; tabId: number }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
-  | { type: 'field:apply'; tabId: number; frameId: number; fieldId: string; text?: string; optionLabel?: string }
+  | { type: 'field:apply'; tabId: number; frameId: number; fieldId: string; text?: string; optionLabel?: string; undo?: boolean }
   | { type: 'field:captureFingerprint'; tabId: number; frameId: number; fieldId: string }
   /** Open the profile page; with a field key (and its source path), at that field's input. */
   | { type: 'ui:openOptions'; fieldKey?: string; source?: string }

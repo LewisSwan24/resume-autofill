@@ -179,6 +179,48 @@ describe('apply', () => {
     expect((await h.apply({ fieldId: row.fieldId })).outcome).toBe('action_failed');
   });
 
+  it('undo: puts back what the box held before the first apply, and the row as the fill left it', async () => {
+    const h = make();
+    const report = await h.fill({ resume: zh, files });
+    const row = report.fields.find((f) => f.label === '验证码')!;
+    const box = document.getElementById('vc') as HTMLInputElement;
+    box.value = 'mine';
+
+    await h.apply({ fieldId: row.fieldId, text: 'first' });
+    await h.apply({ fieldId: row.fieldId, text: 'second' });
+    const undone = await h.apply({ fieldId: row.fieldId, undo: true });
+
+    expect(box.value).toBe('mine');
+    expect(undone).toMatchObject({ fieldId: row.fieldId, outcome: row.outcome, label: '验证码' });
+    // Nothing more to take back: the row stays as it is.
+    expect((await h.apply({ fieldId: row.fieldId, undo: true })).outcome).toBe(row.outcome);
+    expect(box.value).toBe('mine');
+  });
+
+  it('a draft row stays a draft once written, and undo brings the draft back', async () => {
+    document.body.innerHTML = '<form><label for="cl">求职信</label><textarea id="cl"></textarea></form>';
+    const h = make();
+    const report = await h.fill({ resume: zh, files });
+    const row = report.fields.find((f) => f.fieldKey === 'answers.coverLetter')!;
+    expect(row).toMatchObject({ outcome: 'needs_review', note: 'draft' });
+    expect((document.getElementById('cl') as HTMLTextAreaElement).value).toBe('');
+
+    const written = await h.apply({ fieldId: row.fieldId, text: row.value! });
+    expect(written).toMatchObject({ outcome: 'filled', note: 'draft' });
+    const undone = await h.apply({ fieldId: row.fieldId, undo: true });
+    expect(undone).toMatchObject({ outcome: 'needs_review', note: 'draft', value: row.value });
+    expect((document.getElementById('cl') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('undo clears a box that was empty before', async () => {
+    const h = make();
+    const report = await h.fill({ resume: zh, files });
+    const row = report.fields.find((f) => f.label === '验证码')!;
+    await h.apply({ fieldId: row.fieldId, text: 'typed' });
+    await h.apply({ fieldId: row.fieldId, undo: true });
+    expect((document.getElementById('vc') as HTMLInputElement).value).toBe('');
+  });
+
   it('waits for a running fill before applying', async () => {
     const h = make();
     const filling = h.fill({ resume: zh, files });

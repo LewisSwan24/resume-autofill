@@ -29,6 +29,8 @@ export interface ApplyInput {
   fieldId: string;
   text?: string;
   optionLabel?: string;
+  /** Put back what the box held before the side panel first wrote to it. */
+  undo?: boolean;
 }
 
 /**
@@ -40,12 +42,13 @@ export async function relayApply(input: ApplyInput, deps: RelayDeps = {}): Promi
   const { tabId, frameId, fieldId } = input;
   if (isSectionRow(fieldId)) return null;
   const send = deps.send ?? sendToFrame;
-  const msg: { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string } = {
+  const msg: { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string; undo?: boolean } = {
     type: 'frame:apply',
     fieldId,
   };
   if (input.text !== undefined) msg.text = input.text;
   if (input.optionLabel !== undefined) msg.optionLabel = input.optionLabel;
+  if (input.undo) msg.undo = true;
 
   const answer: unknown = await withTimeout(send(tabId, frameId, msg), deps.timeoutMs ?? FRAME_TIMEOUT_MS);
   if (!isFieldReport(answer)) return null;

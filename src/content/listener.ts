@@ -76,9 +76,10 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
       }
       case 'frame:apply': {
         if (typeof message.fieldId !== 'string') return false;
-        const request: { fieldId: string; text?: string; optionLabel?: string } = { fieldId: message.fieldId };
+        const request: { fieldId: string; text?: string; optionLabel?: string; undo?: boolean } = { fieldId: message.fieldId };
         if (typeof message.text === 'string') request.text = message.text;
         if (typeof message.optionLabel === 'string') request.optionLabel = message.optionLabel;
+        if (message.undo === true) request.undo = true;
         handlers.apply(request).then(sendResponse, () => sendResponse(undefined));
         return true;
       }

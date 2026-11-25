@@ -126,6 +126,20 @@ function drawer(doc: Document, kind: string, body: string): HTMLElement {
   return d;
 }
 
+/** A drawer sliding in for `ms`, as `getAnimations` reports it; `done` once it is in. */
+function slideIn(d: HTMLElement, ms: number, done: () => void): void {
+  let running = true;
+  const finished = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      running = false;
+      done();
+      resolve();
+    }, ms),
+  );
+  const animation = { get playState() { return running ? 'running' : 'finished'; }, finished };
+  Object.defineProperty(d, 'getAnimations', { value: () => (running ? [animation] : []) });
+}
+
 /** Closed drawers stay in <body>, shut, as the page leaves them. */
 const shut = (d: HTMLElement) => {
   d.classList.remove('atsx-drawer-open');
@@ -141,8 +155,12 @@ export interface MobilePage {
   stop(): void;
 }
 
-/** Make the atsx widgets under `doc` behave. `now` is the month a fresh period wheel starts on. */
-export function behave(doc: Document, now: [number, number] = [2026, 11]): MobilePage {
+/**
+ * Make the atsx widgets under `doc` behave. `now` is the month a fresh period wheel starts on. `slideMs`: as on the
+ * live page, a span's drawer slides in for that long (an animation it reports), and what its wheels are turned to
+ * before then goes unheard.
+ */
+export function behave(doc: Document, now: [number, number] = [2026, 11], opts: { slideMs?: number } = {}): MobilePage {
   const page: MobilePage = { opened: [], stop: () => doc.removeEventListener('click', onClick, true) };
   const onClick = (e: Event) => {
     const t = e.target as Element;
@@ -208,10 +226,18 @@ export function behave(doc: Document, now: [number, number] = [2026, 11]): Mobil
     const year = wheel(doc, YEARS, YEARS.indexOf(String(now[0])), 'atsx-mperiod-popup-year-picker');
     const month = wheel(doc, MONTHS, now[1] - 1, 'atsx-mperiod-popup-month-picker');
     d.querySelector('.rmc-multi-picker')!.append(year.el, month.el);
-    const keep = () => (ends[side] = [Number(year.items[year.index]), Number(month.items[month.index])]);
+    // What the page heard each wheel settle on: a turn while the drawer is still sliding in is not heard.
+    let heard = !opts.slideMs;
+    if (opts.slideMs) slideIn(d, opts.slideMs, () => (heard = true));
+    const heardAt = { year: year.index, month: month.index };
+    year.el.addEventListener('touchend', () => heard && (heardAt.year = year.index));
+    month.el.addEventListener('touchend', () => heard && (heardAt.month = month.index));
+    const keep = () => (ends[side] = [Number(year.items[heardAt.year]), Number(month.items[heardAt.month])]);
     const show = () => {
       year.set(YEARS.indexOf(String(ends[side][0])));
       month.set(ends[side][1] - 1);
+      heardAt.year = year.index;
+      heardAt.month = month.index;
       d.querySelectorAll('.footer_time_button').forEach((b) => b.classList.toggle('footerTimeclicked', b.className.includes(side === 'start' ? '__startTime' : '__endTime')));
     };
     for (const s of ['start', 'end'] as const) {

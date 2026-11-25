@@ -102,6 +102,15 @@ describe('a span of months', () => {
     expect(openDrawers()).toBe(0);
   });
 
+  it('turns the wheels only once the drawer has slid in and listens, so the first 确定 is taken', async () => {
+    page.stop();
+    page = behave(document, [2026, 11], { slideMs: 900 });
+    const control = only(mperiod());
+    const result = await fill(control, span([2020, 9], [2024, 7]));
+    expect(result).toMatchObject({ ok: true, observed: '2020-09 – 2024-07' });
+    expect(page.opened).toEqual(['period']);
+  });
+
   it('a span already there is left alone', async () => {
     const control = only(mperiod('2020-09', '2024-07'));
     expect(await fill(control, span([2020, 9], [2024, 7]))).toMatchObject({ ok: true });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextFrame, waitFor } from '../../../src/drivers/wait';
+import { animationsDone, nextFrame, waitFor } from '../../../src/drivers/wait';
 
 describe('waitFor', () => {
   it('resolves immediately when the probe already hits', async () => {
@@ -41,5 +41,36 @@ describe('waitFor', () => {
 
   it('nextFrame resolves', async () => {
     await expect(nextFrame()).resolves.toBeUndefined();
+  });
+});
+
+describe('animationsDone', () => {
+
+  const fake = (animations: { playState: string; finished: Promise<unknown>; iterations?: number }[]) => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'getAnimations', {
+      value: () => animations.map((a) => ({ ...a, effect: { getComputedTiming: () => ({ iterations: a.iterations ?? 1 }) } })),
+    });
+    return el;
+  };
+
+  it('waits for a slide to finish, not for a spinner that never does', async () => {
+    let end!: () => void;
+    const slide = new Promise<void>((r) => (end = r));
+    const el = fake([{ playState: 'running', finished: slide }, { playState: 'running', finished: new Promise(() => {}), iterations: Infinity }]);
+    let done = false;
+    const waiting = animationsDone(el, 5000).then(() => (done = true));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(done).toBe(false);
+    end();
+    await waiting;
+    expect(done).toBe(true);
+  });
+
+  it('gives up at the cap, and returns at once where nothing animates', async () => {
+    const started = performance.now();
+    await animationsDone(fake([{ playState: 'running', finished: new Promise(() => {}) }]), 80);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(70);
+    await animationsDone(document.createElement('div'), 5000);
   });
 });

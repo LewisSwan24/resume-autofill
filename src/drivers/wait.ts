@@ -142,3 +142,24 @@ export function watchAnswers(doc: Document): AnswerWatch {
     stop: () => observer?.disconnect(),
   };
 }
+
+/**
+ * Once what `el` and its insides animate (a drawer sliding in) has run its course: at once where nothing does, and
+ * never longer than `timeout`. An animation that loops for ever (a spinner) is not waited for.
+ */
+export async function animationsDone(el: Element, timeout: number, signal?: AbortSignal): Promise<void> {
+  if (typeof el.getAnimations !== 'function') return;
+  const running = el
+    .getAnimations({ subtree: true })
+    .filter((a) => a.playState === 'running' && a.effect?.getComputedTiming?.().iterations !== Infinity);
+  if (running.length === 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.all(running.map((a) => a.finished.catch(() => undefined))),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeout);
+      signal?.addEventListener('abort', () => resolve(), { once: true });
+    }),
+  ]);
+  clearTimeout(timer);
+}

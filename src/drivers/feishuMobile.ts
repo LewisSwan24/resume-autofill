@@ -5,13 +5,15 @@
 import type { Control, OptionInfo } from '../engine/types';
 import { fireInput, focusElement, setNativeValue, simulateClick } from './events';
 import type { DatePart, Driver, DriverContext, FillIntent, FillResult } from './types';
-import { ANSWER_SETTLE_MS, waitFor, watchAnswers } from './wait';
+import { ANSWER_SETTLE_MS, animationsDone, waitFor, watchAnswers } from './wait';
 import { turnWheel, wheelTexts } from './wheel';
 
 const OPEN = '.atsx-drawer-open';
 const OPENS_MS = 1500;
 const SETTLES_MS = 1500;
 const SEARCH_MS = 3000;
+/** Longest a drawer is let slide in before its wheels are turned (it takes about a third of a second). */
+const SLIDE_MS = 800;
 const PLACEHOLDER = /^(?:请选择|请输入)$/;
 /** Above anything mere containment can reach. */
 const THE_VERY_THING = 0.9;
@@ -140,6 +142,9 @@ async function fillPeriod(control: Control, intent: FillIntent, ctx: DriverConte
   if (current === want) return { ok: true, observed: current };
   const drawer = await opened(control.el.querySelector('.atsx-mperiod-content') ?? control.el, PERIOD_DRAWER, ctx);
   if (!drawer) return failed('the dates did not open', current);
+  // A span's drawer does not hear its wheels while it slides in: turned then, the start stays this month, later than
+  // any end, and the first 确定 is refused (开始时间不能晚于结束时间), seen on the phone replays.
+  await animationsDone(drawer, SLIDE_MS, ctx.signal);
   for (const [side, when] of [['start', intent.start], ['end', intent.end]] as const) {
     if (!(await toSide(drawer, side, ctx)) || !(await setMonth(drawer, when, ctx))) {
       await dismiss(drawer, ctx);

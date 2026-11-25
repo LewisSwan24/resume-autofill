@@ -256,9 +256,9 @@ const NUMBER = String.raw`(\d+(?:\.\d+)?)\s*(k|千|万|w)?`;
 const RANGE = new RegExp(String.raw`${NUMBER}[^\d]{0,4}?\s*(?:-|–|—|~|～|至|到|\bto\b)\s*${NUMBER}`);
 const ONE_NUMBER = new RegExp(NUMBER, 'g');
 const SCALE: Record<string, number> = { k: 1e3, 千: 1e3, 万: 1e4, w: 1e4 };
-/** An option that means none at all, once its unit is gone: 无, 暂无, None. */
-const NOTHING = /^(?:无|没有|暂无|零|none|nil|zero)$/;
-const UNIT_WORDS = /份|个|家|年|月|天|日|周|人|次|years?|months?|days?|weeks?|offers?|\s/g;
+/** An option that means none at all, once its unit is gone: 无, 暂无, None, No experience. */
+const NOTHING = /^(?:无|没有|暂无|零|none|nil|zero|no)$/;
+const UNIT_WORDS = /份|个|家|年|月|天|日|周|人|次|相关|经验|years?|months?|days?|weeks?|offers?|experience|\s/g;
 const AT_MOST = /及以下|或以下|以内|or less|or fewer|at most|up to|≤|<=/;
 const BELOW = /以下|不足|少于|不到|未满|less than|fewer than|under|below|</;
 const AT_LEAST = /及以上|或以上|以上|or more|and above|and over|at least|\+|≥|>=/;
@@ -293,9 +293,9 @@ const holds = (s: Span, n: number): boolean =>
  * that both hold it, as "1-3年" and "3-5年" for 3, are ambiguous, never a guess.
  */
 export function matchNumber(n: number, options: OptionInfo[]): OptionMatch {
-  const hits = candidates(options).filter((c) => {
-    const span = spanOf(options[c.index]!.label);
-    return span !== null && holds(span, n);
-  });
-  return result(hits, CONF_EXACT) ?? NONE;
+  const spans = new Map(candidates(options).map((c) => [c, spanOf(options[c.index]!.label)] as const));
+  const hits = [...spans].filter(([, span]) => span !== null && holds(span, n)).map(([c]) => c);
+  // An option that says the number itself ("No experience" for 0) beats a range that only holds it ("Less than 2").
+  const exact = hits.filter((c) => spans.get(c)!.lo === n && spans.get(c)!.hi === n);
+  return result(exact.length ? exact : hits, CONF_EXACT) ?? NONE;
 }

@@ -405,7 +405,8 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   'questions.yearsExperience': s(
     '工作年限|工作年数|工作经验年限|相关工作年限|从业年限|累计工作年限',
     'Years of experience|How many years of professional experience do you have|Years of professional experience|Total years of experience|Years of work experience|Years of relevant experience|How many years of experience do you have',
-    '团队|带队|管理|leading|lead|managing|manage|management|supervis',
+    // Years in one trade or field: the resume counts years worked, not years in an industry.
+    '团队|带队|管理|行业|领域|leading|lead|managing|manage|management|supervis|experience in|years in|do you have in|industry',
   ),
   'questions.yearsLeading': s(
     '带团队年限|带团队年数|管理团队年限|团队管理年限|管理经验年限|带团队经验|管理岗位年限',

@@ -96,3 +96,13 @@ describe('a referral code or staff number', () => {
     expect(classify(label).fieldKey).not.toBe('questions.referrerName');
   });
 });
+
+describe('years in one industry', () => {
+  // The resume counts years worked, not years in one trade: a question about one industry stays with the applicant.
+  it.each(['Years in telecommunications', 'How many years of experience do you have in banking?', '在通信行业的工作年限', '行业经验年限'])(
+    '"%s" is not the years worked',
+    (label) => {
+      expect(classify(label).fieldKey).not.toBe('questions.yearsExperience');
+    },
+  );
+});

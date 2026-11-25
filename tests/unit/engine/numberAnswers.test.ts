@@ -23,6 +23,12 @@ describe('matchNumber', () => {
     expect(pick(0, 'None', '1-2', '3+')).toBe('None');
   });
 
+  it('takes "No experience" for none, over a range that also holds none', () => {
+    expect(pick(0, '5+ years experience', 'No experience', "Less than 2 year's experience", "2-4 year's experience")).toBe('No experience');
+    expect(pick(0, '无经验', '1年以下', '1-3年')).toBe('无经验');
+    expect(pick(1, '5+ years experience', 'No experience', "Less than 2 year's experience")).toBe("Less than 2 year's experience");
+  });
+
   it('takes the range that holds it, written in either language', () => {
     expect(pick(2, '0', '1-2份', '3份以上')).toBe('1-2份');
     expect(pick(4, 'Less than 1 year', '1–3 years', '3 to 5 years', 'More than 5 years')).toBe('3 to 5 years');

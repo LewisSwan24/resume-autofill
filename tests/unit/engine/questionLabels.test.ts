@@ -89,3 +89,9 @@ describe('fields the resume already had, asked in longer words', () => {
     }
   });
 });
+
+describe('a referral code or staff number', () => {
+  it.each(['推荐人工号', '推荐码', 'Referral code', 'Referrer employee ID'])('"%s" is not the referrer’s name', (label) => {
+    expect(classify(label).fieldKey).not.toBe('questions.referrerName');
+  });
+});

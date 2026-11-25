@@ -357,7 +357,7 @@ export function App() {
       </div>
 
       <div style={row}>
-        {/* Nothing in a resume answers this. */}
+        {/* An application question: the resume's answer to it is kept with the others. */}
         <label htmlFor="q-worked-here" style={labelStyle}>Have you worked for us before?</label>
         <YesNoButtons name="q-worked-here" onPick={set('workedHere')} />
       </div>

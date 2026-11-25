@@ -49,7 +49,7 @@ export const FIXTURE_SPECS: FixtureSpec[] = [
   {
     name: 'aria',
     review: { currentLocation: /current location/i, visaType: /visa type/i },
-    traps: [/privacy policy/i, /autofill from resume/i, /worked for us/i],
+    traps: [/privacy policy/i, /autofill from resume/i],
   },
 ];
 

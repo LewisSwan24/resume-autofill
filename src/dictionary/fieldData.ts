@@ -372,8 +372,10 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Have you previously worked for this company|Have you previously worked for us|Have you worked here before|Have you been employed here before|Previously employed by us|Former employee|Are you a former employee|Have you ever worked for',
   ),
   'questions.referrerName': s(
-    '内推人姓名|内推人|内推员工姓名|内推员工|推荐员工姓名|内推人工号|内部推荐人',
+    '内推人姓名|内推人|内推员工姓名|内推员工|推荐员工姓名|内部推荐人',
     'Who referred you|Who referred you to this role|Referrer|Referrer name|Referred by|Name of the person who referred you|Employee referral name|Name of referring employee|If you were referred to this role',
+    // A staff number or a code is not the name.
+    '工号|编号|号码|推荐码|内推码|id|number|code',
   ),
   'questions.campusAmbassador': s(
     '是否愿意成为校园大使|是否愿意担任校园大使|校园大使|是否愿意成为校园推广大使|是否愿意担任校园推广人',

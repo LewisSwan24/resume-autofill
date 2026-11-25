@@ -14,7 +14,7 @@ import { isSensitiveFieldKey, type SensitiveFieldMode } from '../schema/sensitiv
 import type { MappingPresetId } from '../templates/presets';
 import { FILL_THRESHOLD, REVIEW_THRESHOLD } from './classify';
 import type { Classification, FieldContext, FieldKey, FieldReport, SectionKey } from './types';
-import { entryCount, everyEnglishTest, resolveValue, toIntent } from './values';
+import { classYearOf, entryCount, everyEnglishTest, resolveValue, toIntent } from './values';
 
 export type { FillStep };
 
@@ -190,6 +190,7 @@ export function planFill(
             askedAs: report.label,
             ...(ctx.sectionNote ? { sectionNote: ctx.sectionNote } : {}),
             ...(opts.now ? { now: opts.now } : {}),
+            ...classYearFor(report.label, opts.pageTitle),
             ...(opts.sensitiveFields ? { sensitiveFields: opts.sensitiveFields } : {}),
           });
     if (!resolved) {
@@ -246,6 +247,12 @@ export function planFill(
   });
 
   return { steps, reports, cardDemand: cardDemand(contexts, classifications, resume, hasInternshipSection) };
+}
+
+/** The class the question or the page names (2026届), for 应届/往届. */
+function classYearFor(label: string, pageTitle = ''): { classYear?: number } {
+  const year = classYearOf(label) ?? classYearOf(pageTitle);
+  return year ? { classYear: year } : {};
 }
 
 /** The answer depends on the country in the question, so it is worked out here where the question is known. */

@@ -143,6 +143,8 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'projects.duties': ['projects.role', 'projects.description'],
   // With no works, a works card takes the portfolio link (the portfolio file goes as attachments.portfolio).
   'works.link': ['contact.portfolio'],
+  // Worked out from the latest schooling when the applicant left it empty (derived() in values.ts).
+  'questions.graduateStatus': ['education.startDate', 'education.endDate', 'education.current'],
   'languages.listeningSpeaking': ['languages.proficiency'],
   'languages.readingWriting': ['languages.proficiency'],
   'education.endDate': ['education.current'],

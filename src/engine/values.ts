@@ -31,7 +31,18 @@ export interface ResolveOptions {
   sectionNote?: string;
   /** The applicant's choice for sensitive fields: only 'fill' gives their values. */
   sensitiveFields?: SensitiveFieldMode;
+  /** The graduating class the page recruits (2026届), for 应届/往届. Absent: the class recruited now. */
+  classYear?: number;
 }
+
+/** The class a page names: 2026届校园招聘 → 2026. */
+export function classYearOf(text: string): number | null {
+  const m = /(20\d{2})\s*届/.exec(text);
+  return m ? Number(m[1]) : null;
+}
+
+/** The class recruited at `now`: from August on, next year's graduates. */
+const classRecruitedAt = (now: Date): number => (now.getMonth() >= 7 ? now.getFullYear() + 1 : now.getFullYear());
 
 /** Enum domains for text-typed keys that nevertheless have a dictionary (used when the control offers options). */
 const DOMAIN_OVERRIDES: Record<FieldKey, string> = {
@@ -298,6 +309,20 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
       if (!latest.current && end === '') return null;
       if (latest.educationType === 'part_time') return { raw: false, source: 'education.educationType' };
       return latest.educationType === 'full_time' ? { raw: true, source: 'education.educationType' } : null;
+    }
+    case 'questions.graduateStatus': {
+      // The applicant's own answer comes first; only an empty one is worked out from the latest schooling.
+      if (resume.questions.graduateStatus) return null;
+      const latest = [...resume.education].sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''))[0];
+      if (!latest) return null;
+      const now = opts.now ?? new Date();
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const end = (latest.endDate ?? '').slice(0, 7);
+      if (latest.current || (end !== '' && end >= thisMonth)) return { raw: 'fresh_graduate', source: 'education.endDate' };
+      if (end === '') return null;
+      const graduated = Number(end.slice(0, 4));
+      const recruited = opts.classYear ?? classRecruitedAt(now);
+      return { raw: graduated >= recruited ? 'fresh_graduate' : 'past_graduate', source: 'education.endDate' };
     }
     case 'basics.isAdult': {
       // A month-only birth date in the eighteenth birthday's month could go either way: say nothing.

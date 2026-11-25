@@ -58,9 +58,11 @@ export default function App() {
   const [wizard, setWizard] = useState<WizardSessionState | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
 
-  // UI language follows the stored setting.
-  const uiLanguage = profile?.settings.uiLanguage ?? 'auto';
+  // UI language follows the stored setting. Until the profile is read the panel keeps the language it has,
+  // so a Chinese setting does not flash the browser's English first.
+  const uiLanguage = profile?.settings.uiLanguage;
   useEffect(() => {
+    if (!uiLanguage) return;
     const language = resolveLanguage(uiLanguage, navigator.language);
     setLanguage(language);
     document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';

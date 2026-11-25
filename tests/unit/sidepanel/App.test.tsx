@@ -4,7 +4,7 @@ import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import App from '../../../entrypoints/sidepanel/App';
 import type { FieldReport, FillReport, Outcome } from '../../../src/engine/types';
-import { setLanguage } from '../../../src/i18n';
+import { getLanguage, setLanguage } from '../../../src/i18n';
 import type { UiToBg } from '../../../src/messaging';
 import { ProfileSchema, ResumeSchema, type Profile } from '../../../src/schema';
 import { loadProfile, saveProfile, setUiLanguage } from '../../../src/storage';
@@ -309,6 +309,16 @@ describe('Side panel – report list', () => {
     expect(loading.querySelectorAll('.raf-skeleton').length).toBeGreaterThan(0);
     await screen.findByText('Email');
     expect(screen.queryByRole('status', { name: 'Just a moment' })).toBeNull();
+  });
+
+  it('keeps the language it has while the profile is still being read, instead of flashing the browser’s', async () => {
+    setLanguage('zh');
+    await saveProfile(makeProfile('zh'));
+    // Effects have run once render returns; the profile is still on its way.
+    render(<App />);
+    expect(getLanguage()).toBe('zh');
+    await screen.findByText('填写报告', undefined, WAIT);
+    expect(getLanguage()).toBe('zh');
   });
 
   it('renders the Chinese empty state, summary and labels when the UI language is zh', async () => {

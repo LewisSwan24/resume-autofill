@@ -8,7 +8,7 @@ import type { Control } from '../engine/types';
 import { shutDropdown } from './dropdown';
 import { fireInput, focusElement, setNativeValue, simulateClick } from './events';
 import type { DatePart, Driver, DriverContext, FillIntent, FillResult, OptionMatcher } from './types';
-import { waitFor } from './wait';
+import { ANSWER_SETTLE_MS, waitFor, watchAnswers } from './wait';
 
 const HIDDEN = 'atsx-select-dropdown-hidden';
 const ITEM = '.atsx-select-dropdown-menu-item';
@@ -162,11 +162,14 @@ async function fillSchool(control: Control, intent: Extract<FillIntent, { kind: 
   if (current && fits(intent, current)) return { ok: true, observed: current };
   const field = fieldOf(control);
   if (!field) return failed('the school box has no input', current);
+  const answer = watchAnswers(ctx.doc);
   type(field, intent.query);
   const options = () => Array.from(dropdownOf(control)?.querySelectorAll<HTMLElement>(ITEM) ?? []).map((el) => ({ el, info: { label: clean(el.textContent) } }));
   const matchNow = () => intent.match(options().map((o) => o.info));
   // The site searches as it is typed into; its answer may be a moment coming.
-  await waitFor(() => matchNow().status === 'matched' || null, { timeout: SEARCH_MS, signal: ctx.signal, root: ctx.doc });
+  // Once it has come and been drawn, the list is all there will be.
+  await waitFor(() => matchNow().status === 'matched' || answer.answered(ANSWER_SETTLE_MS) || null, { timeout: SEARCH_MS, signal: ctx.signal, root: ctx.doc });
+  answer.stop();
   const m = matchNow();
   if (m.status === 'ambiguous') {
     shut(control, ctx);

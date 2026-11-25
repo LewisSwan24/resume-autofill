@@ -1,6 +1,6 @@
 // Feishu's mobile form: lists and month spans are wheels in a drawer, schools a search in a drawer. Built from the
 // markup captured on a phone (Android 13, WebView 156) on 9 Nov 2026; the page's behaviour is a stand-in.
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { discover } from '../../../src/engine/discover';
 import { getDriver } from '../../../src/drivers/registry';
 import { registerAllDrivers } from '../../../src/drivers';
@@ -200,6 +200,29 @@ describe('a school', () => {
     const result = await fill(control, choice('某某学院'));
     expect(result).toMatchObject({ ok: true, observed: '某某学院' });
     expect(openDrawers()).toBe(0);
+  });
+
+  it('a school the site answered with nothing is kept as typed without waiting out the search', async () => {
+    // The page's search request comes back as soon as the school is typed, with nothing for it.
+    let deliver: (() => void) | null = null;
+    vi.stubGlobal('PerformanceObserver', class {
+      constructor(cb: (list: { getEntries: () => unknown[] }) => void) {
+        deliver = () => cb({ getEntries: () => [{ name: `${location.origin}/api/v1/suggestion/`, initiatorType: 'xmlhttprequest', responseEnd: performance.now() }] });
+      }
+      observe() {}
+      disconnect() {}
+    });
+    const onInput = () => deliver?.();
+    document.addEventListener('input', onInput);
+    try {
+      const control = only(mschool('', ['清华大学']));
+      const started = performance.now();
+      expect(await fill(control, choice('某某学院'))).toMatchObject({ ok: true, observed: '某某学院' });
+      expect(performance.now() - started).toBeLessThan(1500);
+    } finally {
+      document.removeEventListener('input', onInput);
+      vi.unstubAllGlobals();
+    }
   });
 
   /** Holds back the search's answer behind a spinner, as a slow network does; `after` ms later it comes, or never. */

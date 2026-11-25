@@ -5,7 +5,7 @@ import type { Control } from '../engine/types';
 import { closeDropdown, findDropdownNear, shutDropdown, visibleOptions } from './dropdown';
 import { fireBlur, fireChange, fireInput, focusElement, pressKey, setNativeValue, simulateClick, typeText } from './events';
 import type { DatePart, Driver, DriverContext, FillIntent, FillResult } from './types';
-import { waitFor } from './wait';
+import { ANSWER_SETTLE_MS, waitFor, watchAnswers } from './wait';
 
 const PANEL = '.ud__select__dropdown';
 const OPTION = '.ud__select__list__item';
@@ -73,14 +73,20 @@ async function pickLevel(control: Control, intent: Level, current: string | null
   const near = () => findDropdownNear(control.el, PANEL, { doc: ctx.doc });
   let panel = await waitFor(near, { timeout: OPENS_BY_ITSELF_MS, signal: ctx.signal, root: ctx.doc });
   if (searches && (!panel || visibleOptions(panel, OPTION).length === 0 || current !== null)) {
+    const answer = watchAnswers(ctx.doc);
     typeText(input!, intent.query);
-    panel = await waitFor(
+    // The site's answer, once it has come and been drawn, is all the list will hold.
+    const answered = await waitFor(
       () => {
         const open = near();
-        return open && visibleOptions(open, OPTION).some((o) => intent.match([o.info]).status === 'matched') ? open : null;
+        if (open && visibleOptions(open, OPTION).some((o) => intent.match([o.info]).status === 'matched')) return open;
+        return answer.answered(ANSWER_SETTLE_MS) ? 'answered' : null;
       },
       { timeout: searchMs, signal: ctx.signal, root: ctx.doc },
     );
+    answer.stop();
+    // Answered with nothing that fits is what running out of time meant before: nothing on the list.
+    panel = answered === 'answered' ? null : answered;
   }
   const restore = () => {
     if (searches && input && input.value !== wasInBox) {

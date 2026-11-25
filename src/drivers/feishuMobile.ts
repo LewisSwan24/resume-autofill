@@ -5,7 +5,7 @@
 import type { Control, OptionInfo } from '../engine/types';
 import { fireInput, focusElement, setNativeValue, simulateClick } from './events';
 import type { DatePart, Driver, DriverContext, FillIntent, FillResult } from './types';
-import { waitFor } from './wait';
+import { ANSWER_SETTLE_MS, waitFor, watchAnswers } from './wait';
 import { turnWheel, wheelTexts } from './wheel';
 
 const OPEN = '.atsx-drawer-open';
@@ -217,13 +217,16 @@ async function fillSearch(control: Control, intent: FillIntent, ctx: DriverConte
   if (!drawer) return failed('the search did not open', current);
   const box = drawer.querySelector<HTMLInputElement>(SEARCH_DRAWER)!;
   focusElement(box);
+  const answer = watchAnswers(ctx.doc);
   setNativeValue(box, intent.query);
   fireInput(box, intent.query);
   const options = () =>
     Array.from(drawer.querySelectorAll<HTMLElement>(SEARCH_OPTION)).map((el) => ({ el, info: { label: clean(el.textContent) } }));
   const matchNow = () => intent.match(options().map((o) => o.info));
-  // The site searches as it is typed into; its answer may be a moment coming.
-  await waitFor(() => matchNow().status === 'matched', { timeout: SEARCH_MS, signal: ctx.signal, root: drawer });
+  // The site searches as it is typed into; its answer may be a moment coming. Once it has come and been drawn, the
+  // list is all there will be.
+  await waitFor(() => matchNow().status === 'matched' || answer.answered(ANSWER_SETTLE_MS), { timeout: SEARCH_MS, signal: ctx.signal, root: drawer });
+  answer.stop();
   const m = matchNow();
   if (m.status === 'ambiguous') {
     await dismiss(drawer, ctx);

@@ -93,3 +93,52 @@ export function nextFrame(win: Window = window): Promise<void> {
     setTimeout(finish, 50);
   });
 }
+
+/** After a search's answer has come back, time for the page to draw its options. */
+export const ANSWER_SETTLE_MS = 400;
+
+/** Requests that only count what a page does: they say nothing about a search. */
+const TELEMETRY = /collect|track|log|report|monitor|beacon|metric|analytic|stat/i;
+const DATA_REQUESTS: ReadonlySet<string> = new Set(['xmlhttprequest', 'fetch']);
+
+export interface AnswerWatch {
+  /** The page's own request has come back, at least `settleMs` ago (time for the page to draw what it got). */
+  answered(settleMs: number): boolean;
+  stop(): void;
+}
+
+/**
+ * Watch for the page's answer to what was just typed into a search box: a data request of the page's own origin that
+ * finishes from now on. Watched with an observer, which a full resource buffer does not stop. Where requests cannot
+ * be watched, it never says answered, and the caller waits as long as it would have.
+ */
+export function watchAnswers(doc: Document): AnswerWatch {
+  const win = doc.defaultView as (Window & typeof globalThis) | null;
+  const Observer = win?.PerformanceObserver;
+  if (!win || typeof Observer !== 'function') return { answered: () => false, stop: () => undefined };
+  const origin = win.location.origin;
+  let answeredAt: number | null = null;
+  const own = (name: string): boolean => {
+    try {
+      const url = new URL(name);
+      return url.origin === origin && !TELEMETRY.test(url.pathname);
+    } catch {
+      return false;
+    }
+  };
+  let observer: PerformanceObserver | null = null;
+  try {
+    observer = new Observer((list) => {
+      for (const e of list.getEntries() as PerformanceResourceTiming[]) {
+        if (answeredAt === null && DATA_REQUESTS.has(e.initiatorType) && own(e.name)) answeredAt = e.responseEnd;
+      }
+    });
+    observer.observe({ type: 'resource' });
+  } catch {
+    observer = null;
+  }
+  return {
+    answered: (settleMs) => answeredAt !== null && win.performance.now() - answeredAt >= settleMs,
+    stop: () => observer?.disconnect(),
+  };
+}

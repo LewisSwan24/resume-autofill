@@ -39,6 +39,7 @@ const asked: [string, string, string?][] = [
   ['亲友姓名及关系', 'questions.relativesDetail'],
   ['是否曾在本公司工作', 'questions.workedHereBefore', YES_NO],
   ['Have you previously worked for this company?', 'questions.workedHereBefore', YES_NO],
+  ['Have you worked for us before?', 'questions.workedHereBefore', YES_NO],
   ['内推人姓名', 'questions.referrerName'],
   ['Who referred you to this role?', 'questions.referrerName'],
   ['是否愿意成为校园大使', 'questions.campusAmbassador', YES_NO],

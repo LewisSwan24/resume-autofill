@@ -369,7 +369,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'questions.workedHereBefore': s(
     '是否曾在本公司工作|是否在我司工作过|是否曾在本公司任职|是否曾就职于本公司|曾在本公司工作|是否为前员工|是否曾在我司实习|是否曾在本集团工作',
-    'Have you previously worked for this company|Have you previously worked for us|Have you worked here before|Have you been employed here before|Previously employed by us|Former employee|Are you a former employee|Have you ever worked for',
+    'Have you previously worked for this company|Have you previously worked for us|Have you worked for us before|Have you worked for us|Have you worked here before|Have you been employed here before|Previously employed by us|Former employee|Are you a former employee|Have you ever worked for',
   ),
   'questions.referrerName': s(
     '内推人姓名|内推人|内推员工姓名|内推员工|推荐员工姓名|内部推荐人',

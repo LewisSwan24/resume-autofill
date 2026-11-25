@@ -180,6 +180,15 @@ export const ProjectSchema = z.object({
   link: text(),
 });
 
+/** A piece of the applicant's own work (作品): its file is one from the file store, else the portfolio file is used. */
+export const WorkSampleSchema = z.object({
+  id: entryId(),
+  title: text(),
+  link: text(),
+  description: text(),
+  fileId: z.string().optional(),
+});
+
 export const CampusEntrySchema = z.object({
   id: entryId(),
   organization: text(),
@@ -303,6 +312,7 @@ export const VARIANT_SECTIONS = [
   'education',
   'work',
   'projects',
+  'works',
   'campus',
   'awards',
   'languages',
@@ -377,6 +387,7 @@ export const ResumeSchema = z.object({
   education: z.array(EducationSchema).default([]),
   work: z.array(WorkEntrySchema).default([]),
   projects: z.array(ProjectSchema).default([]),
+  works: z.array(WorkSampleSchema).default([]),
   campus: z.array(CampusEntrySchema).default([]),
   awards: z.array(AwardSchema).default([]),
   languages: z.array(LanguageEntrySchema).default([]),
@@ -443,6 +454,7 @@ export type SiteRecipe = z.infer<typeof SiteRecipeSchema>;
 
 export type Region = z.infer<typeof RegionSchema>;
 export type Basics = z.infer<typeof BasicsSchema>;
+export type WorkSample = z.infer<typeof WorkSampleSchema>;
 export type Address = z.infer<typeof AddressSchema>;
 export type Contact = z.infer<typeof ContactSchema>;
 export type WorkRights = z.infer<typeof WorkRightsSchema>;

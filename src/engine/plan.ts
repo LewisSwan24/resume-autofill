@@ -292,7 +292,7 @@ function cardDemand(
 }
 
 const ARRAY_SECTIONS: ReadonlySet<SectionKey> = new Set<SectionKey>([
-  'education', 'work', 'internship', 'projects', 'campus', 'awards', 'languages', 'certificates', 'skills',
+  'education', 'work', 'internship', 'projects', 'works', 'campus', 'awards', 'languages', 'certificates', 'skills',
   'family', 'referees',
 ]);
 const isArraySection = (s: SectionKey) => ARRAY_SECTIONS.has(s);

@@ -54,7 +54,9 @@ describe('language levels asked apart', () => {
   });
 
   it('falls back to the overall level when the applicant gave none', () => {
-    const { step } = plan(zh());
+    const resume = zh();
+    resume.languages[0] = LanguageEntrySchema.parse({ ...resume.languages[0], listeningSpeaking: null, readingWriting: null });
+    const { step } = plan(resume);
     expect(step('ls')?.source).toBe('languages[0].proficiency');
     expect(step('rw')?.source).toBe('languages[0].proficiency');
   });

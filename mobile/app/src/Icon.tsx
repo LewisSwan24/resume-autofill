@@ -206,6 +206,7 @@ export const MODULE_ICONS: Record<ModuleName, IconName> = {
   education: 'mortarboard',
   work: 'briefcase',
   projects: 'kanban',
+  works: 'image',
   campus: 'people',
   awards: 'trophy',
   languages: 'translate',

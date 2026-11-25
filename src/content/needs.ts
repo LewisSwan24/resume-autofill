@@ -40,6 +40,10 @@ export function computeFrameNeeds(doc: Document, idFor?: (el: HTMLElement) => st
       if (cls.confidence >= FILL_THRESHOLD - EPS && contexts[i]?.control.kind === 'file') attachmentKeys.add(cls.fieldKey);
     } else {
       fieldKeys.add(cls.fieldKey);
+      // A work with no file of its own takes the portfolio file.
+      if (cls.fieldKey === 'works.fileId' && cls.confidence >= FILL_THRESHOLD - EPS && contexts[i]?.control.kind === 'file') {
+        attachmentKeys.add('attachments.portfolio');
+      }
     }
   });
 

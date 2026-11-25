@@ -451,3 +451,17 @@ describe('buildResumeSubset: never leaks a value the needs do not imply (propert
     expect(ENUM_VALUES.gender).toContain(fat.basics.gender);
   });
 });
+
+describe('works', () => {
+  const withWorks = ResumeSchema.parse({
+    ...zh,
+    works: [{ title: '校园导览小程序', link: 'https://example.com/guide', description: '描述', fileId: 'work-file' }],
+    attachments: { ...zh.attachments, portfolioFileId: 'portfolio-1' },
+  });
+
+  it('sends a work card its title, link, description and own file id', () => {
+    const out = buildResumeSubset(withWorks, needs({ fieldKeys: ['works.title', 'works.fileId'], repeatSections: ['works'] }));
+    expect(out.works).toHaveLength(1);
+    expect(out.works[0]).toMatchObject({ title: '校园导览小程序', fileId: 'work-file' });
+  });
+});

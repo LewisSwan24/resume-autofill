@@ -94,6 +94,12 @@ export function attachmentIds(resume: Resume, keys: readonly AttachmentKey[] = A
   return keys.map((k) => resume.attachments[ATTACHMENT_PROP[k]]).filter((id): id is string => !!id);
 }
 
+/** A work's own files, sent when the frame has a works upload (the portfolio file goes as attachments.portfolio). */
+export function worksFileIds(resume: Resume, needs: Pick<FrameNeeds, 'fieldKeys'>): string[] {
+  if (!needs.fieldKeys.includes('works.fileId')) return [];
+  return resume.works.map((w) => w.fileId).filter((id): id is string => !!id);
+}
+
 /**
  * Load the resume's attachments as driver-ready data, only for the given attachment keys (default: all).
  * Missing / unreadable files are left out.
@@ -101,9 +107,10 @@ export function attachmentIds(resume: Resume, keys: readonly AttachmentKey[] = A
 export async function loadAttachmentFiles(
   resume: Resume,
   keys: readonly AttachmentKey[] = ALL_ATTACHMENT_KEYS,
+  extraIds: readonly string[] = [],
 ): Promise<Record<string, FileData>> {
   const files: Record<string, FileData> = {};
-  for (const id of new Set(attachmentIds(resume, keys))) {
+  for (const id of new Set([...attachmentIds(resume, keys), ...extraIds])) {
     try {
       const record = await getFile(id);
       if (record) files[id] = await fileToFileData(record);
@@ -118,9 +125,10 @@ export async function loadAttachmentFiles(
 export async function loadAttachmentMeta(
   resume: Resume,
   keys: readonly AttachmentKey[] = ALL_ATTACHMENT_KEYS,
+  extraIds: readonly string[] = [],
 ): Promise<Record<string, FileData>> {
   const files: Record<string, FileData> = {};
-  for (const id of new Set(attachmentIds(resume, keys))) {
+  for (const id of new Set([...attachmentIds(resume, keys), ...extraIds])) {
     try {
       const record = await getFile(id);
       if (record) files[id] = { name: record.name, type: record.type, dataUrl: '' };
@@ -200,7 +208,7 @@ async function runPreviewInternal(
       const payload: FramePayload = {
         runId,
         resume: buildResumeSubset(resume, needs, sensitiveFields ? { sensitiveFields } : {}),
-        files: await loadAttachmentMeta(resume, needs.attachmentKeys),
+        files: await loadAttachmentMeta(resume, needs.attachmentKeys, worksFileIds(resume, needs)),
         ...(presetId ? { presetId } : {}),
         ...(sensitiveFields ? { sensitiveFields } : {}),
         ...(answerTemplates ? { answerTemplates } : {}),
@@ -285,7 +293,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
         const payload: FramePayload = {
           runId,
           resume: buildResumeSubset(resume, needs, sensitiveFields ? { sensitiveFields } : {}),
-          files: await loadAttachmentFiles(resume, needs.attachmentKeys),
+          files: await loadAttachmentFiles(resume, needs.attachmentKeys, worksFileIds(resume, needs)),
           ...(filter ? { filter } : {}),
           ...(presetId ? { presetId } : {}),
           ...(sensitiveFields ? { sensitiveFields } : {}),

@@ -14,6 +14,7 @@ import {
   RefereeSchema,
   SkillSchema,
   WorkEntrySchema,
+  WorkSampleSchema,
   APPLICATION_QUESTIONS,
   type QuestionType,
   type Resume,
@@ -33,13 +34,13 @@ export interface FieldMeta {
 }
 
 export type ModuleName =
-  | 'basics' | 'contact' | 'workRights' | 'jobIntention' | 'questions' | 'education' | 'work' | 'projects' | 'campus'
+  | 'basics' | 'contact' | 'workRights' | 'jobIntention' | 'questions' | 'education' | 'work' | 'projects' | 'works' | 'campus'
   | 'awards' | 'languages' | 'certificates' | 'skills' | 'family' | 'emergencyContact' | 'referees'
   | 'diversity' | 'about' | 'customAnswers' | 'attachments';
 
 /** Modules stored as arrays of entries on the resume. */
 export type ArrayModuleName =
-  | 'education' | 'work' | 'projects' | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills'
+  | 'education' | 'work' | 'projects' | 'works' | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills'
   | 'family' | 'referees' | 'customAnswers';
 
 /** A list inside each entry of a module: the tests of a language entry. Only the extension's editor shows it so far. */
@@ -157,6 +158,8 @@ export const MODULES: readonly ModuleMeta[] = [
     month('startDate'), endMonth(),
     area('description'), text('link'),
   ]),
+  // A work's file is the portfolio file from the attachments unless an imported entry names its own.
+  mod('works', 'array', [text('title', 'workTitle'), text('link'), area('description')]),
   mod('campus', 'array', [
     text('organization'), text('role'),
     month('startDate'), endMonth(),
@@ -224,6 +227,7 @@ const ENTRY_SCHEMAS: Record<ArrayModuleName, z.ZodType> = {
   education: EducationSchema,
   work: WorkEntrySchema,
   projects: ProjectSchema,
+  works: WorkSampleSchema,
   campus: CampusEntrySchema,
   awards: AwardSchema,
   languages: LanguageEntrySchema,

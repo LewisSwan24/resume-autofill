@@ -28,13 +28,13 @@ export const isAttachmentKey = (key: string): key is AttachmentKey =>
 
 /** Sections that repeat as cards (one per resume entry). */
 export const REPEAT_SECTIONS: readonly SectionKey[] = [
-  'education', 'work', 'internship', 'projects', 'campus', 'awards', 'languages', 'certificates', 'skills',
+  'education', 'work', 'internship', 'projects', 'works', 'campus', 'awards', 'languages', 'certificates', 'skills',
   'family', 'referees',
 ];
 
 /** Array modules of the resume (`internship` cards are fed by the `work` module). */
 export const ARRAY_MODULE_NAMES = [
-  'education', 'work', 'projects', 'campus', 'awards', 'languages', 'certificates', 'skills', 'family', 'referees',
+  'education', 'work', 'projects', 'works', 'campus', 'awards', 'languages', 'certificates', 'skills', 'family', 'referees',
 ] as const;
 export type ArrayModuleName = (typeof ARRAY_MODULE_NAMES)[number];
 
@@ -141,6 +141,8 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
     ['answers.coverLetter', 'answers.whyUs', 'answers.strengths', 'answers.careerPlan'].map((key) => [key, DRAFT_KEYS]),
   ),
   'projects.duties': ['projects.role', 'projects.description'],
+  // With no works, a works card takes the portfolio link (the portfolio file goes as attachments.portfolio).
+  'works.link': ['contact.portfolio'],
   'languages.listeningSpeaking': ['languages.proficiency'],
   'languages.readingWriting': ['languages.proficiency'],
   'education.endDate': ['education.current'],

@@ -3,7 +3,7 @@ import { SECTION_SYNONYMS, matchSection } from '../../../src/dictionary/sections
 import type { SectionKey } from '../../../src/schema/fieldKeys';
 
 const ALL_SECTIONS: SectionKey[] = [
-  'basics', 'contact', 'jobIntention', 'education', 'work', 'internship', 'projects',
+  'basics', 'contact', 'jobIntention', 'education', 'work', 'internship', 'projects', 'works',
   'campus', 'awards', 'languages', 'certificates', 'skills', 'family',
   'emergencyContact', 'referees', 'workRights', 'diversity', 'selfIntro', 'attachments', 'other',
 ];

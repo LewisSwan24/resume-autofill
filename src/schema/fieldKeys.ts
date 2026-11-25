@@ -12,7 +12,7 @@ export type FieldKey = string;
 export type SectionKey =
   | 'basics' | 'contact' | 'jobIntention' | 'education' | 'work' | 'internship' | 'projects'
   | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills' | 'family'
-  | 'emergencyContact' | 'referees' | 'workRights' | 'diversity' | 'selfIntro'
+  | 'emergencyContact' | 'referees' | 'workRights' | 'diversity' | 'selfIntro' | 'works'
   | 'attachments' | 'other';
 export type ValueType = 'text' | 'longtext' | 'date' | 'enum' | 'bool' | 'region' | 'file' | 'number' | 'list' | 'period';
 export interface FieldKeyDef {
@@ -133,6 +133,8 @@ export const FIELD_KEYS: FieldKeyDef[] = [
     name: 'text', role: 'text', startDate: 'date', endDate: 'date', current: yesNo(),
     description: 'longtext', link: 'text',
   }),
+
+  ...module('works', ['works'], { title: 'text', link: 'text', description: 'longtext', fileId: 'file' }),
 
   ...module('campus', ['campus'], {
     organization: 'text', role: 'text', startDate: 'date', endDate: 'date', current: yesNo(),

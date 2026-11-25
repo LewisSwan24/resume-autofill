@@ -34,6 +34,7 @@ import {
   ResumeSchema,
   SkillSchema,
   WorkEntrySchema,
+  WorkSampleSchema,
   type Resume,
   type SensitiveFieldMode,
 } from '../schema';
@@ -44,6 +45,7 @@ const ENTRY_SCHEMAS: Record<ArrayModuleName, { parse(input: unknown): unknown }>
   education: EducationSchema,
   work: WorkEntrySchema,
   projects: ProjectSchema,
+  works: WorkSampleSchema,
   campus: CampusEntrySchema,
   awards: AwardSchema,
   languages: LanguageEntrySchema,

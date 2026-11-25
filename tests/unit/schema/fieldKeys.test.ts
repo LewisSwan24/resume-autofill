@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENUM_DOMAINS, ENUM_VALUES, FIELD_KEYS, getFieldKeyDef } from '../../../src/schema';
 
 const SECTIONS = [
-  'basics', 'contact', 'jobIntention', 'education', 'work', 'internship', 'projects',
+  'basics', 'contact', 'jobIntention', 'education', 'work', 'internship', 'projects', 'works',
   'campus', 'awards', 'languages', 'certificates', 'skills', 'family',
   'emergencyContact', 'referees', 'workRights', 'diversity', 'selfIntro', 'attachments', 'other',
 ];

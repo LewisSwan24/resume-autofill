@@ -36,6 +36,10 @@ export const SECTION_SYNONYMS: Record<SectionKey, string[]> = {
     '项目经历', '项目经验', '项目经验与成果', '项目情况', '科研项目', '项目信息',
     'Projects', 'Project experience', 'Project history', 'Key projects', 'Personal projects',
   ],
+  works: [
+    '作品', '作品展示', '个人作品', '作品信息', '作品经历', '作品集', '代表作品', '作品介绍',
+    'Work samples', 'Portfolio', 'Portfolio pieces', 'Selected work', 'Samples of work',
+  ],
   campus: [
     '校园经历', '校园活动', '社会实践', '社团经历', '学生干部经历', '实践经历', '校内经历', '课外活动', '在校实践', '在校经历', '校内实践',
     'Campus activities', 'Campus experience', 'Extracurricular activities', 'Extracurriculars',

@@ -90,8 +90,14 @@ const zhInput: ResumeInput = {
       description: '开发浏览器扩展，在各类网申表单中一键填写个人简历，并逐项校验填写结果。',
     },
   ],
+  works: [
+    {
+      title: '校园导览小程序', link: 'https://example.com/campus-guide',
+      description: '为新生设计的校园导览小程序，包含教学楼地图和每周活动日历。',
+    },
+  ],
   awards: [{ name: '国家奖学金', date: '2022-10', level: 'national' }],
-  languages: [{ language: '英语', proficiency: 'fluent', certificate: 'CET-6', score: '580', tests: [{ test: 'cet6', score: '580' }] }],
+  languages: [{ language: '英语', proficiency: 'fluent', listeningSpeaking: 'proficient', certificate: 'CET-6', score: '580', tests: [{ test: 'cet6', score: '580' }] }],
   certificates: [{ name: '全国计算机等级考试二级', date: '2021-09' }],
   skills: [{ name: 'Python' }, { name: 'TypeScript' }, { name: 'SQL' }],
   family: [
@@ -184,6 +190,12 @@ const enInput: ResumeInput = {
       kind: 'internship', company: 'Tencent', position: 'Backend Developer Intern', city: 'Shenzhen',
       startDate: '2023-06', endDate: '2023-09', current: false,
       description: 'Developed internal service APIs, tuned performance and wrote unit tests.',
+    },
+  ],
+  works: [
+    {
+      title: 'Course planner', link: 'https://example.com/course-planner',
+      description: 'A small web app that lays out a semester of subjects and checks the prerequisites.',
     },
   ],
   referees: [

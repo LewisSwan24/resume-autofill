@@ -51,7 +51,7 @@ const ADD_WORDS = /^[\s+＋]*(?:继续添加|再添加|再增加|添加更多|�
 const SECTION_FROM_TEXT_MIN = 0.8;
 
 export const REPEATED: ReadonlySet<SectionKey> = new Set<SectionKey>([
-  'education', 'work', 'internship', 'projects', 'campus', 'awards', 'languages', 'certificates', 'skills',
+  'education', 'work', 'internship', 'projects', 'works', 'campus', 'awards', 'languages', 'certificates', 'skills',
   'family', 'referees',
 ]);
 

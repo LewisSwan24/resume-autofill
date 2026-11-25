@@ -62,10 +62,10 @@ const ATTACHMENT_FIELDS: Record<string, keyof Resume['attachments']> = {
 };
 
 type ArrayModule =
-  | 'education' | 'work' | 'projects' | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills' | 'family'
+  | 'education' | 'work' | 'projects' | 'works' | 'campus' | 'awards' | 'languages' | 'certificates' | 'skills' | 'family'
   | 'referees';
 const ARRAY_MODULES: ReadonlySet<string> = new Set<ArrayModule>([
-  'education', 'work', 'projects', 'campus', 'awards', 'languages', 'certificates', 'skills', 'family', 'referees',
+  'education', 'work', 'projects', 'works', 'campus', 'awards', 'languages', 'certificates', 'skills', 'family', 'referees',
 ]);
 
 function clean(v: unknown): RawValue | null {
@@ -388,6 +388,13 @@ export function resolveValue(
   if (fieldKey === 'education.supervisor' && section !== 'education') return null;
   if (ARRAY_MODULES.has(module)) {
     const rows = sectionEntries(resume, module as ArrayModule, section, opts.hasInternshipSection);
+    // A resume with no works still answers a works card with the portfolio's link and file.
+    if (module === 'works' && rows.length === 0) {
+      if (entryIndex !== 0) return null;
+      if (field === 'link') return wrap(resume.contact.portfolio, 'contact.portfolio');
+      if (field === 'fileId') return wrap(resume.attachments.portfolioFileId, 'attachments.portfolioFileId');
+      return null;
+    }
     // Away from the cards, as on 最高学历 next to the name, a question about schooling means the highest.
     const row =
       module === 'education' && section && section !== 'education' && entryIndex === 0
@@ -409,6 +416,10 @@ export function resolveValue(
     if (field === 'endDate' && entry.current === true && !entry.endDate) return null;
     if (field === 'period') return periodOf(entry, source);
     if (field === 'supervisor') return supervisorAt(entry, resume);
+    // A work with no file of its own goes in with the portfolio file.
+    if (module === 'works' && field === 'fileId') {
+      return wrap(entry.fileId, `${module}[${row.index}].fileId`) ?? wrap(resume.attachments.portfolioFileId, 'attachments.portfolioFileId');
+    }
     // A level asked apart that the applicant left empty is answered by the overall level.
     if ((field === 'listeningSpeaking' || field === 'readingWriting') && clean(entry[field]) === null) {
       return wrap(entry.proficiency, `${module}[${row.index}].proficiency`);

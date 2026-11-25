@@ -335,13 +335,13 @@ describe('evidence weights and types', () => {
       expect(scan(file('Resume and portfolio', 'a')).cls[0]!.fieldKey).not.toBe('attachments.portfolio');
     });
 
-    // NIO's 作品: a link, a file and a few words about the work. None of it is a job.
-    it('a 作品 section is the portfolio: its link, its file, and a description that is no job’s', () => {
+    // NIO's 作品: a link, a file and a few words about the work. None of it is a job: it is a work's card.
+    it('a 作品 section is a work: its link, its file, and a description that is no job’s', () => {
       const s = scan(
         `<h2>作品</h2><div>${text('作品链接', 'a')}${file('作品附件', 'b')}${row('描述', '<textarea id="c"></textarea>', 'c')}</div>` +
           `<h2>工作经历</h2><div>${text('公司名称', 'd')}${row('描述', '<textarea id="e"></textarea>', 'e')}</div>`,
       );
-      expect(keys(s)).toEqual(['contact.portfolio', 'attachments.portfolio', null, 'work.company', 'work.description']);
+      expect(keys(s)).toEqual(['works.link', 'works.fileId', 'works.description', 'work.company', 'work.description']);
     });
 
     it('the wording only counts on an upload box', () => {

@@ -195,6 +195,24 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Project link|Project URL|Project link/URL|Demo link|Repository|Repository URL|Link|URL',
   ),
 
+  // ------------------------------------------------------------ works
+  'works.title': s(
+    '作品名称|作品标题|作品名|作品题目|名称|标题',
+    'Title|Work title|Piece title|Sample title|Name of work|Portfolio piece title',
+  ),
+  'works.link': s(
+    '作品链接|作品地址|作品网址|作品URL|链接|网址',
+    'Link|URL|Work link|Sample link|Portfolio link|Link to work',
+  ),
+  'works.description': s(
+    '作品描述|作品介绍|作品说明|作品简介|描述|简介|说明',
+    'Description|Work description|About this work|Sample description',
+  ),
+  'works.fileId': s(
+    '作品附件|上传作品|作品文件|作品上传|作品附件上传',
+    'Work file|Sample file|Upload work sample|Work sample file|File of work',
+  ),
+
   // ------------------------------------------------------------ campus
   'campus.organization': s(
     '组织|组织名称|社团|社团名称|学生组织|学生组织名称|活动名称|社团/组织名称|所属组织|参与组织',

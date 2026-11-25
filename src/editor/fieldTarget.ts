@@ -35,6 +35,7 @@ const SAME_AS: Readonly<Record<string, string>> = {
 /** Field keys worked out from another module's entries: the module and the input there. */
 const ELSEWHERE: Readonly<Record<string, { module: ModuleName; field: string }>> = {
   'education.supervisor': { module: 'referees', field: 'name' },
+  'works.fileId': { module: 'attachments', field: 'portfolioFileId' },
   // A drafted answer is built mostly from the introduction, which is where the applicant improves it.
   'answers.coverLetter': { module: 'about', field: 'selfIntroduction' },
   'answers.whyUs': { module: 'about', field: 'selfIntroduction' },

@@ -26,7 +26,7 @@ export const MAX_FILES = 3;
 export const MAX_DATA_URL_CHARS = 15_000_000;
 
 const SECTION_KEYS = [
-  'basics', 'contact', 'jobIntention', 'education', 'work', 'internship', 'projects', 'campus', 'awards', 'languages',
+  'basics', 'contact', 'jobIntention', 'education', 'work', 'internship', 'projects', 'works', 'campus', 'awards', 'languages',
   'certificates', 'skills', 'family', 'emergencyContact', 'referees', 'workRights', 'diversity', 'selfIntro',
   'attachments', 'other',
 ] as const satisfies readonly SectionKey[];

@@ -203,8 +203,14 @@ function belongsElsewhere(def: FieldKeyDef, section: SectionKey | null): boolean
   return module !== 'basics' && module !== 'contact';
 }
 
+/**
+ * Modules whose words are shared with fields asked anywhere (作品附件 is the portfolio file on its own): their keys
+ * count only inside their own section, and anywhere else, a page with no heading included, stand back.
+ */
+const SECTION_BOUND_MODULES: ReadonlySet<string> = new Set(['works']);
+
 function sectionAdjust(def: FieldKeyDef, raw: number, section: SectionKey | null): number {
-  if (!section) return raw;
+  if (!section) return SECTION_BOUND_MODULES.has(def.key.split('.')[0]!) ? raw * OUT_OF_SECTION_FACTOR : raw;
   if (def.sections.includes(section)) {
     if (raw < BONUS_MIN_RAW) return raw;
     return raw + IN_SECTION_BONUS + (def.sections[0] === section ? PRIMARY_SECTION_BONUS : 0);

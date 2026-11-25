@@ -46,7 +46,8 @@ export function resumeWithEverything(locale: Locale): Resume {
     else if (module === 'attachments') (r.attachments as Bag)[`${field}FileId`] = `file-${field}`;
     else if ((ARRAY_MODULE_NAMES as readonly string[]).includes(module)) {
       (r[module] as Bag[]).forEach((entry, i) => {
-        entry[field] = valueFor(def.type, def.enumDomain, `${def.key}#${i}`, i);
+        // A work's file is held as the id of a stored file.
+        entry[field] = module === 'works' && field === 'fileId' ? `file-work-${i}` : valueFor(def.type, def.enumDomain, `${def.key}#${i}`, i);
       });
     } else if (module === 'contact' && field in ADDRESS) {
       ((r.contact as Bag).address as Bag)[ADDRESS[field]!] = `secret:${def.key}`;

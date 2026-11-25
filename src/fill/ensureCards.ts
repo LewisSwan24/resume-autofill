@@ -193,6 +193,10 @@ function pickButton(buttons: AddButton[], section: SectionKey): AddButton | unde
 /**
  * For every repeated section with fewer cards than resume entries, click its add button until the
  * count is reached or clicking stops helping. Returns one entry per section that needed cards.
+ *
+ * A read of the page (scan, classify, count cards) takes most of a second on a long form, so it is done at most three
+ * times: before, after one click in each section (does its button make a card?), and after the remaining clicks of
+ * the sections whose button does. A click that adds no fields at all is seen at once, without a read.
  */
 export async function ensureCards(
   doc: Document,
@@ -201,56 +205,77 @@ export async function ensureCards(
 ): Promise<SectionGrowth[]> {
   const timeout = opts.timeoutMs ?? 2000;
   const maxAdds = opts.maxAdds ?? 12;
-  const results: SectionGrowth[] = [];
   // Every control the engine sees: a card on a phone can be pickers alone, with no input behind any of them.
   const fieldCount = () => discover(doc).length;
+  const read = () => sectionStates(doc, resume, opts.idFor);
 
-  const initial = sectionStates(doc, resume, opts.idFor).filter((s) => s.need > s.have && !opts.skip?.has(s.section));
-  for (const first of initial) {
-    const result: SectionGrowth = { section: first.section, have: first.have, need: first.need, added: 0, status: 'ok' };
-    results.push(result);
-    let prevHave = first.have;
-    while (result.added < maxAdds) {
-      const state = sectionStates(doc, resume, opts.idFor).find((s) => s.section === first.section);
-      if (!state) break;
-      result.have = state.have;
-      result.need = state.need;
-      if (state.have >= state.need) break;
-      if (result.added > 0 && state.have <= prevHave) {
-        // The last click added fields but no recognisable card: stop instead of piling up blocks.
-        result.status = 'action_failed';
-        break;
-      }
-      prevHave = state.have;
-      const button = pickButton(findAddButtons(doc), first.section);
-      if (!button) {
-        result.status = 'no_button';
-        break;
-      }
-      result.label = button.text;
-      const before = fieldCount();
-      clickAdd(button.el);
-      const grown = await waitFor(() => fieldCount() > before, { timeout, root: doc });
-      if (!grown) {
-        result.status = 'action_failed';
-        break;
-      }
-      result.added += 1;
-      opts.onProgress?.();
+  const results: SectionGrowth[] = read()
+    .filter((s) => s.need > s.have && !opts.skip?.has(s.section))
+    .map((s) => ({ section: s.section, have: s.have, need: s.need, added: 0, status: 'ok' as const }));
+
+  /** One click on the section's add button. False when there is none, or nothing grew. */
+  const addOne = async (result: SectionGrowth): Promise<boolean> => {
+    const button = pickButton(findAddButtons(doc), result.section);
+    if (!button) {
+      result.status = 'no_button';
+      return false;
     }
-    if (result.status === 'ok' && result.added >= maxAdds) {
-      // Stopped by the cap, not by success: refresh the counts and do not claim a complete section.
-      const last = sectionStates(doc, resume, opts.idFor).find((s) => s.section === first.section);
-      if (last) {
-        result.have = last.have;
-        result.need = last.need;
-        if (last.have < last.need) {
-          result.status = 'action_failed';
-          result.capped = true;
-        }
-      }
+    result.label = button.text;
+    const before = fieldCount();
+    clickAdd(button.el);
+    const grown = await waitFor(() => fieldCount() > before, { timeout, root: doc });
+    if (!grown) {
+      result.status = 'action_failed';
+      return false;
     }
+    result.added += 1;
+    opts.onProgress?.();
+    return true;
+  };
+  /** The counts as the page now has them; false when the section is gone from it. */
+  const update = (result: SectionGrowth, states: SectionState[]): boolean => {
+    const state = states.find((s) => s.section === result.section);
+    if (!state) return false;
+    result.have = state.have;
+    result.need = state.need;
+    return true;
+  };
+
+  // One click per section: whether its button makes a card at all.
+  const tried: { result: SectionGrowth; had: number }[] = [];
+  for (const result of results) {
+    const had = result.have;
+    if (maxAdds > 0 && (await addOne(result))) tried.push({ result, had });
+  }
+  if (tried.length === 0) return capCheck(results, maxAdds);
+
+  // The rest of the cards of each section whose button made one, without reading the page between clicks.
+  const states = read();
+  const more: SectionGrowth[] = [];
+  for (const { result, had } of tried) {
+    if (!update(result, states)) continue;
+    if (result.have <= had) {
+      // The click added fields but no recognisable card: stop instead of piling up blocks.
+      result.status = 'action_failed';
+      continue;
+    }
+    let expected = result.have;
+    while (expected < result.need && result.added < maxAdds && (await addOne(result))) expected += 1;
+    if (result.added > 1) more.push(result);
+  }
+  if (more.length > 0) {
+    const last = read();
+    for (const result of more) update(result, last);
+  }
+  return capCheck(results, maxAdds);
+}
+
+/** A section still short of cards after clicks that all worked was stopped by the cap, or its cards stopped coming. */
+function capCheck(results: SectionGrowth[], maxAdds: number): SectionGrowth[] {
+  for (const result of results) {
+    if (result.status !== 'ok' || result.have >= result.need) continue;
+    result.status = 'action_failed';
+    if (result.added >= maxAdds) result.capped = true;
   }
   return results;
 }
-

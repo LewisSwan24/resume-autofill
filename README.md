@@ -4,6 +4,8 @@
 
 **Fill job applications from your own resume in one click, with your data kept on your device.**
 
+[![Release](https://img.shields.io/github/v/release/LewisSwan24/resume-autofill?color=0066cc)](https://github.com/LewisSwan24/resume-autofill/releases/latest)
+[![Extension checks](https://github.com/LewisSwan24/resume-autofill/actions/workflows/extension.yml/badge.svg)](https://github.com/LewisSwan24/resume-autofill/actions/workflows/extension.yml)
 [![Mobile build](https://github.com/LewisSwan24/resume-autofill/actions/workflows/mobile-build.yml/badge.svg)](https://github.com/LewisSwan24/resume-autofill/actions/workflows/mobile-build.yml)
 ![Chrome MV3](https://img.shields.io/badge/Chrome-MV3%20%C2%B7%20114%2B-0066cc)
 ![Android 10+](https://img.shields.io/badge/Android-10%2B-0066cc)
@@ -11,7 +13,7 @@
 
 [![English](https://img.shields.io/badge/English-0066cc?style=for-the-badge)](README.md) [![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-8a8a8e?style=for-the-badge)](README.zh-CN.md)
 
-[Wiki](https://github.com/LewisSwan24/resume-autofill/wiki) · [中文 Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5)
+[Download](https://github.com/LewisSwan24/resume-autofill/releases/latest) · [Wiki](https://github.com/LewisSwan24/resume-autofill/wiki) · [中文 Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5)
 
 </div>
 
@@ -23,6 +25,7 @@ When it is not sure, it leaves the field empty and asks rather than guessing.
 
 - [Highlights](#highlights)
 - [Supported sites](#supported-sites)
+- [Download](#download)
 - [Quick start](#quick-start)
 - [Android app](#android-app)
 - [How it works](#how-it-works)
@@ -57,9 +60,20 @@ When it is not sure, it leaves the field empty and asks rather than guessing.
 
 Recorded pages from Moka, Feishu, Beisen, Workday, Greenhouse, Lever, Workable, Ashby, Rippling, Breezy, Gem, Manatal, Pinpoint, Recruitee, Teamtailor and Zoho are replayed offline and scored field by field, with zero wrong fills as the target. The recordings stay on the developer's machine and are not part of the repository.
 
+## Download
+
+The latest build is on the [Releases](https://github.com/LewisSwan24/resume-autofill/releases/latest) page.
+
+| File | Install |
+|---|---|
+| `resume-autofill-<version>-chrome.zip` | Unzip it, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the folder. |
+| `resume-autofill-<version>-android.apk` | Open it on an Android 10+ phone and allow the install. |
+
+The Android build is signed with a test key for now. The first release signed with the permanent key will ask you to uninstall this one, so export your resumes before updating.
+
 ## Quick start
 
-You need **Node.js 22+**, **pnpm** and **Chrome 114+**.
+To build it yourself, you need **Node.js 22+**, **pnpm** and **Chrome 114+**.
 
 ```powershell
 pnpm i

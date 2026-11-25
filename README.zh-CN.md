@@ -4,6 +4,8 @@
 
 **用你自己的简历，一键填好网申表单；资料只存在你自己的设备上。**
 
+[![Release](https://img.shields.io/github/v/release/LewisSwan24/resume-autofill?color=0066cc)](https://github.com/LewisSwan24/resume-autofill/releases/latest)
+[![Extension checks](https://github.com/LewisSwan24/resume-autofill/actions/workflows/extension.yml/badge.svg)](https://github.com/LewisSwan24/resume-autofill/actions/workflows/extension.yml)
 [![Mobile build](https://github.com/LewisSwan24/resume-autofill/actions/workflows/mobile-build.yml/badge.svg)](https://github.com/LewisSwan24/resume-autofill/actions/workflows/mobile-build.yml)
 ![Chrome MV3](https://img.shields.io/badge/Chrome-MV3%20%C2%B7%20114%2B-0066cc)
 ![Android 10+](https://img.shields.io/badge/Android-10%2B-0066cc)
@@ -11,7 +13,7 @@
 
 [![English](https://img.shields.io/badge/English-8a8a8e?style=for-the-badge)](README.md) [![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-0066cc?style=for-the-badge)](README.zh-CN.md)
 
-[中文 Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5) · [English Wiki](https://github.com/LewisSwan24/resume-autofill/wiki)
+[下载](https://github.com/LewisSwan24/resume-autofill/releases/latest) · [中文 Wiki](https://github.com/LewisSwan24/resume-autofill/wiki/%E9%A6%96%E9%A1%B5) · [English Wiki](https://github.com/LewisSwan24/resume-autofill/wiki)
 
 </div>
 
@@ -23,6 +25,7 @@ Resume Autofill 包括一个 Chrome 扩展和一个安卓应用。打开网申�
 
 - [主要功能](#主要功能)
 - [支持的网站](#支持的网站)
+- [下载](#下载)
 - [快速上手](#快速上手)
 - [安卓应用](#安卓应用)
 - [工作原理](#工作原理)
@@ -57,9 +60,20 @@ Resume Autofill 包括一个 Chrome 扩展和一个安卓应用。打开网申�
 
 Moka、飞书、北森、Workday、Greenhouse、Lever、Workable、Ashby、Rippling、Breezy、Gem、Manatal、Pinpoint、Recruitee、Teamtailor、Zoho 的真实页面都录制下来离线回放，逐字段打分，目标是填错为零。录制文件只保存在开发者本机，不在仓库里。
 
+## 下载
+
+最新的安装包在 [Releases](https://github.com/LewisSwan24/resume-autofill/releases/latest) 页面。
+
+| 文件 | 安装方法 |
+|---|---|
+| `resume-autofill-<版本>-chrome.zip` | 解压，打开 `chrome://extensions`，开启 **开发者模式**，点 **加载已解压的扩展程序**，选解压出来的文件夹。 |
+| `resume-autofill-<版本>-android.apk` | 在 Android 10 及以上的手机上打开，允许安装。 |
+
+安卓包目前用的是测试签名。第一个正式签名的版本会要求先卸载这一版，更新前请先导出简历。
+
 ## 快速上手
 
-需要 **Node.js 22+**、**pnpm** 和 **Chrome 114+**。
+想自己构建的话，需要 **Node.js 22+**、**pnpm** 和 **Chrome 114+**。
 
 ```powershell
 pnpm i

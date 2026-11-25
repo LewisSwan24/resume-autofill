@@ -236,16 +236,20 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const { resume, files } = payload;
   const adapter = resolveAdapter(doc);
 
+  // A retry of some boxes leaves the page's cards as they are.
+  const only = opts.filter?.onlyFieldIds ? new Set(opts.filter.onlyFieldIds) : null;
   // Growing sections is best effort: when it throws, carry on with the cards the page already has.
   let growth: SectionGrowth[] = [];
-  try {
-    growth = await ensureCards(doc, resume, {
-      idFor,
-      skip: new Set(adapter?.editors?.map((e) => e.section)),
-      ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
-    });
-  } catch (error) {
-    console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
+  if (!only) {
+    try {
+      growth = await ensureCards(doc, resume, {
+        idFor,
+        skip: new Set(adapter?.editors?.map((e) => e.section)),
+        ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+      });
+    } catch (error) {
+      console.warn('[runFill] ensureCards failed, continuing with the existing cards', error);
+    }
   }
   const scan: ScanResult = scanDocument(doc, idFor);
   const { plan, left, entryOf, shown } = planPage(doc, scan, payload);
@@ -256,7 +260,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const excluded = new Set(opts.filter?.excludedFieldIds ?? []);
   const overrides = opts.filter?.overrides ?? {};
   const plannedSteps = plan.steps
-    .filter((s) => !excluded.has(s.fieldId))
+    .filter((s) => !excluded.has(s.fieldId) && (!only || only.has(s.fieldId)))
     .map((s) =>
       Object.hasOwn(overrides, s.fieldId)
         ? { ...s, intent: { kind: 'text' as const, text: overrides[s.fieldId]! } }
@@ -270,7 +274,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     if (answer !== null) held.set(step.fieldId, answer);
   }
 
-  const results: FieldReport[] = [...plan.reports, ...left];
+  const results: FieldReport[] = [...plan.reports, ...left].filter((r) => !only || only.has(r.fieldId));
   // Files first: many forms read an uploaded resume and write over their fields with what they find.
   const steps = [...plannedSteps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
   const uploadBusy = adapter?.uploadBusy;
@@ -312,7 +316,7 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   const entries = entriesInPlace(growth, results, shown, (section, index) => entryName(resume, section, index, hasInternshipSection));
 
   // After the rest of the page: on a page with `uploadBusy`, the upload has been read by now, and it may list entries.
-  const editorRun = adapter?.editors?.length
+  const editorRun = !only && adapter?.editors?.length
     ? await fillEntryEditors(doc, adapter.editors, { resume, files, idFor })
     : null;
   if (editorRun) {
@@ -334,9 +338,43 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     finishedAt: Date.now(),
     fields,
     counts: countOutcomes(fields),
-    ...(entries.length > 0 ? { entries } : {}),
+    ...(entries.length > 0 && !only ? { entries } : {}),
   };
   return { report, controls, growth };
+}
+
+/**
+ * Fill one box with the resume's answer for the key the applicant chose for it (the side panel's "fill this one" and
+ * "use selected"). Nothing else on the page is touched. The applicant chose this box and this key, so a sensitive key is
+ * filled and an answer the box holds is written over; a long-text key still comes back as a draft to read first.
+ */
+export async function fillOneField(
+  doc: Document,
+  payload: FillPayload,
+  fieldId: string,
+  fieldKey: FieldKey,
+  opts: Pick<RunFillOptions, 'idFor'> = {},
+): Promise<{ report: FieldReport; control?: Control }> {
+  registerAllDrivers();
+  const idFor = opts.idFor ?? makeIdFor();
+  const scan = scanDocument(doc, idFor);
+  const i = scan.contexts.findIndex((c) => c.control.id === fieldId);
+  if (i < 0) return { report: { fieldId, label: fieldId, fieldKey, section: null, outcome: 'no_control', confidence: 1 } };
+  const ctx = scan.contexts[i]!;
+  // A box never filled (a password, a captcha, fine print) stays so, whatever was chosen for it.
+  const cls: Classification = { ...scan.classifications[i]!, fieldKey, confidence: 1 };
+  const plan = planFill([ctx], [cls], payload.resume, payload.files, {
+    sensitiveFields: 'fill',
+    ...(payload.answerTemplates ? { answerTemplates: payload.answerTemplates } : {}),
+    job: jobContextOf(doc),
+    ...(doc.title ? { pageTitle: doc.title } : {}),
+  });
+  const step = plan.steps[0];
+  const control = ctx.control;
+  if (!step) return { report: plan.reports[0] ?? { ...baseReport(ctx, cls, payload.resume.locale), outcome: 'no_data' }, control };
+  const result = await runStep(step, new Map([[control.id, control]]), doc);
+  const report = result.outcome === 'filled' && isSensitiveFieldKey(fieldKey) ? { ...result, note: 'sensitive_filled' as const } : result;
+  return { report, control };
 }
 
 /**

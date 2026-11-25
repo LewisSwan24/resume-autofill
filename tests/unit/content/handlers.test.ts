@@ -230,3 +230,45 @@ describe('apply', () => {
     expect((document.getElementById('vc') as HTMLInputElement).value).toBe('late');
   });
 });
+
+describe('fillOne', () => {
+  it('fills one box by the key chosen, outlines it, and a later apply knows it', async () => {
+    const h = make();
+    await h.fill({ resume: zh, files });
+    const nm = document.getElementById('nm') as HTMLInputElement;
+    const row = await h.fillOne({ fieldId: idFor(nm), fieldKey: 'contact.email', resume: zh, files });
+    expect(row).toMatchObject({ outcome: 'filled', fieldKey: 'contact.email' });
+    expect(nm.value).toBe(zh.contact.email);
+    expect(outline('nm')).toBe('2px solid #22c55e');
+    expect((await h.apply({ fieldId: idFor(nm), text: 'x' })).fieldKey).toBe('contact.email');
+    expect(h.isBusy()).toBe(false);
+  });
+
+  it('never fills a box kept closed (a captcha), whatever key is chosen', async () => {
+    const h = make();
+    const vc = document.getElementById('vc') as HTMLInputElement;
+    expect((await h.fillOne({ fieldId: idFor(vc), fieldKey: 'contact.email', resume: zh, files })).outcome).not.toBe('filled');
+    expect(vc.value).toBe('');
+  });
+
+  it('works before any fill, on the box as the page has it now', async () => {
+    const h = make();
+    const nm = document.getElementById('nm') as HTMLInputElement;
+    expect((await h.fillOne({ fieldId: idFor(nm), fieldKey: 'basics.fullName', resume: zh, files })).outcome).toBe('filled');
+    expect(nm.value).toBe('林知远');
+  });
+});
+
+describe('a retry of some boxes', () => {
+  it('keeps the rows and outlines of the rest', async () => {
+    const h = make();
+    await h.fill({ resume: zh, files });
+    const nm = document.getElementById('nm') as HTMLInputElement;
+    nm.value = '';
+    const report = await h.fill({ resume: zh, files, filter: { onlyFieldIds: [idFor(nm)] } });
+    expect(report.fields.map((f) => f.fieldId)).toEqual([idFor(nm)]);
+    expect(nm.value).toBe('林知远');
+    expect(outline('vc')).toBe('3px solid #ef4444');
+    expect((await h.apply({ fieldId: idFor(document.getElementById('zz')!), optionLabel: 'Alpha' })).outcome).toBe('filled');
+  });
+});

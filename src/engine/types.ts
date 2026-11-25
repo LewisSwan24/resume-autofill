@@ -194,6 +194,11 @@ export interface FillFilter {
   excludedFieldIds?: string[];
   /** Per-field text overrides entered in previewBeforeFill. */
   overrides?: Record<string, string>;
+  /**
+   * Fill only these boxes, as they were planned (the side panel's retry): no cards are added, no entry editor is opened
+   * and the report holds only their rows.
+   */
+  onlyFieldIds?: string[];
 }
 
 export interface PreviewItem {

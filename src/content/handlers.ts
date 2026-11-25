@@ -2,9 +2,9 @@
 import { registerAllDrivers } from '../drivers';
 import { executeStep, type FillStep } from '../drivers/execute';
 import type { FileData } from '../drivers/types';
-import type { Control, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
+import type { Control, FieldKey, FieldReport, FillFilter, FillReport, FramePreview } from '../engine/types';
 import { applyHighlights, clearHighlights, focusField } from '../fill/highlight';
-import { highlightRun, runFill, runPreview, type FillPayload, type FillRun, type RunFillOptions } from '../fill/runFill';
+import { fillOneField, highlightRun, runFill, runPreview, type FillPayload, type FillRun, type RunFillOptions } from '../fill/runFill';
 import { collectEvidence } from '../engine/evidence';
 import { captureFieldFingerprint } from '../recipes';
 import type { AnswerTemplates, Resume, SensitiveFieldMode, SiteRecipe, SiteRecipeFingerprint } from '../schema';
@@ -31,6 +31,15 @@ export interface FrameHandlerDeps {
   onInspectorPick?: (target: InspectorTargetInfo) => void;
 }
 
+/** The side panel's "fill this one" / "use selected": one box, by the key the applicant chose. */
+export interface FillOneRequest {
+  fieldId: string;
+  fieldKey: FieldKey;
+  resume: Resume;
+  files: Record<string, FileData>;
+  answerTemplates?: AnswerTemplates;
+}
+
 export interface ApplyRequest {
   fieldId: string;
   text?: string;
@@ -50,6 +59,7 @@ export interface FrameHandlers {
   fill(payload: { resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }): Promise<FillReport>;
   focus(fieldId: string): boolean;
   apply(request: ApplyRequest): Promise<FieldReport>;
+  fillOne(request: FillOneRequest): Promise<FieldReport>;
   captureFingerprint?(fieldId: string): SiteRecipeFingerprint | null;
   inspectorStart?(): void;
   inspectorStop?(): void;
@@ -106,15 +116,20 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
   }
 
   async function doFill(payload: FillPayload, filter?: FillFilter): Promise<FillReport> {
-    clearHighlights();
-    before.clear();
+    // A retry of some boxes leaves the rest of the last run as it was: its rows, outlines and what undo keeps.
+    const retry = filter?.onlyFieldIds !== undefined;
+    if (!retry) {
+      clearHighlights();
+      before.clear();
+    }
     const result = await run(deps.doc, payload, {
       idFor: deps.idFor,
       ...(filter ? { filter } : {}),
       ...(deps.onProgress ? { onProgress: deps.onProgress } : {}),
     });
-    controls = result.controls;
-    reports = new Map(result.report.fields.map((f) => [f.fieldId, f]));
+    controls = retry ? new Map([...controls, ...result.controls]) : result.controls;
+    const rows = result.report.fields.map((f) => [f.fieldId, f] as const);
+    reports = retry ? new Map([...reports, ...rows]) : new Map(rows);
     highlightRun(result);
     discard();
     return result.report;
@@ -197,6 +212,29 @@ export function createFrameHandlers(deps: FrameHandlerDeps): FrameHandlers {
         applyHighlights([{ el: control.el, outcome: updated.outcome }]);
         discard();
         return updated;
+      } finally {
+        leave();
+      }
+    },
+
+    async fillOne({ fieldId, fieldKey, resume, files, answerTemplates }) {
+      if (filling) await filling.catch(() => undefined);
+      enter();
+      try {
+        const { report, control } = await fillOneField(
+          deps.doc,
+          { resume, files, ...(answerTemplates ? { answerTemplates } : {}) },
+          fieldId,
+          fieldKey,
+          { idFor: deps.idFor },
+        );
+        if (control) {
+          controls.set(fieldId, control);
+          applyHighlights([{ el: control.el, outcome: report.outcome }]);
+        }
+        reports.set(fieldId, report);
+        discard();
+        return report;
       } finally {
         leave();
       }

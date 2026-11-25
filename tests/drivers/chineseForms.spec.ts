@@ -291,7 +291,9 @@ test.describe('Moka entries', () => {
       expect.objectContaining({ 项目名称: '示例项目', 起止时间: '2021/3 ~ 2021/6', 项目描述: '示例项目描述。' }),
     ]);
     expect(await mokaEntries('获奖情况')).toEqual([{ 奖项名称: '示例奖学金', 获奖时间: '2021/10' }]);
-    expect(rows.filter((r) => r.outcome === 'action_failed' || r.outcome === 'needs_review')).toEqual([]);
+    // A project's duties are a long answer: drafted for the side panel, written only when the applicant says so.
+    expect(rows.filter((r) => r.note === 'draft')).toEqual([{ outcome: 'needs_review', fieldKey: 'projects.duties', label: '项目中职责', note: 'draft' }]);
+    expect(rows.filter((r) => r.note !== 'draft' && (r.outcome === 'action_failed' || r.outcome === 'needs_review'))).toEqual([]);
   });
 
   test('an entry the page already holds is left as it is, and the resume’s go into entries of their own', async () => {

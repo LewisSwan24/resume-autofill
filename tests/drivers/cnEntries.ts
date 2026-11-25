@@ -19,6 +19,8 @@ export interface EntryRow {
   outcome: string;
   fieldKey: string | null;
   label: string;
+  /** Why a row waits for the applicant: `draft` for a long answer drafted for the side panel. */
+  note?: string;
 }
 
 /** Fills the page from the Chinese sample resume with its entries swapped for ENTRIES, `runs` times. */
@@ -37,7 +39,7 @@ export function fillEntries(page: Page, runs = 1): Promise<EntryRow[]> {
       } as typeof sample;
       let rows: EntryRow[] = [];
       for (let i = 0; i < runs; i += 1) rows = (await raf.runFill(document, { resume, files: {} })).report.fields;
-      return rows.map((r) => ({ outcome: r.outcome, fieldKey: r.fieldKey, label: r.label }));
+      return rows.map((r) => ({ outcome: r.outcome, fieldKey: r.fieldKey, label: r.label, ...(r.note ? { note: r.note } : {}) }));
     },
     { entries: ENTRIES, runs },
   );

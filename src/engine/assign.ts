@@ -17,6 +17,21 @@ export const ALLOW_DUPLICATE_KEYS: ReadonlySet<FieldKey> = new Set(['contact.ema
  */
 const SCORE_KEY: FieldKey = 'languages.score';
 
+/**
+ * Places a form may ask twice, once on a picker (a tree of regions, a list) and once in a text box (所在地点 and
+ * 目前所在地): one of each kind may take the place. Two boxes of one kind still share one answer.
+ */
+const PLACE_KEYS: ReadonlySet<FieldKey> = new Set([
+  'basics.currentLocation', 'basics.nativePlace', 'basics.studentOrigin', 'basics.household',
+]);
+
+/** The key as the one-per-scope rule counts it: a place on a text box and on a picker count apart. */
+function takenAs(key: FieldKey, ctx: FieldContext): string {
+  if (!PLACE_KEYS.has(key)) return key;
+  const kind = ctx.control.kind;
+  return `${key}@${kind === 'text' || kind === 'textarea' ? 'typed' : 'picked'}`;
+}
+
 /** Confidence ceiling of a fallback assignment (the best key went to another control). */
 const FALLBACK_CAP = 0.7;
 
@@ -92,8 +107,8 @@ export function assign(
       const subject = scoreSubject(label);
       if (subjects.has(subject)) continue;
       subjects.add(subject);
-    } else if (keys.has(cand.fieldKey) && !ALLOW_DUPLICATE_KEYS.has(cand.fieldKey)) continue;
-    keys.add(cand.fieldKey);
+    } else if (keys.has(takenAs(cand.fieldKey, contexts[index]!)) && !ALLOW_DUPLICATE_KEYS.has(cand.fieldKey)) continue;
+    keys.add(takenAs(cand.fieldKey, contexts[index]!));
     assigned.add(index);
     out[index]!.fieldKey = cand.fieldKey;
     // A control that lost its best key settles for a weaker guess: never above the review band.

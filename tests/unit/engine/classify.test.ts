@@ -121,9 +121,13 @@ describe('global assignment', () => {
     expect(s.contexts.map((c) => c.group?.index)).toEqual([0, 0, 1, 1]);
   });
 
-  it('does not fall back to a key of another section: a second place under 基本信息 is not a school', () => {
+  it('does not fall back to a key of another section: a second place under 基本信息 is the same place, never a school', () => {
+    // Typed once and picked once (Feishu's phone form): both boxes take the place.
     const s = scan(`<h3>基本信息</h3>${text('目前所在地', 'a')}${row('所在地点', '<select id="b"><option>深圳</option></select>', 'b')}`);
-    expect(keys(s)).toEqual(['basics.currentLocation', null]);
+    expect(keys(s)).toEqual(['basics.currentLocation', 'basics.currentLocation']);
+    // Typed twice: one answer, and the other box takes no school either.
+    const twice = scan(`<h3>基本信息</h3>${text('目前所在地', 'a')}${text('所在地点', 'b')}`);
+    expect(keys(twice)).toEqual(['basics.currentLocation', null]);
   });
 
   it('falls back to the next candidate when the best key is taken', () => {

@@ -2,7 +2,7 @@
   "name": "resume-autofill",
   "description": "网申简历一键填写助手 / Resume Autofill",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

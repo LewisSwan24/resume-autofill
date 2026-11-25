@@ -28,6 +28,8 @@ export type BgToFrame =
   | { type: 'frame:preview'; runId: string; resume: Resume; files: Record<string, FileData>; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }
   | { type: 'frame:fill'; runId: string; resume: Resume; files: Record<string, FileData>; filter?: FillFilter; presetId?: MappingPresetId; recipes?: SiteRecipe[]; sensitiveFields?: SensitiveFieldMode; answerTemplates?: AnswerTemplates }
   | { type: 'frame:focus'; fieldId: string }
+  /** One box by the key the applicant chose for it, with only that key's data. */
+  | { type: 'frame:fillOne'; fieldId: string; fieldKey: string; resume: Resume; files: Record<string, FileData>; answerTemplates?: AnswerTemplates }
   | { type: 'frame:apply'; fieldId: string; text?: string; optionLabel?: string; undo?: boolean }
   | { type: 'frame:captureFingerprint'; fieldId: string }
   /** Top frame: which step is showing and whether it can be left on its own (auto-advance). */
@@ -47,6 +49,8 @@ export type UiToBg =
       overridesByFrame?: Record<number, Record<string, string>>;
     }
   | { type: 'fill:cancelPreview'; tabId: number }
+  /** Fill again the boxes of the stored report that failed or were not recognised, and only those. */
+  | { type: 'fill:retry'; tabId: number }
   /** FAB → background: re-send the current scan:total (the first push can arrive before the FAB listens). */
   | { type: 'scan:query' }
   | { type: 'wizard:query'; tabId?: number }
@@ -58,6 +62,8 @@ export type UiToBg =
   | { type: 'inspector:stop'; tabId: number }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
   | { type: 'field:apply'; tabId: number; frameId: number; fieldId: string; text?: string; optionLabel?: string; undo?: boolean }
+  /** Fill one box with the resume's answer for a key (the row's own, or a candidate the applicant chose). */
+  | { type: 'field:fill'; tabId: number; frameId: number; fieldId: string; fieldKey: string }
   | { type: 'field:captureFingerprint'; tabId: number; frameId: number; fieldId: string }
   /** Open the profile page; with a field key (and its source path), at that field's input. */
   | { type: 'ui:openOptions'; fieldKey?: string; source?: string }
@@ -93,6 +99,9 @@ export interface ResponseMap {
   'frame:fill': FillReport;
   'field:apply': FieldReport;
   'frame:apply': FieldReport;
+  'field:fill': FieldReport;
+  'frame:fillOne': FieldReport;
+  'fill:retry': FillRequestResponse;
   'frame:captureFingerprint': SiteRecipeFingerprint | null;
   'field:captureFingerprint': SiteRecipeFingerprint | null;
   'wizard:query': WizardSessionState | null;
@@ -116,6 +125,7 @@ const TYPE_TABLE = {
   'fill:request': true,
   'fill:commitPreview': true,
   'fill:cancelPreview': true,
+  'fill:retry': true,
   'scan:query': true,
   'wizard:query': true,
   'wizard:clear': true,
@@ -139,6 +149,8 @@ const TYPE_TABLE = {
   'frame:focus': true,
   'field:apply': true,
   'frame:apply': true,
+  'field:fill': true,
+  'frame:fillOne': true,
   'field:captureFingerprint': true,
   'frame:captureFingerprint': true,
   'ui:openOptions': true,

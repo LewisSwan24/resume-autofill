@@ -2,17 +2,19 @@
 // resume subset and files that answer implies (`frame:fill` or `frame:preview`), merge the reports → store → notify.
 import { browser } from 'wxt/browser';
 import type { FileData } from '../drivers/types';
-import { ATTACHMENT_PROP, isEmptyNeeds, parseFrameNeeds, type AttachmentKey, type FrameNeeds } from '../engine/fieldDeps';
-import type { FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
-import { sendToFrame, type FillRequestResponse } from '../messaging';
+import { ATTACHMENT_PROP, isAttachmentKey, isEmptyNeeds, parseFrameNeeds, type AttachmentKey, type FrameNeeds } from '../engine/fieldDeps';
+import type { FieldReport, FillFilter, FillPreview, FillReport, FramePreview } from '../engine/types';
+import { getFieldKeyDef, type FieldKey } from '../schema/fieldKeys';
+import { sendToFrame, type BgToFrame, type FillRequestResponse } from '../messaging';
 import { materializeResume, type AnswerTemplates, type Resume, type SensitiveFieldMode, type SiteRecipe } from '../schema';
 import { BUILTIN_SITE_RECIPES, matchRecipesForPage } from '../recipes';
 import { isValidPresetId, type MappingPresetId } from '../templates/presets';
 import { VaultLockedError, fileToFileData, getFile, loadProfile } from '../storage';
-import { FRAME_TIMEOUT_MS, NEEDS_TIMEOUT_MS, collectFrameReports, collectFrames, listFrameIds, watchFrame } from './frames';
-import { isFramePreview, mergeFramePreviews, mergeFrameReports } from './merge';
+import { FRAME_TIMEOUT_MS, NEEDS_TIMEOUT_MS, collectFrameReports, collectFrames, listFrameIds, watchFrame, withTimeout } from './frames';
+import { isFieldReport, isFramePreview, isSectionRow, mergeFramePreviews, mergeFrameReports, sameField } from './merge';
 import { buildResumeSubset } from './subset';
-import { clearPreview, loadPreview, savePreview, saveReport } from './tabState';
+import { isRetryable } from '../fill/report';
+import { clearPreview, loadPreview, loadReport, patchStoredField, patchStoredFields, savePreview, saveReport } from './tabState';
 import { recordWizardStep, type WizardSessionState } from './wizardSession';
 
 export interface PreviewApproval {
@@ -42,6 +44,11 @@ export interface FillDeps {
    * frame is asked anything, and again before each frame gets resume data; a mismatch answers `origin_changed`.
    */
   expectOrigin?: string;
+  /**
+   * A retry: per frame, the boxes to fill again. Other frames are not asked; no cards are added; the stored report keeps
+   * its other rows and only these are replaced.
+   */
+  only?: Record<number, string[]>;
 }
 
 class OriginChangedError extends Error {}
@@ -281,7 +288,8 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     }
 
     const runId = crypto.randomUUID();
-    const frameIds = await (deps.listFrameIds ?? listFrameIds)(tabId);
+    const only = deps.only;
+    const frameIds = (await (deps.listFrameIds ?? listFrameIds)(tabId)).filter((id) => !only || (only[id]?.length ?? 0) > 0);
     const sendNeeds = deps.sendNeeds ?? defaultSendNeeds;
     const sendFill = deps.sendFill ?? defaultSendFill;
     const parts = await collectFrameReports<FrameNeeds>(
@@ -289,7 +297,7 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
       // Each frame gets the minimum it asked for: a resume subset and only the files its upload controls take.
       async (frameId, needs) => {
         await stillOnSite();
-        const filter = frameFilter(deps.approval, frameId);
+        const filter: FillFilter | undefined = only ? { onlyFieldIds: only[frameId]! } : frameFilter(deps.approval, frameId);
         const payload: FramePayload = {
           runId,
           resume: buildResumeSubset(resume, needs, sensitiveFields ? { sensitiveFields } : {}),
@@ -319,6 +327,11 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     if (parts.length === 0) return { ok: false, error: 'no_frames' };
 
     const report = mergeFrameReports(parts);
+    if (only) {
+      const patched = await patchStoredFields(tabId, report.fields);
+      if (patched) await broadcastReport(tabId, patched).catch(() => undefined);
+      return { ok: true };
+    }
     const hadPreview = deps.forceFill || (await loadPreview(tabId)) !== null;
     if (hadPreview) await clearPreview(tabId);
     await saveReport(tabId, report);
@@ -335,6 +348,74 @@ export async function runFillRequest(tabId: number, deps: FillDeps = {}): Promis
     stop();
     inFlight.delete(tabId);
   }
+}
+
+/** Fill again, frame by frame, the boxes of the stored report that failed or were not recognised. */
+export async function retryRequest(tabId: number, deps: FillDeps = {}): Promise<FillRequestResponse> {
+  const stored = await loadReport(tabId);
+  const only: Record<number, string[]> = {};
+  for (const f of stored?.fields ?? []) {
+    if (!isRetryable(f)) continue;
+    (only[f.frameId ?? 0] ??= []).push(f.fieldId);
+  }
+  if (Object.keys(only).length === 0) return { ok: false, error: 'nothing_to_retry' };
+  return runFillRequest(tabId, { ...deps, forceFill: true, only });
+}
+
+export interface FillOneInput {
+  tabId: number;
+  frameId: number;
+  fieldId: string;
+  fieldKey: string;
+}
+
+type FillOneMessage = Extract<BgToFrame, { type: 'frame:fillOne' }>;
+
+export interface FillOneDeps {
+  sendFillOne?: (tabId: number, frameId: number, msg: FillOneMessage) => Promise<unknown>;
+  timeoutMs?: number;
+}
+
+/**
+ * The side panel's "fill this one" / "use selected": the frame gets the resume's data for that one key (and the file
+ * it uploads, if it is an upload) and fills that one box. The stored row is patched; resolves to it, or null when the
+ * key is unknown, the vault is locked or the frame did not answer with a row. The applicant chose the box, so a
+ * sensitive key's value goes too.
+ */
+export async function fillOneRequest(input: FillOneInput, deps: FillOneDeps = {}): Promise<FieldReport | null> {
+  const { tabId, frameId, fieldId, fieldKey } = input;
+  const attachment = isAttachmentKey(fieldKey);
+  if (isSectionRow(fieldId) || (!attachment && !getFieldKeyDef(fieldKey))) return null;
+  let profile;
+  try {
+    profile = await loadProfile();
+  } catch (error) {
+    if (error instanceof VaultLockedError) return null;
+    throw error;
+  }
+  const raw = profile.resumes.find((r) => r.id === profile.activeResumeId);
+  if (!raw) return null;
+  const full = materializeResume(raw, profile.resumes);
+  const needs: FrameNeeds = {
+    fieldKeys: attachment ? [] : [fieldKey as FieldKey],
+    repeatSections: [],
+    attachmentKeys: attachment ? [fieldKey] : [],
+  };
+  const answerTemplates = profile.settings.answerTemplates;
+  const msg: FillOneMessage = {
+    type: 'frame:fillOne',
+    fieldId,
+    fieldKey,
+    resume: buildResumeSubset(full, needs, { sensitiveFields: 'fill' }),
+    files: await loadAttachmentFiles(full, needs.attachmentKeys, worksFileIds(full, needs)),
+    ...(answerTemplates ? { answerTemplates } : {}),
+  };
+  const send = deps.sendFillOne ?? ((t: number, f: number, m: FillOneMessage) => sendToFrame(t, f, m));
+  const answer: unknown = await withTimeout(send(tabId, frameId, msg), deps.timeoutMs ?? FRAME_TIMEOUT_MS);
+  if (!isFieldReport(answer)) return null;
+  const field: FieldReport = { ...answer, fieldId, frameId };
+  const patched = await patchStoredField(tabId, frameId, field);
+  return patched?.fields.find((f) => sameField(f, frameId, fieldId)) ?? field;
 }
 
 export async function commitPreviewRequest(

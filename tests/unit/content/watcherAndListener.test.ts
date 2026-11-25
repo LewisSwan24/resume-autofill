@@ -22,6 +22,7 @@ describe('content listener', () => {
       fill: vi.fn().mockResolvedValue({ fields: [] }),
       focus: vi.fn().mockReturnValue(true),
       apply: vi.fn().mockResolvedValue({ fieldId: 'c1' }),
+      fillOne: vi.fn().mockResolvedValue({ fieldId: 'c2', outcome: 'filled' }),
       isBusy: vi.fn().mockReturnValue(false),
     };
     listener = createContentListener(handlers as unknown as FrameHandlers);
@@ -75,6 +76,17 @@ describe('content listener', () => {
     await flush();
     expect(handlers.apply).toHaveBeenCalledWith({ fieldId: 'c1', optionLabel: 'Male' });
     expect(respond).toHaveBeenCalledWith({ fieldId: 'c1' });
+  });
+
+  it('runs frame:fillOne for a known key only', async () => {
+    const msg = { type: 'frame:fillOne', fieldId: 'c2', fieldKey: 'contact.email', resume: { id: 'x' }, files: {} };
+    expect(listener(msg, bg(), respond)).toBe(true);
+    await flush();
+    expect(handlers.fillOne).toHaveBeenCalledWith({ fieldId: 'c2', fieldKey: 'contact.email', resume: { id: 'x' }, files: {} });
+    expect(respond).toHaveBeenCalledWith({ fieldId: 'c2', outcome: 'filled' });
+    expect(listener({ ...msg, fieldKey: 'not.a.key' }, bg(), respond)).toBe(false);
+    expect(listener({ ...msg, resume: null }, bg(), respond)).toBe(false);
+    expect(handlers.fillOne).toHaveBeenCalledTimes(1);
   });
 
   it('ignores the FAB-only messages and everything unrelated', () => {

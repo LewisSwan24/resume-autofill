@@ -23,6 +23,12 @@ export function shortLabel(label: string, max = 60): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
+const RETRIED: ReadonlySet<Outcome> = new Set<Outcome>(['action_failed', 'no_option', 'unmatched']);
+
+/** A box a retry fills again: it failed, had no option to pick, or was not recognised. A section row is not a box. */
+export const isRetryable = (f: Pick<FieldReport, 'outcome' | 'fieldId'>): boolean =>
+  RETRIED.has(f.outcome) && !f.fieldId.startsWith('section:');
+
 /** Fields the user should look at: anything that is neither filled nor deliberately empty. */
 export function needsAttention(fields: readonly Pick<FieldReport, 'outcome'>[]): number {
   return fields.filter((f) => f.outcome !== 'filled' && f.outcome !== 'no_data').length;

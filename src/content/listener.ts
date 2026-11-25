@@ -2,7 +2,9 @@
 // Only commands from the background are handled: same extension id, no `sender.tab`. Everything
 // else (including `scan:total` / `report:updated`, which belong to the FAB) is left alone: returning
 // false without responding lets other listeners answer.
+import { isAttachmentKey } from '../engine/fieldDeps';
 import { isFromExtension, isValidMessage, type Sender } from '../messaging';
+import { getFieldKeyDef, type FieldKey } from '../schema/fieldKeys';
 import type { FrameHandlers } from './handlers';
 import type { StepHandlers } from './steps';
 
@@ -49,6 +51,22 @@ export function createContentListener(handlers: FrameHandlers, steps?: StepHandl
             ...(presetId ? { presetId } : {}),
             ...(Array.isArray(recipes) ? { recipes } : {}),
             ...(sensitiveFields === 'fill' ? { sensitiveFields } : {}),
+            ...(answerTemplates && typeof answerTemplates === 'object' ? { answerTemplates } : {}),
+          })
+          .then(sendResponse, () => sendResponse(undefined));
+        return true;
+      }
+      case 'frame:fillOne': {
+        const { fieldId, fieldKey, resume, files, answerTemplates } = message;
+        if (typeof fieldId !== 'string' || typeof fieldKey !== 'string') return false;
+        if (!getFieldKeyDef(fieldKey) && !isAttachmentKey(fieldKey)) return false;
+        if (typeof resume !== 'object' || resume === null || typeof files !== 'object' || files === null) return false;
+        handlers
+          .fillOne({
+            fieldId,
+            fieldKey: fieldKey as FieldKey,
+            resume,
+            files,
             ...(answerTemplates && typeof answerTemplates === 'object' ? { answerTemplates } : {}),
           })
           .then(sendResponse, () => sendResponse(undefined));

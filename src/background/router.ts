@@ -8,7 +8,7 @@ import { isFromExtension, isFromExtensionPage, isValidMessage, sendToFrame, type
 import type { FieldReport } from '../engine/types';
 import { targetOfField, type ProfileTarget } from '../editor/fieldTarget';
 import { openProfileAt } from '../ui/pages';
-import { cancelPreviewRequest, commitPreviewRequest, runFillRequest, type PreviewApproval } from './fill';
+import { cancelPreviewRequest, commitPreviewRequest, fillOneRequest, retryRequest, runFillRequest, type FillOneInput, type PreviewApproval } from './fill';
 import { isSectionRow } from './merge';
 import { frameSaysAlive, listFrameIds } from './frames';
 import { relayApply, relayCaptureFingerprint, relayFocus, type ApplyInput } from './relay';
@@ -26,6 +26,10 @@ export interface RouterDeps {
   cancelPreview?(tabId: number): Promise<void>;
   focus(tabId: number, frameId: number, fieldId: string): Promise<void>;
   apply(input: ApplyInput): Promise<FieldReport | null>;
+  /** One box by a chosen key (side panel). */
+  fillOne?(input: FillOneInput): Promise<FieldReport | null>;
+  /** Fill again the boxes that failed or were not recognised (side panel). */
+  retry?(tabId: number): Promise<FillRequestResponse>;
   captureFingerprint?(tabId: number, frameId: number, fieldId: string): Promise<SiteRecipeFingerprint | null>;
   /** A content script says it is still filling. */
   frameAlive?(tabId: number, frameId: number): void;
@@ -50,6 +54,8 @@ export const defaultRouterDeps: RouterDeps = {
   frameAlive: (tabId, frameId) => frameSaysAlive(tabId, frameId),
   focus: (tabId, frameId, fieldId) => relayFocus(tabId, frameId, fieldId),
   apply: (input) => relayApply(input),
+  fillOne: (input) => fillOneRequest(input),
+  retry: (tabId) => retryRequest(tabId),
   captureFingerprint: (tabId, frameId, fieldId) => relayCaptureFingerprint(tabId, frameId, fieldId),
   recordScan,
   pushTotal: async (tabId, total) => {
@@ -126,6 +132,12 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
         return true;
       }
 
+      case 'fill:retry': {
+        if (!fromPage || !isIndex(message.tabId)) return false;
+        (deps.retry ?? retryRequest)(message.tabId).then(sendResponse, (e) => sendResponse({ ok: false, error: errorMessage(e) }));
+        return true;
+      }
+
       case 'fill:cancelPreview': {
         if (!fromPage || !isIndex(message.tabId)) return false;
         void (deps.cancelPreview ?? cancelPreviewRequest)(message.tabId).catch(() => undefined);
@@ -154,6 +166,17 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
         if (optionLabel !== undefined) input.optionLabel = optionLabel;
         if (undo === true) input.undo = true;
         deps.apply(input).then(
+          (field) => sendResponse(field ?? undefined),
+          () => sendResponse(undefined),
+        );
+        return true;
+      }
+
+      case 'field:fill': {
+        if (!fromPage) return false;
+        const { tabId, frameId, fieldId, fieldKey } = message;
+        if (!isIndex(tabId) || !isIndex(frameId) || typeof fieldId !== 'string' || !isPath(fieldKey)) return false;
+        (deps.fillOne ?? fillOneRequest)({ tabId, frameId, fieldId, fieldKey }).then(
           (field) => sendResponse(field ?? undefined),
           () => sendResponse(undefined),
         );

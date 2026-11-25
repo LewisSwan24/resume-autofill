@@ -56,6 +56,17 @@ export function patchStoredField(tabId: number, frameId: number, field: FieldRep
   });
 }
 
+/** Replace several rows of the stored report at once (a retry of some boxes); rows it does not hold are left out. */
+export function patchStoredFields(tabId: number, fields: readonly FieldReport[]): Promise<FillReport | null> {
+  return exclusive(async () => {
+    const current = await loadReport(tabId);
+    if (!current) return null;
+    const next = fields.reduce((report, field) => patchReportField(report, field.frameId ?? 0, field), current);
+    if (next !== current) await browser.storage.session.set({ [reportKey(tabId)]: next });
+    return next;
+  });
+}
+
 // ------------------------------------------------------------------ scan totals
 
 type FrameCounts = Record<string, number>;

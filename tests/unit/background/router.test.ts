@@ -11,6 +11,8 @@ function makeDeps(): { [K in keyof RouterDeps]: ReturnType<typeof vi.fn> } {
     fill: vi.fn().mockResolvedValue({ ok: true }),
     focus: vi.fn().mockResolvedValue(undefined),
     apply: vi.fn().mockResolvedValue(field),
+    fillOne: vi.fn().mockResolvedValue(field),
+    retry: vi.fn().mockResolvedValue({ ok: true }),
     recordScan: vi.fn().mockResolvedValue(5),
     pushTotal: vi.fn().mockResolvedValue(undefined),
     currentTotal: vi.fn().mockResolvedValue(7),
@@ -176,6 +178,31 @@ describe('field:apply', () => {
     expect(route({ type: 'field:apply', tabId: '8', frameId: 0, fieldId: 'c1', text: 'x' }, pageSender(), respond)).toBe(false);
     expect(route({ type: 'field:apply', tabId: 8, frameId: 0, fieldId: 'c1', text: 5 }, pageSender(), respond)).toBe(false);
     expect(deps.apply).not.toHaveBeenCalled();
+  });
+});
+
+describe('field:fill and fill:retry (side panel)', () => {
+  it('relays one box by a key from extension pages and answers with the row', async () => {
+    expect(route({ type: 'field:fill', tabId: 8, frameId: 2, fieldId: 'c4', fieldKey: 'contact.email' }, pageSender(), respond)).toBe(true);
+    await flush();
+    expect(deps.fillOne).toHaveBeenCalledWith({ tabId: 8, frameId: 2, fieldId: 'c4', fieldKey: 'contact.email' });
+    expect(respond).toHaveBeenCalledWith(field);
+  });
+
+  it('retries a tab from extension pages', async () => {
+    expect(route({ type: 'fill:retry', tabId: 8 }, pageSender(), respond)).toBe(true);
+    await flush();
+    expect(deps.retry).toHaveBeenCalledWith(8);
+    expect(respond).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('is not available to content scripts, and rejects malformed payloads', () => {
+    expect(route({ type: 'field:fill', tabId: 8, frameId: 0, fieldId: 'c4', fieldKey: 'contact.email' }, contentSender(), respond)).toBe(false);
+    expect(route({ type: 'fill:retry', tabId: 8 }, contentSender(), respond)).toBe(false);
+    expect(route({ type: 'field:fill', tabId: 8, frameId: 0, fieldId: 'c4', fieldKey: 5 }, pageSender(), respond)).toBe(false);
+    expect(route({ type: 'fill:retry', tabId: -1 }, pageSender(), respond)).toBe(false);
+    expect(deps.fillOne).not.toHaveBeenCalled();
+    expect(deps.retry).not.toHaveBeenCalled();
   });
 });
 

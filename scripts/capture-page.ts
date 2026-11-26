@@ -1,6 +1,8 @@
 // Capture one real application page for offline regression. Loads the page only: no filling, no clicking.
 //
 //   pnpm capture --ats greenhouse --name sample-a --url <url>     public page, headless
+//   pnpm capture --ats bamboohr --name sample-a --url <url> --open '<selector>'
+//                                                                 presses the one button that shows the form first
 //   pnpm capture --ats workday --name step-1 --url <url> --login  opens a window, waits for a manual login
 //   pnpm capture --ats workday --name step-2 --url <url> --profile  reuses that login, headless
 //   pnpm capture --ats moka --name phone-a --url <url> --device mobile --locale zh-CN --login \
@@ -19,8 +21,9 @@ import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { chromium } from '@playwright/test';
+import { chromium, type Page } from '@playwright/test';
 import { capturePage } from './capture/capture.ts';
+import { openForm } from './capture/open.ts';
 import { DEFAULT_LOCALE, contextOptionsFor, parseDevice, type CaptureDevice } from './capture/device.ts';
 import { resumeTerms } from './capture/sanitize.ts';
 
@@ -47,6 +50,8 @@ const { values: args } = parseArgs({
     device: { type: 'string', default: 'desktop' },
     /** Wait for this file to appear instead of Enter, for a run with no terminal of its own. */
     'ready-file': { type: 'string' },
+    /** The button that shows the form on the same page. Never one that sends: see capture/open.ts. */
+    open: { type: 'string' },
   },
 });
 
@@ -59,6 +64,7 @@ const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 if (!args.ats || !SLUG.test(args.ats)) die('--ats must be a lowercase slug');
 if (!args.name || !SLUG.test(args.name)) die('--name must be a lowercase slug');
 if (!args.url || !/^https?:\/\//.test(args.url)) die('--url must be http(s)');
+if (args.open !== undefined && !args.open.trim()) die('--open needs the selector of the button that shows the form');
 const { ats, name, url } = { ats: args.ats, name: args.name, url: args.url };
 let device: CaptureDevice = 'desktop';
 try {
@@ -108,6 +114,17 @@ async function waitForUser(): Promise<void> {
   rl.close();
 }
 
+/** What happens between the page's load and its snapshot: the manual walk to the form, then the button that shows it. */
+function beforeSnapshot(): ((page: Page) => Promise<void>) | undefined {
+  const walk = args.login && args['ready-file'] ? `${args['ready-file']}.form` : null;
+  const open = args.open;
+  if (!walk && !open) return undefined;
+  return async (page) => {
+    if (walk) await waitForFile(walk);
+    if (open) await openForm(page, open);
+  };
+}
+
 const dir = path.join(ROOT, 'fixtures', 'captured', ats, name);
 const profileDir = profileDirArg ?? path.join(HOME, 'profiles', ats);
 if (authenticated) mkdirSync(profileDir, { recursive: true });
@@ -132,7 +149,7 @@ const result = await capturePage(context, {
   screenshots: !authenticated && !args.resume,
   beforeRecord: args.login ? waitForUser : undefined,
   // Recording by now, and past the login: the walk to the form is part of what a replay needs.
-  beforeSnapshot: args.login && args['ready-file'] ? () => waitForFile(`${args['ready-file']}.form`) : undefined,
+  beforeSnapshot: beforeSnapshot(),
 });
 await browser?.close();
 

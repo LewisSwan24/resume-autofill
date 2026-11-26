@@ -25,6 +25,18 @@ function capture(profileDir: string) {
   );
 }
 
+describe('pnpm capture --open', () => {
+  it('refuses an empty selector before a browser starts', () => {
+    const run = spawnSync(
+      process.execPath,
+      ['scripts/capture-page.ts', '--ats', 'test', '--name', 'cli', '--url', 'http://127.0.0.1:9/', '--open', ' '],
+      { cwd: ROOT, encoding: 'utf8', env: { ...process.env, HOME, USERPROFILE: HOME }, timeout: 60_000 },
+    );
+    expect(run.stderr).toContain('--open needs the selector');
+    expect(run.status).toBe(2);
+  });
+});
+
 describe('pnpm capture --profile-dir', () => {
   it.each([
     ['the repository itself', ROOT],

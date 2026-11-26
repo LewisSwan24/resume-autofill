@@ -26,6 +26,7 @@ import { replayFromHar, sameDocument } from '../shared/harReplay';
 import { fillThroughSteps, mergeReports } from '../shared/stepFill';
 import { injectHarness } from '../drivers/helpers';
 import { contextOptionsFor } from '../../scripts/capture/device';
+import { openForm } from '../../scripts/capture/open';
 import { inspect, locatorsOf, unjudgedControls } from './readState';
 
 const samples = listSamples();
@@ -67,6 +68,7 @@ async function openReplay(browser: Browser, sample: CapturedSample): Promise<{ p
   await answerSearches(context);
   const page = await context.newPage();
   await page.goto(sample.url, { waitUntil: 'load' });
+  if (sample.expected.__open) await openForm(page, sample.expected.__open);
   const firstField = Object.values(sample.expected.fields)[0]!.selector;
   await page.locator(firstField).first().waitFor({ state: 'attached', timeout: 20_000 });
   await page.waitForTimeout(800);

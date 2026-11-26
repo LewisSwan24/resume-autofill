@@ -110,6 +110,11 @@ export interface CapturedExpected {
   /** A banner the applicant answers first, which covers the FAB. Clicked in the replay only, where nothing leaves. */
   __banner?: string;
   /**
+   * The button that shows the form on the same page, as `pnpm capture --open` pressed it (BambooHR's "Apply for This
+   * Job"). A replay presses it before it looks for the form; the snapshot already shows the form.
+   */
+  __open?: string;
+  /**
    * A step form that keeps every step on the page and hides all but the one showing (Moka on a phone): the boxes of
    * its steps. The static checks show them all, so each control is judged as it will be once its step comes up.
    */

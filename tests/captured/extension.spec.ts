@@ -9,6 +9,7 @@ import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
 import { answerSearches } from '../shared/searchAnswers';
 import { replayFromHar, sameDocument } from '../shared/harReplay';
 import { inspect, locatorsOf } from './readState';
+import { openForm } from '../../scripts/capture/open';
 
 // Phones run no extensions. The app injects the engine itself, which is what the harness replay in
 // captured.spec.ts does, on the device the sample was captured with.
@@ -41,6 +42,7 @@ for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
     const run = await fillFixture(context, serviceWorker, '', sample.expected.__resume, {
       url: sample.url,
       beforeFill: async (page) => {
+        if (sample.expected.__open && !sample.readInPlace) await openForm(page, sample.expected.__open);
         await page.locator(firstField).first().waitFor({ state: 'attached', timeout: 20_000 });
         if (sample.expected.__banner) {
           await page.locator(sample.expected.__banner).first().click();

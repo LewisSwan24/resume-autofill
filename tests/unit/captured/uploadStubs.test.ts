@@ -82,6 +82,22 @@ describe('upload stubs', () => {
     expect(data).toEqual({ resumeKey: expect.any(String), resumeName: '示例-简历.pdf' });
   });
 
+  it('answers BambooHR: the file it holds for the application, under an id of its own', () => {
+    const boundary = '----replayBoundary';
+    const body = `--${boundary}\r\nContent-Disposition: form-data; name="upload"; filename="Sample-Resume.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4\r\n--${boundary}--\r\n`;
+    const request = {
+      method: 'POST',
+      url: 'https://acme.bamboohr.com/ajax/files/attachTemporary.php',
+      postData: body,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    };
+    const reply = uploadReply(request);
+    expect(reply?.status).toBe(200);
+    expect(json(reply)).toEqual({ status: 'OK', fid: expect.any(String), name: 'Sample-Resume.pdf', type: 'application/pdf', size: expect.any(Number) });
+    expect(storesItself(request)).toBe(true);
+    expect(uploadReply({ ...request, url: 'https://example.com/ajax/files/attachTemporary.php' })).toBeNull();
+  });
+
   it('a Moka upload is the file itself, so nothing waits for a storage post after it', () => {
     expect(storesItself({ method: 'POST', url: 'https://app.mokahr.com/api/outer/ats-candidate-extractor/resume/uploadAndParse/candidate' })).toBe(true);
     expect(storesItself({ method: 'GET', url: 'https://apply.workable.com/api/v1/jobs/ABC123/form/upload/resume' })).toBe(false);

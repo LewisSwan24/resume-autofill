@@ -143,6 +143,16 @@ describe('scoreSample', () => {
       expect(scoreProblems(s, expected({ __knownGaps: gap, __knownGapsMax: 1 }))).toEqual([]);
     });
 
+    it('may be gone in a replay: the page draws it only with an answer the recording lacks', () => {
+      const s = scoreSample(sample(expected({ __knownGaps: gap, __knownGapsMax: 1 })), 'harness', emptyPage, filled(), allFilled());
+      expect(s.stale).toEqual([]);
+      expect(s.gaps).toEqual(['City']);
+    });
+
+    it('is stale when it is gone from a live page', () => {
+      expect(scoreSample(sample(expected({ __knownGaps: gap, __knownGapsMax: 1 })), 'live', emptyPage, filled(), allFilled()).stale).toEqual(['City']);
+    });
+
     it('is missing on a live page when it stays empty', () => {
       expect(score('live', '').missing).toEqual(['City']);
     });

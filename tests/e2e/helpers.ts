@@ -135,6 +135,8 @@ export async function fillFixture(
     frame?: boolean;
     /** Open this address instead of a synthetic fixture (`name` is then ignored). */
     url?: string;
+    /** Runs right after the page loads, before its fields are counted: a page that shows its form on a button. */
+    afterLoad?: (page: Page) => Promise<void>;
     /** Runs once the page is open, before the FAB is clicked. */
     beforeFill?: (page: Page) => Promise<Inspection>;
     /** Fill with whichever resume is active now (`locale` is then ignored). */
@@ -147,6 +149,7 @@ export async function fillFixture(
   const url = opts.url ?? fixtureUrl(name);
   const page = await context.newPage();
   await page.goto(url);
+  await opts.afterLoad?.(page);
   if (opts.frame) await page.frameLocator('iframe[title="Additional questions"]').getByLabel('Notice period').waitFor();
 
   // A page may add to its address while it starts.

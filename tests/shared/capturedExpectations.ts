@@ -409,8 +409,11 @@ export function scoreSample(
   );
 
   const gaps = allGaps.filter(([label]) => !(label in checked)).map(([label]) => label);
+  // A live gap's box may need the answer the recording lacks before the page draws it at all (BambooHR's states,
+  // asked for once the country is chosen): gone in a replay, it is still the same gap.
+  const drawnLiveOnly = new Set(mode === 'live' ? [] : allGaps.filter(([, g]) => g.live).map(([label]) => label));
   for (const label of [...gaps, ...Object.keys(expected.__review ?? {})]) {
-    if ((after.coverage[label] ?? []).length === 0) stale.push(label);
+    if ((after.coverage[label] ?? []).length === 0 && !drawnLiveOnly.has(label)) stale.push(label);
   }
 
   const trapsFilled = (expected.__traps ?? []).flatMap((re) => {

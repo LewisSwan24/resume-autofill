@@ -99,6 +99,23 @@ const SERVICES: Service[] = [
       }),
     storesItself: true,
   },
+  {
+    // <company>.bamboohr.com: `POST /ajax/files/attachTemporary.php`, the file in multipart field `upload`. The page
+    // keeps `fid` in its hidden resumeFileId, and takes the upload only when `status` is "OK".
+    name: 'bamboohr',
+    matches: (method, url) => method === 'POST' && url.hostname.endsWith('.bamboohr.com') && url.pathname === '/ajax/files/attachTemporary.php',
+    reply: (request) => {
+      const body = request.postData ?? '';
+      return ok({
+        status: 'OK',
+        fid: 'replay-file-1',
+        name: fileName(body, 'upload') ?? 'resume.pdf',
+        type: /name="upload";[^\r\n]*\r?\nContent-Type: ([^\r\n]+)/.exec(body)?.[1] ?? 'application/octet-stream',
+        size: body.length,
+      });
+    },
+    storesItself: true,
+  },
 ];
 
 /** Whether an upload request carries the file itself, so nothing is left to wait for once it is answered. */

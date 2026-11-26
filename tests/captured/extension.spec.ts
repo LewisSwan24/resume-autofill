@@ -41,8 +41,8 @@ for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
     const firstField = Object.values(sample.expected.fields)[0]!.selector;
     const run = await fillFixture(context, serviceWorker, '', sample.expected.__resume, {
       url: sample.url,
+      ...(sample.expected.__open && !sample.readInPlace ? { afterLoad: (page) => openForm(page, sample.expected.__open!) } : {}),
       beforeFill: async (page) => {
-        if (sample.expected.__open && !sample.readInPlace) await openForm(page, sample.expected.__open);
         await page.locator(firstField).first().waitFor({ state: 'attached', timeout: 20_000 });
         if (sample.expected.__banner) {
           await page.locator(sample.expected.__banner).first().click();

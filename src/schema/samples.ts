@@ -82,7 +82,7 @@ const zhInput: ResumeInput = {
   ],
   projects: [
     {
-      name: '校园二手交易平台', role: '负责人', startDate: '2022-03', endDate: '2022-06',
+      name: '校园二手交易平台', role: '负责人', startDate: '2022-03', endDate: '2022-06', link: 'https://example.com/campus-market',
       description: '带领四人小组完成校园二手物品交易平台，负责后端接口设计与数据库建模，上线后覆盖三千余名学生。',
     },
     {
@@ -96,7 +96,7 @@ const zhInput: ResumeInput = {
       description: '为新生设计的校园导览小程序，包含教学楼地图和每周活动日历。',
     },
   ],
-  awards: [{ name: '国家奖学金', date: '2022-10', level: 'national' }],
+  awards: [{ name: '国家奖学金', date: '2022-10', level: 'national', description: '专业成绩排名前 5%，获评年度国家奖学金。' }],
   languages: [{ language: '英语', proficiency: 'fluent', listeningSpeaking: 'proficient', certificate: 'CET-6', score: '580', tests: [{ test: 'cet6', score: '580' }] }],
   certificates: [{ name: '全国计算机等级考试二级', date: '2021-09' }],
   skills: [{ name: 'Python' }, { name: 'TypeScript' }, { name: 'SQL' }],
@@ -138,6 +138,7 @@ const enInput: ResumeInput = {
     },
     linkedin: 'https://www.linkedin.com/in/zhiyuan-lin-example',
     github: 'https://github.com/zhiyuan-lin-example',
+    portfolio: 'https://example.com/zhiyuan-lin',
   },
   workRights: {
     status: 'graduate_visa',

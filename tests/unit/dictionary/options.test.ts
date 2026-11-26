@@ -121,6 +121,13 @@ describe('matchOption: canonical codes via synonym groups', () => {
     expect(pick('workRightsStatus', 'citizen', o)).toBe('Australian citizen');
     expect(pick('workRightsStatus', 'permanent_resident', o)).toBe('Permanent resident');
   });
+  it('workRightsStatus: any temporary visa is "On a Working/Student Visa" (Teamtailor)', () => {
+    const o = opts('Australian citizen', 'Permanent resident', 'On a Working/Student Visa', 'None of the above');
+    for (const visa of ['graduate_visa', 'student_visa', 'working_holiday', 'other_temporary']) {
+      expect(pick('workRightsStatus', visa, o), visa).toBe('On a Working/Student Visa');
+    }
+    expect(pick('workRightsStatus', 'citizen', o)).toBe('Australian citizen');
+  });
   it('workRightsStatus on a list of visa kinds named briefly (Breezy)', () => {
     const o = opts('Student', 'Temporary Graduate', 'Work and Holiday', 'Skilled', 'Covid', 'Other');
     expect(pick('workRightsStatus', 'graduate_visa', o)).toBe('Temporary Graduate');

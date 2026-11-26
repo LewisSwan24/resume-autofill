@@ -333,6 +333,11 @@ function derived(fieldKey: FieldKey, resume: Resume, opts: ResolveOptions): Reso
       if (oldest === null || youngest === null || oldest >= 18 !== youngest >= 18) return null;
       return { raw: oldest >= 18, source: 'basics.birthDate' };
     }
+    case 'workRights.citizen': {
+      // A citizen of the country the work rights are for: anyone on any other footing, a permanent resident too, is not.
+      const status = resume.workRights.status;
+      return status ? { raw: status === 'citizen', source: 'workRights.status' } : null;
+    }
     case 'workRights.citizenOrResident': {
       const status = resume.workRights.status;
       if (status === 'citizen' || status === 'permanent_resident') return { raw: true, source: 'workRights.status' };

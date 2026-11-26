@@ -225,8 +225,9 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   // ------------------------------------------------------------ work rights
   'workRights.status': s(
     '工作权利|工作许可|工作资格|签证状态|工作身份|在澳工作权利|工作签证状态|居留状态|身份状态',
-    'Work rights|Work rights status|Work authorisation|Work authorization|Visa status|Working rights|Citizenship status|Residency status|Immigration status|Visa/work rights|Current work rights|Work rights in Australia|Work rights in your country',
-    '担保|赞助|需要|是否有|sponsor|do you have|full work|are you|require',
+    'Work rights|Work rights status|Work authorisation|Work authorization|Visa status|Working rights|Citizenship status|Residency status|Immigration status|Visa/work rights|Current work rights|Work rights in Australia|Work rights in your country|What are your working rights in Australia|What are your work rights in Australia|Working rights in Australia|What are your working rights|What are your work rights',
+    // Yes/no questions about the status go to their own keys; "What are your working rights" still asks for it.
+    '担保|赞助|需要|是否有|是否为|sponsor|do you have|full work|are you a|are you legally|are you eligible|are you currently|are you permitted|require',
   ),
   'workRights.visaType': s(
     '签证类型|签证种类|签证类别|签证子类|持有签证类型',
@@ -247,6 +248,12 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Are you an Australian citizen or permanent resident|Are you an Australian Citizen, Permanent Resident or a New Zealand Citizen|Are you an Australian citizen, permanent resident or New Zealand citizen|Are you a citizen or permanent resident|Australian citizen or permanent resident|Australian citizen, permanent resident or New Zealand citizen|Citizen or permanent resident',
     '',
     'permanent resident|permanent residency|permanent residence|永久居民|永久居留|永居',
+  ),
+  'workRights.citizen': s(
+    '是否为澳大利亚公民|是否澳大利亚公民|是否为澳洲公民|是否拥有澳大利亚国籍|是否为本国公民',
+    'Are you an Australian citizen|Australian citizen|Do you hold Australian citizenship|Are you a citizen of Australia|Australian citizenship',
+    // Permanent residents are asked about too in those questions, and another country's citizenship is not this one.
+    'permanent|resident|永久|居民|new zealand|新西兰|nz citizen|status|状态',
   ),
   'workRights.hasFullWorkRights': s(
     '是否拥有完整工作权利|是否有工作权利|是否有合法工作资格|是否可以合法工作|完整工作权利|是否有完整工作权利|是否有权在澳工作',

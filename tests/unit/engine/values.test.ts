@@ -104,6 +104,15 @@ describe('resolveValue', () => {
     expect(adult('', new Date(2026, 10, 20))).toBeUndefined();
   });
 
+  it('works out "citizen" from work rights: only a citizen is one, and an unknown status says nothing', () => {
+    const holding = (status: string) =>
+      resolveValue('workRights.citizen', { ...en, workRights: { ...en.workRights, status } } as Resume, 0, 'workRights')?.raw;
+    expect(resolveValue('workRights.citizen', en, 0, 'workRights')).toEqual({ raw: false, source: 'workRights.status' });
+    expect(holding('citizen')).toBe(true);
+    for (const s of ['permanent_resident', 'graduate_visa', 'student_visa', 'working_holiday', 'other_temporary', 'no_rights']) expect(holding(s), s).toBe(false);
+    expect(holding('')).toBeUndefined();
+  });
+
   it('works out "citizen or permanent resident" from work rights, and stays quiet when it cannot tell', () => {
     const holding = (status: string, nationality = '') =>
       resolveValue('workRights.citizenOrResident', { ...en, basics: { ...en.basics, nationality }, workRights: { ...en.workRights, status } } as Resume, 0, 'workRights')?.raw;

@@ -104,6 +104,7 @@ export const FIELD_KEYS: FieldKeyDef[] = [
     requiresSponsorship: yesNo(), hasFullWorkRights: yesNo(),
   }),
   def('workRights.citizenOrResident', 'bool', ['workRights', 'basics', 'other'], { derived: true, enumDomain: 'yesNo' }),
+  def('workRights.citizen', 'bool', ['workRights', 'basics', 'other'], { derived: true, enumDomain: 'yesNo' }),
 
   ...module('jobIntention', ['jobIntention', 'other'], {
     positions: 'list', cities: 'list', industry: 'text', employmentType: ['enum', 'employmentType'],

@@ -54,10 +54,21 @@ describe('screening questions', () => {
     expect(classify(ask).fieldKey).not.toBe('workRights.citizenOrResident');
   });
 
+  it.each(['Are you an Australian citizen?', 'Are you an Australian Citizen?', '是否为澳大利亚公民？'])('%s → citizen', (ask) => {
+    const c = classify(ask);
+    expect(c.fieldKey).toBe('workRights.citizen');
+    expect(c.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+  });
+
+  it('leaves another country’s citizenship alone: the work rights are for one country', () => {
+    expect(classify('Are you a New Zealand citizen?').fieldKey).not.toBe('workRights.citizen');
+  });
+
   it.each([
     ['Age', 'basics.age', '<input id="q" type="text">'],
     ['Citizenship', 'basics.nationality', '<input id="q" type="text">'],
     ['Citizenship status', 'workRights.status', '<input id="q" type="text">'],
+    ['What are your working rights in Australia?', 'workRights.status', '<select id="q"><option></option><option>Australian citizen</option><option>Permanent resident</option><option>On a Working/Student Visa</option></select>'],
     ['Do you have full work rights in Australia?', 'workRights.hasFullWorkRights', '<select id="q"><option></option><option>Yes</option><option>No</option></select>'],
   ])('leaves %s to %s', (label, key, control) => {
     document.body.innerHTML = `<div><label for="q">${label}</label>${control}</div>`;
@@ -90,5 +101,16 @@ describe('the visa question', () => {
     const [rights, visa] = scanDocument(document).classifications;
     expect(rights!.fieldKey).toBe('workRights.status');
     expect(visa!.fieldKey).not.toBe('workRights.status');
+  });
+});
+
+describe('the working-rights question with its kinds listed (Teamtailor)', () => {
+  it('is the work-rights status, sure enough to fill', () => {
+    const kinds = ['Australian citizen', 'Permanent resident', 'On a Working/Student Visa', 'None of the above'];
+    document.body.innerHTML = `<fieldset><legend>What are your working rights in Australia? <span>*</span> Required</legend>
+      ${kinds.map((k, i) => `<label><input type="radio" name="wr" value="${i}">${k}</label>`).join('')}</fieldset>`;
+    const c = scanDocument(document).classifications[0]!;
+    expect(c.fieldKey).toBe('workRights.status');
+    expect(c.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
   });
 });

@@ -77,6 +77,18 @@ async function waitForUploadRead(doc: Document, busy: string, justUploaded: bool
 }
 
 /** Looks in the largest box around this input that holds no other file input, so another slot's file does not count. */
+/** How long a page that empties its file box may take to list the file it took. */
+const HELD_FILE_MS = 2500;
+
+/** The file box itself, or the one the page put in its place after taking a file: same id, else same name. */
+function liveFileBox(box: Element, doc: Document): Element | null {
+  if (box.isConnected) return box;
+  const id = box.getAttribute('id');
+  const name = box.getAttribute('name');
+  const boxes = Array.from(doc.querySelectorAll('input[type="file"]'));
+  return boxes.find((el) => id && el.id === id) ?? boxes.find((el) => name && el.getAttribute('name') === name) ?? null;
+}
+
 function holdsFile(input: Element, held: HeldFile, name: string): boolean {
   let box: Element = input;
   while (box.parentElement && box.parentElement.querySelectorAll('input[type="file"]').length === 1) box = box.parentElement;
@@ -313,8 +325,21 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
     }
     if (step.intent.kind === 'file') uploaded = true;
     const started = performance.now();
-    const result = { ...(await runStep(step, controls, doc)), ms: Math.round(performance.now() - started) };
+    let result = { ...(await runStep(step, controls, doc)), ms: Math.round(performance.now() - started) };
     opts.onProgress?.();
+    // A page that takes the file into a list of its own leaves an empty box, often a new one in place of the old: the
+    // list, a render later, says the file went in.
+    if (step.intent.kind === 'file' && result.outcome === 'action_failed' && box && adapter?.heldFile) {
+      const { heldFile } = adapter;
+      const name = step.intent.file.name;
+      const listed = (): boolean => {
+        const live = liveFileBox(box, doc);
+        return live !== null && holdsFile(live, heldFile, name);
+      };
+      if (await waitFor(listed, { timeout: HELD_FILE_MS, root: doc })) {
+        result = { ...result, outcome: 'filled', observed: name };
+      }
+    }
     if (step.intent.kind === 'file' && step.fieldKey === 'attachments.resume' && result.outcome === 'filled') resumeTaken = true;
     // Filled because the applicant chose to: the row still says it was a sensitive field.
     results.push(result.outcome === 'filled' && isSensitiveFieldKey(step.fieldKey) ? { ...result, note: 'sensitive_filled' } : result);

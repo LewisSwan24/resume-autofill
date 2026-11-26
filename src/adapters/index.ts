@@ -4,6 +4,7 @@ import { beisen, bytedanceCampus, feishu, moka, nowcoderCampus, tencentCareers }
 import { greenhouse } from './greenhouse';
 import { lever } from './lever';
 import { pageup } from './pageup';
+import { personio } from './personio';
 import { rippling } from './rippling';
 import { smartrecruiters } from './smartrecruiters';
 import { successfactors } from './successfactors';
@@ -21,6 +22,7 @@ export const ADAPTERS: readonly AtsAdapter[] = [
   ashby,
   smartrecruiters,
   rippling,
+  personio,
   moka,
   beisen,
   // Before ByteDance: on a domain of its own, a form of this system is Feishu's.

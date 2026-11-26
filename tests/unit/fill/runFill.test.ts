@@ -310,6 +310,57 @@ describe('runFill on a page that keeps the file it already holds', () => {
   });
 });
 
+describe('runFill on a page that takes a file into its own list and empties the box', () => {
+  const en = createSampleProfile().resumes.find((r) => r.id === 'sample-en')!;
+  const name = files['sample-resume-en']!.name;
+
+  /**
+   * Personio's box: on change it puts a fresh input where the old one was, and a render later lists the file with a
+   * Remove button.
+   */
+  function mountTaking(takes: boolean, withAdapter = true): void {
+    document.body.innerHTML = `<form><div role="group" aria-labelledby="doc-label-cv">
+      <div id="doc-label-cv">CV</div>
+      <div><div role="list"></div><button type="button">Add file</button>
+      <input id="doc-input-cv" type="file" aria-label="Upload CV" name="${withAdapter ? 'documents.cv' : 'cv'}"></div>
+    </div></form>`;
+    const list = document.querySelector('[role="list"]')!;
+    // On the form, as React listens: every input the page puts in its place behaves the same.
+    document.querySelector('form')!.addEventListener('change', (e) => {
+      const box = e.target as HTMLInputElement;
+      const file = box.files?.[0];
+      if (takes && file) {
+        // Well past the driver's own wait for the box: only the list tells that the file went in.
+        setTimeout(() => {
+          list.innerHTML = `<div role="listitem"><span>${file.name}</span><button type="button" aria-label="Remove ${file.name}">x</button></div>`;
+        }, 1500);
+      }
+      box.replaceWith(box.cloneNode());
+    });
+  }
+
+  const row = (report: { fields: { label: string; outcome: string; observed?: string | null }[] }) =>
+    report.fields.find((f) => /^CV/.test(f.label));
+
+  it('reports the file filled once the page lists it', async () => {
+    mountTaking(true);
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)).toMatchObject({ outcome: 'filled', observed: name });
+  });
+
+  it('still reports a failure when the page lists nothing', async () => {
+    mountTaking(false);
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)?.outcome).toBe('action_failed');
+  });
+
+  it('needs the adapter to read a list as the page holding the file', async () => {
+    mountTaking(true, false);
+    const { report } = await runFill(document, { resume: en, files });
+    expect(row(report)?.outcome).toBe('action_failed');
+  });
+});
+
 describe('runFill on entries the page already holds', () => {
   /** The resume's schools under made-up names; the page lists them under other wording. */
   const aliased = structuredClone(zh);

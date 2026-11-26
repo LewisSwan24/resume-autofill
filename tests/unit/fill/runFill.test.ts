@@ -361,6 +361,39 @@ describe('runFill on a page that takes a file into its own list and empties the 
   });
 });
 
+describe('runFill on a state list that the country fills in', () => {
+  const en = createSampleProfile().resumes.find((r) => r.id === 'sample-en')!;
+  const STATES: Record<string, string[]> = {
+    US: ['Utah', 'Texas'],
+    AU: ['Australian Capital Territory', 'New South Wales'],
+  };
+
+  /** State above Country, as BambooHR lays them out: the states on offer are the chosen country's. */
+  function mountAddress(): void {
+    document.body.innerHTML = `<form>
+      <div><label for="city">City</label><input id="city"></div>
+      <div><label for="state">State</label><select id="state"></select></div>
+      <div><label for="country">Country</label><select id="country">
+        <option value="US" selected>United States</option><option value="AU">Australia</option></select></div>
+    </form>`;
+    const country = document.getElementById('country') as HTMLSelectElement;
+    const state = document.getElementById('state') as HTMLSelectElement;
+    const offer = (): void => {
+      state.innerHTML = ['<option value="">-Select-</option>', ...STATES[country.value]!.map((s) => `<option>${s}</option>`)].join('');
+    };
+    offer();
+    country.addEventListener('change', offer);
+  }
+
+  it('picks the country first, so the state comes from that country', async () => {
+    mountAddress();
+    const { report } = await runFill(document, { resume: en, files });
+    expect((document.getElementById('country') as HTMLSelectElement).value).toBe('AU');
+    expect((document.getElementById('state') as HTMLSelectElement).value).toBe('Australian Capital Territory');
+    expect(report.fields.find((f) => f.label === 'State')?.outcome).toBe('filled');
+  });
+});
+
 describe('runFill on entries the page already holds', () => {
   /** The resume's schools under made-up names; the page lists them under other wording. */
   const aliased = structuredClone(zh);

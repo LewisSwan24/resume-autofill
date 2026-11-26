@@ -297,8 +297,10 @@ export async function runFill(doc: Document, payload: FillPayload, opts: RunFill
   }
 
   const results: FieldReport[] = [...plan.reports, ...left].filter((r) => !only || only.has(r.fieldId));
-  // Files first: many forms read an uploaded resume and write over their fields with what they find.
-  const steps = [...plannedSteps].sort((a, b) => Number(b.intent.kind === 'file') - Number(a.intent.kind === 'file'));
+  // Files first: many forms read an uploaded resume and write over their fields with what they find. Then the
+  // country: a page may offer only that country's states once it is chosen, wherever its box sits.
+  const stepRank = (s: FillStep): number => (s.intent.kind === 'file' ? 0 : s.fieldKey === 'contact.addressCountry' ? 1 : 2);
+  const steps = [...plannedSteps].sort((a, b) => stepRank(a) - stepRank(b));
   const uploadBusy = adapter?.uploadBusy;
   let uploaded = false;
   // Only a resume the page took can start a read, so only then is the adapter's longer sign window worth waiting.

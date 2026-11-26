@@ -29,9 +29,21 @@ const SECRET_ATTR_REV_RE = new RegExp(
   'gi',
 );
 
-// An address starts where a word does, or right after an escape a script or a URL put before it, so the
-// escape stays whole: a backslash and u with four hex digits, a backslash and a letter, a % and two hex digits.
-const EMAIL_RE = /(?:(?<=\\u[\da-fA-F]{4}|\\[nrtbf]|%[\da-fA-F]{2})|(?<![\w.+%\\-]))[\w.+-]+(?:@|%40)[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}/g;
+// Matched wherever it starts, so nothing in front of an address can hide it. See `splitEscape`.
+const EMAIL_RE = /[\w.+-]+(?:@|%40)[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}/g;
+const AFTER_BACKSLASH = /^(?:u[\da-fA-F]{4}|x[\da-fA-F]{2}|[a-zA-Z])/;
+const AFTER_PERCENT = /^[\da-fA-F]{2}/;
+
+/**
+ * A match that starts right after a backslash or a % began inside an escape a script or a URL put before the
+ * address (>, \x3e, \n, %3C). That escape is kept whole and only the rest is the address.
+ */
+function splitEscape(m: string, at: number, s: string): { escape: string; address: string } {
+  const lead = s[at - 1] === BACKSLASH ? AFTER_BACKSLASH : s[at - 1] === '%' ? AFTER_PERCENT : null;
+  const escape = lead?.exec(m)?.[0] ?? '';
+  const address = m.slice(escape.length);
+  return escape && /^[\w.+-]+(?:@|%40)/.test(address) ? { escape, address } : { escape: '', address: m };
+}
 const ASSET_SUFFIX = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|woff2?|ttf|json|html?)$/i;
 const EMAIL_PLACEHOLDER = /^redacted-\d+@example\.invalid$/i;
 
@@ -345,7 +357,10 @@ export class Scrubber {
     s = s.replace(SECRET_ATTR_REV_RE, secret);
     s = s.replace(SECRET_QUERY_RE, (m, pre: string, value: string) => secret(m, pre, value));
     s = s.replace(SECRET_COOKIE_RE, (m, pre: string, value: string) => secret(m, pre, value));
-    s = s.replace(EMAIL_RE, (m) => (isRealEmail(m) ? this.placeholder('email', m) : m));
+    s = s.replace(EMAIL_RE, (m: string, at: number, all: string) => {
+      const { escape, address } = splitEscape(m, at, all);
+      return isRealEmail(address) ? `${escape}${this.placeholder('email', address)}` : m;
+    });
     if (this.cn) {
       s = s.replace(ID_CARD_RE, (m) => (isIdCard(m) ? this.placeholder('id-card', m.replace(/[ -]/g, '')) : m));
       // The prefix stays, so "+86 " written by the page and by page script around the number match alike.
@@ -493,7 +508,10 @@ function scanText(text: string, where: string, terms: RegExp[], cn = false): Fin
   const add = (kind: Finding['kind'], value: string): void => {
     out.push({ kind, where, sample: mask(value) });
   };
-  for (const m of text.match(EMAIL_RE) ?? []) if (isRealEmail(m)) add('email', m);
+  for (const m of text.matchAll(EMAIL_RE)) {
+    const { address } = splitEscape(m[0], m.index, text);
+    if (isRealEmail(address)) add('email', address);
+  }
   for (const m of text.match(JWT_RE) ?? []) add('secret', m);
   for (const re of [SECRET_QUOTED_RE, SECRET_QUERY_RE, SECRET_COOKIE_RE, SECRET_ATTR_RE, SECRET_ATTR_REV_RE]) {
     for (const m of text.matchAll(re)) {

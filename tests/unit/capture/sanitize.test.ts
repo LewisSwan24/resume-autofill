@@ -805,6 +805,15 @@ describe('pages built with Next.js', () => {
     expect(new Scrubber().text('q=%3Cjane%40corp.example%3E')).toBe('q=%3Credacted-1@example.invalid%3E');
   });
 
+  it('finds an address after any escape, and the audit finds what a scrub would have missed', () => {
+    for (const before of [`${BS}x3e`, `${BS}${BS}`, `${BS}v`, '%2B']) {
+      expect(new Scrubber().text(`a${before}jane@corp.example`)).not.toContain('jane@corp');
+      expect(auditHtml(`<p>a${before}jane@corp.example</p>`).map((f) => f.kind)).toContain('email');
+    }
+    expect(new Scrubber().text(`a${BS}x3ejane@corp.example`)).toBe(`a${BS}x3eredacted-1@example.invalid`);
+    expect(auditHtml(`<p>a${BS}x3eredacted-1@example.invalid ${u('>')}redacted-2@example.invalid</p>`)).toEqual([]);
+  });
+
   it('gives a text row the length of its scrubbed text', () => {
     const text = 'Write to jane@corp.example — thanks'; // the dash is three bytes
     const flight = `0:["$","div",null,{}]\n1:T${bytes(text).toString(16)},${text}2:["$","p",null,{}]\n`;

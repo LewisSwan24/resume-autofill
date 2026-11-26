@@ -111,11 +111,13 @@ export function triageCounts(rows: TriageRow[]): TriageCounts {
 }
 
 /** Controls a resume could answer are all but the deliberately empty and the site's own; orphans are report rows. */
-export function coverageOf(counts: TriageCounts): { controls: number; answerable: number; rate: number } {
+export function coverageOf(counts: TriageCounts): { controls: number; answerable: number; rate: number; actionable: number } {
   const n = (t: Triage): number => counts[t] ?? 0;
   const controls = TRIAGES.filter((t) => t !== 'orphan').reduce((sum, t) => sum + n(t), 0);
   const answerable = controls - n('keep') - n('site_own');
-  return { controls, answerable, rate: answerable === 0 ? 0 : Math.round((1000 * n('filled')) / answerable) / 10 };
+  // What a later version can still win: a field to add, a word to teach, a driver to fix, a value the sample lacks.
+  const actionable = n('no_field') + n('no_dictionary') + n('no_driver') + n('no_value');
+  return { controls, answerable, rate: answerable === 0 ? 0 : Math.round((1000 * n('filled')) / answerable) / 10, actionable };
 }
 
 /** Merged by sample: Playwright empties test-results at the start of a run. */

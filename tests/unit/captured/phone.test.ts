@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FillReport } from '../../../src/engine/types';
 import {
+  blocksAcceptance,
   phoneShortfalls,
   renderAccuracyTable,
   scoreSample,
@@ -93,6 +94,16 @@ describe('phoneShortfalls', () => {
   it('flags a phone capture whose page has several desktop captures, rather than pick one', () => {
     const rows = [row('step-1', 'desktop', 10, 10), row('step-2', 'desktop', 5, 10), row('phone', 'mobile', 10, 10)];
     expect(phoneShortfalls(rows)).toMatchObject([{ phone: 'ats/phone', why: 'several_desktops' }]);
+  });
+
+  it('lets a phone capture with no desktop capture of its page pass, listed, while a low or ambiguous one fails', () => {
+    const lone = phoneShortfalls([row('phone', 'mobile', 10, 10)]);
+    expect(lone).toMatchObject([{ why: 'no_desktop' }]);
+    expect(lone.filter(blocksAcceptance)).toEqual([]);
+    const low = phoneShortfalls([row('desk', 'desktop', 10, 10), row('phone', 'mobile', 5, 10)]);
+    expect(low.filter(blocksAcceptance)).toHaveLength(1);
+    const several = phoneShortfalls([row('step-1', 'desktop', 10, 10), row('step-2', 'desktop', 5, 10), row('phone', 'mobile', 10, 10)]);
+    expect(several.filter(blocksAcceptance)).toHaveLength(1);
   });
 
   it('has nothing to say about desktop captures alone', () => {

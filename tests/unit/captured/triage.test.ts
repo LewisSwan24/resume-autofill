@@ -159,18 +159,18 @@ describe('coverage', () => {
   it('counts categories and leaves deliberate and site-own controls out of what can be answered', () => {
     const counts = triageCounts(rows());
     expect(counts).toMatchObject({ filled: 1, missing: 1, keep: 1, site_own: 1, no_field: 1, orphan: 1 });
-    // 10 judged controls, minus keep and site_own: 8 answerable, 1 filled.
-    expect(coverageOf(counts)).toEqual({ controls: 10, answerable: 8, rate: 12.5 });
+    // 10 judged controls, minus keep and site_own: 8 answerable, 1 filled. Still to win: no_field, no_value, no_dictionary and two no_driver.
+    expect(coverageOf(counts)).toEqual({ controls: 10, answerable: 8, rate: 12.5, actionable: 5 });
   });
 
   it('adds coverage to the accuracy table, and a dash for a row recorded before triage', () => {
     const score = scoreSample({ ats: 'ats', name: 's', expected }, 'harness', before, after, fillReport);
     const withTriage = { ...score, triage: triageCounts(rows()) };
     const table = renderAccuracyTable([withTriage, { ...score, sample: 'ats/old' }]);
-    expect(table).toContain('| 页面栏位 | 可答 | 覆盖率 | 未识别 | 简历没有 |');
+    expect(table).toContain('| 页面栏位 | 可答 | 覆盖率 | 可补 | 未识别 | 简历没有 |');
     const line = (name: string) => table.split('\n').find((l) => l.startsWith(`| ${name} |`))!;
-    expect(line('ats/s')).toMatch(/\| 10 \| 8 \| 12\.5% \| 0 \| 0 \|/);
-    expect(line('ats/old')).toMatch(/\| — \| — \| — \| 0 \| 0 \|/);
+    expect(line('ats/s')).toMatch(/\| 10 \| 8 \| 12\.5% \| 5 \| 0 \| 0 \|/);
+    expect(line('ats/old')).toMatch(/\| — \| — \| — \| — \| 0 \| 0 \|/);
   });
 });
 

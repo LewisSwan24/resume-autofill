@@ -590,11 +590,20 @@ export function phoneShortfalls(rows: SampleScore[]): PhoneShortfall[] {
   });
 }
 
-/** Page controls, those a resume could answer, and the share of those filled; dashes on a row recorded before triage. */
+/**
+ * Whether a phone shortfall fails the acceptance: a phone below the floor, or one whose page has several desktop
+ * captures to choose from. A phone with no desktop capture of its page cannot be checked; the table says so.
+ */
+export const blocksAcceptance = (s: PhoneShortfall): boolean => s.why !== 'no_desktop';
+
+/**
+ * Page controls, those a resume could answer, the share of those filled, and how many unfilled ones a later version can
+ * still win (可补); dashes on a row recorded before triage.
+ */
 function coverageCells(r: SampleScore): string {
-  if (!r.triage) return '— | — | —';
+  if (!r.triage) return '— | — | — | —';
   const c = coverageOf(r.triage);
-  return `${c.controls} | ${c.answerable} | ${c.rate}%`;
+  return `${c.controls} | ${c.answerable} | ${c.rate}% | ${c.actionable}`;
 }
 
 const NO_RATIO: Record<NoPartner, string> = { no_desktop: '无电脑版', several_desktops: '电脑版不止一个' };
@@ -632,8 +641,8 @@ export function renderAccuracyTable(rows: SampleScore[]): string {
     return 0;
   });
   const lines = [
-    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 代答后才填 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 页面栏位 | 可答 | 覆盖率 | 未识别 | 简历没有 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
-    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| 样本 | 设备 | 运行方式 | 应填 | 填对 | 填对率 | 代答后才填 | 错填 | 漏填 | 其中已知 | 误报 | 应留空 | 动了应留空 | 错认字段 | 待确认 | 操作失败 | 页面栏位 | 可答 | 覆盖率 | 可补 | 未识别 | 简历没有 | 耗时（秒） | 手机填对率 | 手机/电脑 |',
+    '|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
     ...body.map((b) => b.line),
   ];
   return `${lines.join('\n')}\n`;

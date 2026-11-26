@@ -29,7 +29,9 @@ const SECRET_ATTR_REV_RE = new RegExp(
   'gi',
 );
 
-const EMAIL_RE = /[\w.+-]+(?:@|%40)[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}/g;
+// An address starts where a word does, or right after an escape a script or a URL put before it, so the
+// escape stays whole: a backslash and u with four hex digits, a backslash and a letter, a % and two hex digits.
+const EMAIL_RE = /(?:(?<=\\u[\da-fA-F]{4}|\\[nrtbf]|%[\da-fA-F]{2})|(?<![\w.+%\\-]))[\w.+-]+(?:@|%40)[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}/g;
 const ASSET_SUFFIX = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|woff2?|ttf|json|html?)$/i;
 const EMAIL_PLACEHOLDER = /^redacted-\d+@example\.invalid$/i;
 
@@ -67,6 +69,63 @@ const isIdCard = (raw: string): boolean => {
 // The ID card placeholder is 9000000 and a counter: all digits with no leading zero, so it stays a valid JSON
 // number, and its "birth year" 00 means it never matches an ID card or a mobile again.
 const SCRIPT_BLOCK = /(<script\b[\s\S]*?<\/script>)/gi;
+
+// A Next.js page carries its data as JSON strings pushed onto self.__next_f, read in order as one stream of
+// rows. A text row states its length in UTF-8 bytes ("1:T2a,"), so it is scrubbed as decoded text and given
+// its new length; any other row ends at a newline. A stream that does not read this way is left to the plain
+// scrub, which keeps the data clean but may leave the page unable to load on replay.
+const FLIGHT_OPEN = 'self.__next_f.push([1,';
+const BACKSLASH = String.fromCharCode(92);
+const FLIGHT_TOKEN = /__RAF_FLIGHT_(\d+)__/g;
+const SCRIPT_UNSAFE = new RegExp(`[<>&${String.fromCharCode(0x2028, 0x2029)}]`, 'g');
+const utf8Length = (s: string): number => new TextEncoder().encode(s).length;
+
+/** Where a text of `bytes` UTF-8 bytes starting at `from` ends, or -1 when the stream holds fewer. */
+function afterBytes(s: string, from: number, bytes: number): number {
+  let i = from;
+  let n = 0;
+  while (n < bytes) {
+    if (i >= s.length) return -1;
+    const cp = s.codePointAt(i)!;
+    n += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    i += cp > 0xffff ? 2 : 1;
+  }
+  return n === bytes ? i : -1;
+}
+
+/** The end of the JSON string literal whose opening quote is at `from`, just past its closing quote. */
+function literalEnd(s: string, from: number): number {
+  for (let i = from + 1; i < s.length; i++) {
+    if (s[i] === BACKSLASH) i++;
+    else if (s[i] === '"') return i + 1;
+  }
+  return -1;
+}
+
+/** As Next.js writes a string into a script: JSON, with nothing that could end the script or the line. */
+const forScript = (s: string): string =>
+  JSON.stringify(s).replace(SCRIPT_UNSAFE, (c) => `${BACKSLASH}u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+
+interface FlightLiteral {
+  start: number;
+  end: number;
+  value: string;
+}
+
+function flightLiterals(html: string): FlightLiteral[] | null {
+  const out: FlightLiteral[] = [];
+  for (let at = html.indexOf(FLIGHT_OPEN); at >= 0; at = html.indexOf(FLIGHT_OPEN, at + 1)) {
+    const start = at + FLIGHT_OPEN.length;
+    const end = html[start] === '"' ? literalEnd(html, start) : -1;
+    if (end < 0 || !html.startsWith('])', end)) return null;
+    try {
+      out.push({ start, end, value: JSON.parse(html.slice(start, end)) as string });
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
 // Subresource integrity vouches for the original bytes. Scrubbing changes them and the browser would refuse
 // the script, so hashes are emptied in markup, manifests and bundles alike. This only touches the local sample.
 const INTEGRITY_RE = /(["']?\bintegrity["']?\s*[:=]\s*["'])sha(?:256|384|512)-[\w+/=\s-]+(["'])/gi;
@@ -313,10 +372,52 @@ export class Scrubber {
    * or a script under an unrelated key can only be caught by the term list.
    */
   html(input: string): string {
-    return input
+    const flight = this.flight(input);
+    const out = (flight?.html ?? input)
       .split(SCRIPT_BLOCK)
       .map((part, i) => this.text(part, i % 2 === 1 ? {} : { phones: 'all' }))
       .join('');
+    return flight ? out.replace(FLIGHT_TOKEN, (_m, i: string) => flight.literals[Number(i)]!) : out;
+  }
+
+  /** A Next.js page's data stream, scrubbed row by row. Its strings stand aside as tokens while the rest is scrubbed. */
+  private flight(input: string): { html: string; literals: string[] } | null {
+    const found = flightLiterals(input);
+    if (!found?.length) return null;
+    const stream = found.map((l) => l.value).join('');
+    const starts: number[] = [];
+    found.reduce((at, l) => (starts.push(at), at + l.value.length), 0);
+    const chunks = found.map(() => '');
+    for (let p = 0; p < stream.length; ) {
+      const colon = stream.indexOf(':', p);
+      if (colon < 0 || !/^[0-9a-f]*$/.test(stream.slice(p, colon))) return null;
+      let row: string;
+      let next: number;
+      if (stream[colon + 1] === 'T') {
+        const head = /^T([0-9a-f]+),/.exec(stream.slice(colon + 1, colon + 24));
+        const from = colon + 1 + (head?.[0].length ?? 0);
+        next = head ? afterBytes(stream, from, parseInt(head[1]!, 16)) : -1;
+        if (next < 0) return null;
+        const text = this.text(stream.slice(from, next));
+        row = `${stream.slice(p, colon)}:T${utf8Length(text).toString(16)},${text}`;
+      } else {
+        const nl = stream.indexOf('\n', colon);
+        next = nl < 0 ? stream.length : nl + 1;
+        row = this.text(stream.slice(p, next));
+      }
+      // A row goes back into the push it started in.
+      let chunk = starts.length - 1;
+      while (starts[chunk]! > p) chunk--;
+      chunks[chunk] += row;
+      p = next;
+    }
+    let html = '';
+    let at = 0;
+    found.forEach((l, i) => {
+      html += `${input.slice(at, l.start)}__RAF_FLIGHT_${i}__`;
+      at = l.end;
+    });
+    return { html: html + input.slice(at), literals: chunks.map(forScript) };
   }
 
   body(input: string, mime: string | undefined): string {

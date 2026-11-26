@@ -777,3 +777,61 @@ describe('mainland mobiles and ID numbers in other shapes', () => {
     expect(audit(t)).toEqual([]);
   });
 });
+
+describe('pages built with Next.js', () => {
+  // The page's data travels inside the HTML as JSON strings pushed onto self.__next_f. A text row in it says
+  // its own length in UTF-8 bytes ("1:T17,"), so a placeholder longer or shorter than what it replaces
+  // breaks the stream, and React shows "This page couldn't load" on replay.
+  const BS = String.fromCharCode(92);
+  /** A JSON escape as the page's script holds it: a backslash, u, four hex digits. */
+  const u = (ch: string): string => `${BS}u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+  const OPEN = 'self.__next_f.push([1,';
+  const push = (chunk: string): string =>
+    `<script>${OPEN}${JSON.stringify(chunk).replace(/</g, u('<')).replace(/>/g, u('>'))}])</script>`;
+  const stream = (html: string): string => {
+    let out = '';
+    for (let at = html.indexOf(OPEN); at >= 0; at = html.indexOf(OPEN, at + 1)) {
+      const start = at + OPEN.length;
+      out += JSON.parse(html.slice(start, html.indexOf('])</script>', start))) as string;
+    }
+    return out;
+  };
+  const bytes = (s: string): number => new TextEncoder().encode(s).length;
+
+  it('keeps an escape that stands right before an e-mail address', () => {
+    const out = new Scrubber().text(`${u('<')}a href="mailto:x"${u('>')}jane@corp.example${u('<')}/a${u('>')}`);
+    expect(out).toContain(`${u('>')}redacted-1@example.invalid${u('<')}/a`);
+    expect(new Scrubber().text(`line${BS}njane@corp.example`)).toBe(`line${BS}nredacted-1@example.invalid`);
+    expect(new Scrubber().text('q=%3Cjane%40corp.example%3E')).toBe('q=%3Credacted-1@example.invalid%3E');
+  });
+
+  it('gives a text row the length of its scrubbed text', () => {
+    const text = 'Write to jane@corp.example — thanks'; // the dash is three bytes
+    const flight = `0:["$","div",null,{}]\n1:T${bytes(text).toString(16)},${text}2:["$","p",null,{}]\n`;
+    const out = stream(new Scrubber().html(push(flight)));
+    const m = /1:T([0-9a-f]+),/.exec(out)!;
+    const scrubbed = 'Write to redacted-1@example.invalid — thanks';
+    expect(parseInt(m[1]!, 16)).toBe(bytes(scrubbed));
+    expect(out.slice(m.index + m[0].length)).toBe(`${scrubbed}2:["$","p",null,{}]\n`);
+    expect(out.startsWith('0:["$","div",null,{}]\n')).toBe(true);
+  });
+
+  it('follows a text row from one push into the next', () => {
+    const text = 'Ask jane@corp.example about <b>it</b>';
+    const flight = `1:T${bytes(text).toString(16)},${text}2:"x"\n`;
+    const cut = flight.indexOf('about');
+    const out = new Scrubber().html(`${push(flight.slice(0, cut))}<p>between</p>${push(flight.slice(cut))}`);
+    expect(out).not.toContain('jane@corp');
+    expect(out).toContain('<p>between</p>');
+    expect(out).not.toContain('<b>it');
+    const s = stream(out);
+    const m = /^1:T([0-9a-f]+),/.exec(s)!;
+    const body = 'Ask redacted-1@example.invalid about <b>it</b>';
+    expect(parseInt(m[1]!, 16)).toBe(bytes(body));
+    expect(s.slice(m[0].length)).toBe(`${body}2:"x"\n`);
+  });
+
+  it('leaves a stream it cannot read to the plain scrub', () => {
+    expect(new Scrubber().html(push('not a flight row jane@corp.example'))).not.toContain('jane@corp');
+  });
+});

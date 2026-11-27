@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test, expect } from '../e2e/fixtures';
 import { fillFixture } from '../e2e/helpers';
 import { listSamples, recordScore, replayOptionsFor, scoreLine, scoreProblems, scoreSample } from '../shared/capturedExpectations';
-import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
+import { uploadsFor, type UploadStubs } from '../shared/uploadStubs';
 import { answerSearches } from '../shared/searchAnswers';
 import { replayFromHar, sameDocument } from '../shared/harReplay';
 import { inspect, locatorsOf } from './readState';
@@ -21,7 +21,7 @@ for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
     let uploads: UploadStubs = { settled: async () => {} };
     if (!sample.readInPlace) {
       await replayFromHar(context, path.join(sample.dir, 'page.har'), /^https?:\/\//, replayOptionsFor(sample.expected, sample.url, sample.storage));
-      uploads = await answerUploads(context);
+      uploads = await uploadsFor(context, sample.expected);
       await answerSearches(context);
     } else {
       // A step read in place has no recording: its snapshot, and nothing else.

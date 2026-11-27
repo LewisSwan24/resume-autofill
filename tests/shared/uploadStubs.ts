@@ -176,6 +176,12 @@ const SETTLE_MS = 5_000;
 const SHOW_MS = 300;
 
 /** Register after `routeFromHAR`: a later route is asked first, and anything not an upload falls back to the recording. */
+/** A sample whose recording answers its uploads (`__uploads: "recorded"`): no stubs, a moment for the page to show the file. */
+export async function uploadsFor(context: BrowserContext, expected: { __uploads?: 'recorded' }): Promise<UploadStubs> {
+  if (expected.__uploads !== 'recorded') return answerUploads(context);
+  return { settled: () => new Promise((resolve) => setTimeout(resolve, 1_000)) };
+}
+
 export async function answerUploads(context: BrowserContext): Promise<UploadStubs> {
   let handedOut = 0;
   let stored = 0;

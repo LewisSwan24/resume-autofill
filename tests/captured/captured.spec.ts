@@ -21,7 +21,7 @@ import {
   verdictSelectors,
 } from '../shared/capturedExpectations';
 import { recordTriage, triageCounts, triageSample, untaggedEntries } from '../shared/coverageTriage';
-import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
+import { uploadsFor, type UploadStubs } from '../shared/uploadStubs';
 import { answerSearches } from '../shared/searchAnswers';
 import { replayFromHar, sameDocument } from '../shared/harReplay';
 import { fillThroughSteps, mergeReports } from '../shared/stepFill';
@@ -65,7 +65,7 @@ async function openReplay(browser: Browser, sample: CapturedSample): Promise<{ p
   // Anything not in the HAR is aborted, so the page cannot reach the site either. Uploads get stub answers,
   // and a place search the HAR never saw gets the service's own answer from the live page, if one was saved.
   await replayFromHar(context, path.join(sample.dir, 'page.har'), undefined, replayOptionsFor(sample.expected, sample.url, sample.storage));
-  const uploads = await answerUploads(context);
+  const uploads = await uploadsFor(context, sample.expected);
   await answerSearches(context);
   const page = await context.newPage();
   await page.goto(sample.url, { waitUntil: 'load' });
@@ -93,7 +93,7 @@ for (const sample of samples) {
         await injectHarness(page);
         await showHiddenSteps(page, sample);
         const wanted = Object.entries(sample.expected.fields).flatMap(([label, f]) =>
-          f.fieldKey && !f.liveOnlyKey && !f.added ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
+          f.fieldKey && !f.liveOnlyKey && !f.added && !f.goneInSnapshot ? [{ label, selector: f.control ?? f.selector, fieldKey: f.fieldKey }] : [],
         );
         const rows = await page.evaluate((items) => {
           const { contexts, classifications } = window.__raf.scanDocument(document);

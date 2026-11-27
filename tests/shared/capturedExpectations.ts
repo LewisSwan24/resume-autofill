@@ -36,6 +36,11 @@ export interface CapturedField {
   /** On an entry the fill adds: the page before the fill has no such control to judge. Replays still check it. */
   added?: true;
   /**
+   * The snapshot was taken after the recording sent the file, and the page swapped the box for its list of files
+   * (BambooHR): the snapshot has no box to judge. Replays still check it.
+   */
+  goneInSnapshot?: true;
+  /**
    * The control keeps its answer as text with no input behind it (a date on wheels): `selector` names the boxes
    * showing it, read as their text, two of them as a start and an end joined by ' ~ '.
    */
@@ -120,6 +125,11 @@ export interface CapturedExpected {
    * its consent, which the applicant gave while recording. A replay arrives with that recorded post.
    */
   __arrive?: 'post';
+  /**
+   * `recorded`: the recording holds the answer to the page's upload (the applicant chose the sample's file while
+   * recording), so a replay answers it from there and no stub of ours stands in.
+   */
+  __uploads?: 'recorded';
   /**
    * Session storage a signed-in visitor has on the page's origin, with made-up values: the sign-in the recorded page
    * read its answers with (Oracle Recruiting's `vt`). A replay puts it in place before the page's scripts run.
@@ -290,7 +300,7 @@ function entryRows(report: FillReport, label: string, labelRe: string | undefine
 /** Every selector that gives a control on the page its verdict. */
 export function verdictSelectors(expected: CapturedExpected): string[] {
   const of = (f: CapturedField): string[] => {
-    if (f.added) return [];
+    if (f.added || f.goneInSnapshot) return [];
     if (f.control) return [f.control];
     return f.exists || f.follows ? [] : [f.selector];
   };

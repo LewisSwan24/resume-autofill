@@ -55,7 +55,11 @@ function splitEscape(m: string, at: number, s: string): { escape: string; addres
   const lead = s[at - 1] === BACKSLASH ? AFTER_BACKSLASH : s[at - 1] === '%' ? AFTER_PERCENT : null;
   const escape = lead?.exec(m)?.[0] ?? '';
   const address = m.slice(escape.length);
-  return escape && /^[\w.+-]+(?:@|%40)/.test(address) ? { escape, address } : { escape: '', address: m };
+  if (!escape) return { escape: '', address: m };
+  // With the escape set apart, nothing may be left before the @: the page shows only the domain ("@corp.example").
+  // That is no address, and taking the escape's tail as its name would break the escape.
+  if (/^(?:@|%40)/.test(address)) return { escape, address: '' };
+  return /^[\w.+-]+(?:@|%40)/.test(address) ? { escape, address } : { escape: '', address: m };
 }
 const ASSET_SUFFIX = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|woff2?|ttf|json|html?)$/i;
 const EMAIL_PLACEHOLDER = /^redacted-\d+@example\.invalid$/i;
@@ -192,7 +196,7 @@ function termRes(terms: string[] | undefined): RegExp[] {
     });
 }
 
-const isRealEmail = (m: string): boolean => !ASSET_SUFFIX.test(m) && !EMAIL_PLACEHOLDER.test(m.replace('%40', '@'));
+const isRealEmail = (m: string): boolean => m !== '' && !ASSET_SUFFIX.test(m) && !EMAIL_PLACEHOLDER.test(m.replace('%40', '@'));
 
 export interface ScrubOptions {
   /** Literal strings that must not survive: the account holder's name, address, and so on. */

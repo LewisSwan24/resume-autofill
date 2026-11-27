@@ -830,6 +830,14 @@ describe('pages built with Next.js', () => {
     expect(auditHtml(`<p>a${BS}x3eredacted-1@example.invalid ${u('>')}redacted-2@example.invalid</p>`)).toEqual([]);
   });
 
+  it('takes no escape for the name in an address: a page may show only the part from the @ on', () => {
+    // Personio's footer links "impressum" and "@1komma5grad.com" apart; in page script the second reads >@...
+    const text = `"${u('>')}impressum${u('<')}/a${u('>')}${u('<')}a${u('>')}@corp.example${u('<')}/a${u('>')}"`;
+    expect(new Scrubber().text(text)).toBe(text);
+    expect(auditHtml(`<script>var s = ${text}</script>`).filter((f) => f.kind === 'email')).toEqual([]);
+    expect(new Scrubber().text(`${u('>')}jane@corp.example`)).toBe(`${u('>')}redacted-1@example.invalid`);
+  });
+
   it('gives a text row the length of its scrubbed text', () => {
     const text = 'Write to jane@corp.example — thanks'; // the dash is three bytes
     const flight = `0:["$","div",null,{}]\n1:T${bytes(text).toString(16)},${text}2:["$","p",null,{}]\n`;

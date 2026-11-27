@@ -859,6 +859,11 @@ export function sanitizeStorage(items: Record<string, string>, scrub: Scrubber):
   return out;
 }
 
+/** Identifying values left in a piece of text: an address, a phone, a secret, a listed term. */
+export function auditText(text: string, where: string, opts: ScrubOptions = {}): Finding[] {
+  return scanText(text, where, termRes(opts.terms), opts.cn);
+}
+
 export function auditStorage(items: Record<string, string>, opts: ScrubOptions = {}): Finding[] {
   const terms = termRes(opts.terms);
   const out: Finding[] = [];

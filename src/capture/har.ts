@@ -68,13 +68,32 @@ function query(url: string): HarPair[] {
   }
 }
 
+/** How long a read of a body may take before the recording goes on without it. */
+const READ_TIMEOUT_MS = 5000;
+
 export class HarRecorder {
   /** Addresses whose answer Chrome no longer held when asked for it: replayed with an empty body. */
   readonly unreadBodies: string[] = [];
   private readonly order: Open[] = [];
   private readonly open = new Map<string, Open>();
 
-  constructor(private readonly send: CdpSend) {}
+  private readonly readTimeoutMs: number;
+
+  constructor(
+    private readonly send: CdpSend,
+    opts: { readTimeoutMs?: number } = {},
+  ) {
+    this.readTimeoutMs = opts.readTimeoutMs ?? READ_TIMEOUT_MS;
+  }
+
+  /** One read of the debugger, given up after a while: Chrome may never answer for a file sent as multipart. */
+  private ask(method: string, params: object): Promise<unknown> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${method} did not answer`)), this.readTimeoutMs);
+    });
+    return Promise.race([this.send(method, params), late]).finally(() => clearTimeout(timer));
+  }
 
   /** One event from chrome.debugger.onEvent. Others than the Network ones below are ignored. */
   event(method: string, params: unknown): void {
@@ -186,7 +205,7 @@ export class HarRecorder {
 
   private async readBody(requestId: string, entry: RecordedEntry): Promise<void> {
     try {
-      const { body, base64Encoded } = (await this.send('Network.getResponseBody', { requestId })) as { body: string; base64Encoded: boolean };
+      const { body, base64Encoded } = (await this.ask('Network.getResponseBody', { requestId })) as { body: string; base64Encoded: boolean };
       entry.response.content.text = body;
       if (base64Encoded) entry.response.content.encoding = 'base64';
     } catch {
@@ -197,7 +216,7 @@ export class HarRecorder {
 
   private async readPostData(requestId: string): Promise<string | undefined> {
     try {
-      return ((await this.send('Network.getRequestPostData', { requestId })) as { postData: string }).postData;
+      return ((await this.ask('Network.getRequestPostData', { requestId })) as { postData: string }).postData;
     } catch {
       return undefined;
     }

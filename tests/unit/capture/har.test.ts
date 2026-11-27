@@ -110,6 +110,23 @@ describe('HarRecorder', () => {
     expect(sent.filter((s) => s.startsWith('Network.getRequestPostData'))).toEqual(['Network.getRequestPostData p']);
   });
 
+  // Chrome may never answer for a body: a file sent as multipart, a stream. The recording still ends, without that body.
+  it('stops waiting for a body or a POST body Chrome never answers for', async () => {
+    const silent: CdpSend = () => new Promise(() => {});
+    const rec = new HarRecorder(silent, { readTimeoutMs: 20 });
+    rec.event('Network.requestWillBeSent', {
+      ...request('u', 'https://x.example.com/upload'),
+      type: 'XHR',
+      request: { url: 'https://x.example.com/upload', method: 'POST', headers: { 'Content-Type': 'multipart/form-data; boundary=b' }, hasPostData: true },
+    });
+    rec.event('Network.responseReceived', response('u', 'https://x.example.com/upload', 200, 'application/json'));
+    rec.event('Network.loadingFinished', finished('u'));
+    const [entry] = (await rec.har()).log.entries;
+    expect(entry!.request.postData).toEqual({ mimeType: 'multipart/form-data; boundary=b' });
+    expect(entry!.response.content.text).toBeUndefined();
+    expect(rec.unreadBodies).toEqual(['https://x.example.com/upload']);
+  });
+
   it('keeps a binary body as base64, and counts a body Chrome no longer holds', async () => {
     const { send } = fakeSend({ img: { body: 'iVBORw0K', base64Encoded: true }, gone: new Error('No data found') });
     const rec = new HarRecorder(send);

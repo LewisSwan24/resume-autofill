@@ -94,4 +94,21 @@ describe('side panel fills of its own', () => {
     await open([kept]);
     expect(screen.queryByRole('button', { name: /^Retry/ })).toBeNull();
   });
+
+  // A page that holds an earlier resume (a site's own resume, being updated): every box that kept its answer takes the
+  // resume's in one press, and the button goes once none is left.
+  it('writes the resume over every box that kept its own answer, in one press, and only when there are some', async () => {
+    const town: FieldReport = { ...kept, fieldId: 'h2', label: 'Town', fieldKey: 'basics.currentLocation', observed: 'Old town' };
+    const sent = await open([kept, town, failed]);
+    fireEvent.click(screen.getByRole('button', { name: 'Replace with resume (2)' }));
+    await waitFor(() => {
+      expect(sent).toContainEqual({ type: 'field:fill', tabId: TAB_ID, frameId: 0, fieldId: 'h1', fieldKey: 'contact.addressCity' });
+      expect(sent).toContainEqual({ type: 'field:fill', tabId: TAB_ID, frameId: 0, fieldId: 'h2', fieldKey: 'basics.currentLocation' });
+    });
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Replace with resume/ })).toBeNull());
+    expect(sent.filter((m) => m.type === 'field:fill' && m.fieldId === 'f1')).toEqual([]);
+    cleanup();
+    await open([failed]);
+    expect(screen.queryByRole('button', { name: /^Replace with resume/ })).toBeNull();
+  });
 });

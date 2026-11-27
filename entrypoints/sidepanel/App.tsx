@@ -8,7 +8,7 @@ import { Icon } from '../../src/ui/Icon';
 import { LanguageToggle } from '../../src/ui/LanguageToggle';
 import { HELP_PAGE, openExtensionPage, openProfilePage } from '../../src/ui/pages';
 import type { StatusGroupId } from '../../src/ui/status';
-import { isRetryable } from '../../src/fill/report';
+import { isHeldAnswer, isRetryable } from '../../src/fill/report';
 import { FilterChips } from './FilterChips';
 import { countGroups, filterByGroups, sortBySeverity, toggleGroup } from './model';
 import { EmptyState, IconButton, LoadingList, Notice, Toast } from './parts';
@@ -51,6 +51,7 @@ export default function App() {
   const { report, loading, error, reload, patchField } = useReport(tabId);
   const { focus, apply, fillOne } = useFieldActions(tabId, patchField);
   const [retryBusy, setRetryBusy] = useState(false);
+  const [replaceBusy, setReplaceBusy] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<StatusGroupId>>(new Set());
   const [switchFailed, setSwitchFailed] = useState(false);
   const [inspectorActive, setInspectorActive] = useState(false);
@@ -105,6 +106,20 @@ export default function App() {
       setRetryBusy(false);
     }
   }, [tabId, t]);
+
+  // A page holding an earlier resume (a site's own resume, being updated): the resume's answers over every box that
+  // kept its own, one box after another, the way "fill this one" writes one.
+  const heldRows = useMemo(() => fields.filter(isHeldAnswer), [fields]);
+  const replaceHeld = useCallback(async () => {
+    setReplaceBusy(true);
+    try {
+      let done = 0;
+      for (const field of heldRows) if ((await fillOne(field, field.fieldKey!)).ok) done += 1;
+      setToast({ id: Date.now(), text: done === heldRows.length ? t('panel.replaceHeldDone', { done }) : t('panel.replaceHeldPartial', { done, left: heldRows.length - done }) });
+    } finally {
+      setReplaceBusy(false);
+    }
+  }, [heldRows, fillOne, t]);
 
   const commitPreview = useCallback(
     async (payload: PreviewCommitPayload) => {
@@ -485,6 +500,12 @@ export default function App() {
                   <button type="button" className="raf-btn" disabled={retryBusy} onClick={() => void retry()}>
                     <Icon name="arrow-clockwise" size={14} />
                     <span>{t('panel.retryRows', { n: retryCount })}</span>
+                  </button>
+                ) : null}
+                {heldRows.length > 0 ? (
+                  <button type="button" className="raf-btn" disabled={replaceBusy} onClick={() => void replaceHeld()}>
+                    <Icon name="arrow-clockwise" size={14} />
+                    <span>{t('panel.replaceHeld', { n: heldRows.length })}</span>
                   </button>
                 ) : null}
                 {report && isHttpUrl(report.url) ? (

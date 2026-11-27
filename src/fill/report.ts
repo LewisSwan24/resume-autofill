@@ -37,6 +37,9 @@ const RETRIED: ReadonlySet<Outcome> = new Set<Outcome>(['action_failed', 'no_opt
 export const isRetryable = (f: Pick<FieldReport, 'outcome' | 'fieldId'>): boolean =>
   RETRIED.has(f.outcome) && !f.fieldId.startsWith('section:');
 
+/** A box the fill left because it held an answer of the applicant's own: one the resume's can be written over. */
+export const isHeldAnswer = (f: Pick<FieldReport, 'note' | 'fieldKey'>): boolean => f.note === 'answer_held' && f.fieldKey !== null;
+
 /** Fields the user should look at: anything that is neither filled nor deliberately empty. */
 export function needsAttention(fields: readonly Pick<FieldReport, 'outcome'>[]): number {
   return fields.filter((f) => f.outcome !== 'filled' && f.outcome !== 'no_data').length;

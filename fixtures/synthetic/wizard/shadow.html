@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <title>Single-page application in steps, drawn by a web component (wizard fixture)</title>
+  </head>
+  <body>
+    <h1>Internship application</h1>
+    <!-- The steps, their fields and their Next buttons live in an open shadow root, as web-component forms keep them. -->
+    <x-apply-form></x-apply-form>
+    <template id="steps">
+      <div id="app">
+        <section data-step="1">
+          <h2>Step 1: About you</h2>
+          <div class="row"><label for="s-first">First name</label> <input id="s-first" name="first_name" required autocomplete="off" /></div>
+          <div class="row"><label for="s-last">Last name</label> <input id="s-last" name="last_name" required autocomplete="off" /></div>
+          <div class="row"><label for="s-email">Email</label> <input id="s-email" name="email" type="email" required autocomplete="off" /></div>
+          <div role="button" tabindex="0" class="next">下一步</div>
+        </section>
+        <section data-step="2" hidden>
+          <h2>Step 2: Questions</h2>
+          <div class="row"><label for="s-phone">Mobile number</label> <input id="s-phone" name="phone" type="tel" autocomplete="off" /></div>
+          <div class="row"><label><input type="checkbox" name="confirm_true" required /> 本人确认以上信息真实</label></div>
+          <div role="button" tabindex="0" class="back">上一步</div>
+          <div role="button" tabindex="0" class="next">下一步</div>
+        </section>
+        <section data-step="3" hidden>
+          <h2>Step 3: Send</h2>
+          <div role="button" tabindex="0" class="back">上一步</div>
+          <button type="button" id="send">提交申请</button>
+        </section>
+      </div>
+    </template>
+    <script type="module">
+      import { countSends, singlePage } from './wizard.ts';
+      const host = document.querySelector('x-apply-form');
+      const root = host.attachShadow({ mode: 'open' });
+      root.append(document.getElementById('steps').content.cloneNode(true));
+      singlePage(root.getElementById('app'));
+      countSends(root.getElementById('send'));
+    </script>
+  </body>
+</html>

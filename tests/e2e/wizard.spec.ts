@@ -78,3 +78,36 @@ test("on a step with nothing to fill, the card does not show the last step's num
   expect(names.some((n) => /\d+ filled/.test(n)), "step 1's numbers are gone").toBe(false);
   expect(await sends(page)).toBeNull();
 });
+
+test('advances a form whose steps sit in an iframe, pressing Next inside it', async ({ context, serviceWorker }) => {
+  const { page, tabId } = await fillFixture(context, serviceWorker, 'wizard', 'en-AU', {
+    url: `${FIXTURE_ORIGIN}/wizard/framed.html`,
+  });
+  const form = page.frameLocator('iframe[title="Application form"]');
+  await expect(form.locator('#s-first')).not.toHaveValue('');
+  await startAdvance(page);
+
+  await expect
+    .poll(async () => (await wizardOf(serviceWorker, tabId))?.advance, { timeout: 60_000 })
+    .toEqual({ running: false, steps: 1, stopReason: 'needs_you' });
+  await expect(form.locator('section[data-step="2"]')).toBeVisible();
+  await expect(form.locator('#s-phone'), 'step 2 was filled').not.toHaveValue('');
+  expect(await form.locator('input[name="confirm_true"]').isChecked()).toBe(false);
+  expect(await sends(page)).toBeNull();
+});
+
+test('advances a form drawn in an open shadow root', async ({ context, serviceWorker }) => {
+  const { page, tabId } = await fillFixture(context, serviceWorker, 'wizard', 'en-AU', {
+    url: `${FIXTURE_ORIGIN}/wizard/shadow.html`,
+  });
+  await expect(page.locator('#s-first')).not.toHaveValue('');
+  await startAdvance(page);
+
+  await expect
+    .poll(async () => (await wizardOf(serviceWorker, tabId))?.advance, { timeout: 60_000 })
+    .toEqual({ running: false, steps: 1, stopReason: 'needs_you' });
+  // Playwright's CSS locators pierce open shadow roots.
+  await expect(page.locator('section[data-step="2"]')).toBeVisible();
+  await expect(page.locator('#s-phone'), 'step 2 was filled').not.toHaveValue('');
+  expect(await sends(page)).toBeNull();
+});

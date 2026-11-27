@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { EXT, expect, test } from './fixtures';
 import { FIXTURE_ORIGIN, fabBox, fillFixture, fixtureUrl, waitForSeed } from './helpers';
@@ -99,6 +99,8 @@ test('the parsers and local AI fetchers are not in what runs on pages, and the m
   }
   const manifest = JSON.parse(read('manifest.json')) as { permissions: string[]; content_security_policy?: { extension_pages?: string } };
   expect(manifest.permissions.sort()).toEqual(['sidePanel', 'storage', 'unlimitedStorage', 'webNavigation']);
+  // The recorder's page and its debugger come only with RAF_RECORDER=1, built into a folder of its own.
+  expect(existsSync(path.join(EXT, 'recorder.html'))).toBe(false);
   const csp = manifest.content_security_policy?.extension_pages ?? '';
   expect(csp).toContain("connect-src 'self' http://127.0.0.1:11434 http://localhost:11434;");
   expect(csp).not.toMatch(/https:/);

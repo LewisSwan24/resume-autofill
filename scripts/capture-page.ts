@@ -15,8 +15,7 @@
 // Logins live outside the repository in ~/.raf-capture/profiles/<ats>. Logged-in captures require
 // ~/.raf-capture/scrub-terms.txt (one literal per line: name, address, and so on), because no pattern can
 // recognise a person's name. They also skip screenshots, which cannot be scrubbed.
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
@@ -25,11 +24,12 @@ import { chromium, type Page } from '@playwright/test';
 import { capturePage } from './capture/capture.ts';
 import { openForm } from './capture/open.ts';
 import { DEFAULT_LOCALE, contextOptionsFor, parseDevice, type CaptureDevice } from './capture/device.ts';
-import { resumeTerms } from '../src/capture/sanitize.ts';
+import { CHECKLIST } from '../src/capture/checklist.ts';
+import { captureHome, readTerms, termsFile } from './capture/terms.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const HOME = path.join(homedir(), '.raf-capture');
-const TERMS_FILE = path.join(HOME, 'scrub-terms.txt');
+const HOME = captureHome();
+const TERMS_FILE = termsFile();
 
 const { values: args } = parseArgs({
   options: {
@@ -85,15 +85,10 @@ if (profileDirArg) {
 }
 const authenticated = args.login || args.profile || profileDirArg !== undefined;
 let terms: string[] = [];
-if (existsSync(TERMS_FILE)) {
-  terms = readFileSync(TERMS_FILE, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-}
-if (args.resume) {
-  try {
-    terms = [...new Set([...terms, ...resumeTerms(JSON.parse(readFileSync(args.resume, 'utf8')))])];
-  } catch (error) {
-    die(`cannot read --resume: ${(error as Error).message}`);
-  }
+try {
+  terms = readTerms(args.resume);
+} catch (error) {
+  die(`cannot read --resume: ${(error as Error).message}`);
 }
 if (authenticated && terms.length === 0) die(`logged-in capture needs terms in ${TERMS_FILE} or a --resume`);
 
@@ -124,6 +119,10 @@ function beforeSnapshot(): ((page: Page) => Promise<void>) | undefined {
     if (open) await openForm(page, open);
   };
 }
+
+// What only the applicant can see to, before anything is recorded.
+console.log('Before recording:');
+for (const item of CHECKLIST) console.log(`  - ${item.text}`);
 
 const dir = path.join(ROOT, 'fixtures', 'captured', ats, name);
 const profileDir = profileDirArg ?? path.join(HOME, 'profiles', ats);

@@ -32,6 +32,35 @@ describe('sameDocument', () => {
   });
 });
 
+/** A multipart body as Chrome sends one; Chrome's recording leaves the file's bytes out. */
+const multipart = (boundary: string, parts: { name: string; filename?: string; type?: string; value: string }[]): string =>
+  parts
+    .map(
+      (p) =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="${p.name}"${p.filename ? `; filename="${p.filename}"` : ''}\r\n` +
+        `${p.type ? `Content-Type: ${p.type}\r\n` : ''}\r\n${p.value}\r\n`,
+    )
+    .join('') + `--${boundary}--\r\n`;
+
+describe('stableTwin and a file sent as multipart', () => {
+  const URL_UP = 'https://jobs.example.test/ajax/files/attachTemporary.php';
+  const recorded = post(URL_UP, multipart('----WebKitFormBoundaryAAAA', [{ name: 'upload', filename: 'resume.pdf', type: 'application/pdf', value: '' }]));
+
+  it('answers the same upload from the recording, whatever its boundary and the bytes of its file', () => {
+    const sent = post(URL_UP, multipart('----WebKitFormBoundaryBBBB', [{ name: 'upload', filename: 'resume.pdf', type: 'application/pdf', value: '%PDF-1.4 bytes' }]));
+    expect(stableTwin(sent, [recorded])).toEqual(recorded);
+  });
+
+  it('tells apart another file, another field, or another value beside the file', () => {
+    const other = (parts: Parameters<typeof multipart>[1]) => stableTwin(post(URL_UP, multipart('----X', parts)), [recorded]);
+    expect(other([{ name: 'upload', filename: 'cover.pdf', type: 'application/pdf', value: '' }])).toBeNull();
+    expect(other([{ name: 'attachment', filename: 'resume.pdf', type: 'application/pdf', value: '' }])).toBeNull();
+    const withJob = post(URL_UP, multipart('----A', [{ name: 'job', value: '30' }, { name: 'upload', filename: 'resume.pdf', value: '' }]));
+    expect(stableTwin(post(URL_UP, multipart('----B', [{ name: 'job', value: '31' }, { name: 'upload', filename: 'resume.pdf', value: 'x' }])), [withJob])).toBeNull();
+    expect(stableTwin(post(URL_UP, multipart('----B', [{ name: 'job', value: '30' }, { name: 'upload', filename: 'resume.pdf', value: 'x' }])), [withJob])).toEqual(withJob);
+  });
+});
+
 describe('stableTwin', () => {
   it('leaves a request the recording holds exactly to the recording', () => {
     const recorded = [get('https://api.example.test/list?_=1700000000000&q=a')];

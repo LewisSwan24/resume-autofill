@@ -72,6 +72,31 @@ const canonical = (value: unknown): string =>
 
 const FORM = /^[^=&]+=[^&]*(&[^=&]+=[^&]*)*$/;
 
+const MULTIPART_START = /^--([^\r\n]+)\r\n/;
+const PART_NAME = /\bname="([^"]*)"/i;
+const PART_FILE = /\bfilename="([^"]*)"/i;
+
+/**
+ * A multipart body by its parts: a file by its field and its name, a field by its value. The boundary is new on every
+ * send, and a recording holds no file's bytes (Chrome leaves them out), so neither tells two uploads apart.
+ */
+function multipartParts(text: string): { name: string; filename?: string; value?: string }[] | null {
+  const boundary = MULTIPART_START.exec(text)?.[1];
+  if (!boundary) return null;
+  const parts: { name: string; filename?: string; value?: string }[] = [];
+  for (const chunk of text.split(`--${boundary}`).slice(1)) {
+    if (chunk.startsWith('--')) break;
+    const split = chunk.indexOf('\r\n\r\n');
+    if (split < 0) return null;
+    const head = chunk.slice(0, split);
+    const name = PART_NAME.exec(head)?.[1];
+    if (name === undefined) return null;
+    const filename = PART_FILE.exec(head)?.[1];
+    parts.push(filename !== undefined ? { name, filename } : { name, value: chunk.slice(split + 4).replace(/\r\n$/, '') });
+  }
+  return parts;
+}
+
 /** What a request asks for once the fields it may differ in are set aside, or null when it cannot be read. */
 function stableKey(request: RecordedRequest): string | null {
   let url: URL;
@@ -90,7 +115,10 @@ function stableKey(request: RecordedRequest): string | null {
       body = { json: Object.fromEntries(Object.entries(parsed as Record<string, unknown>).filter(([k, v]) => !ignore(k, v))) };
     }
   } catch {
-    if (FORM.test(text)) {
+    // Multipart first: its "name=" would pass for a form.
+    const parts = multipartParts(text);
+    if (parts) body = { multipart: parts.filter((p) => p.filename !== undefined || !ignore(p.name, p.value)) };
+    else if (FORM.test(text)) {
       body = { form: [...new URLSearchParams(text)].filter(([k, v]) => !ignore(k, v)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) };
     }
   }

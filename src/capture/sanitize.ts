@@ -561,6 +561,8 @@ function scanText(text: string, where: string, terms: RegExp[], cn = false): Fin
 const SHOW_TEXT = 0x4;
 const SHOW_COMMENT = 0x80;
 
+// This extension's floating button (entrypoints/fab.content), in a page recorded with the extension on.
+const OWN_UI = 'raf-fab';
 const KEEP_VALUE_TYPES = new Set(['radio', 'checkbox', 'submit', 'button', 'reset', 'image']);
 const REMOVE_SELECTOR = 'script,noscript,link,base,object,embed,applet,meta[http-equiv]';
 const VISIBLE_ATTRS = new Set(['href', 'title', 'alt', 'placeholder', 'aria-label', 'value', 'content']);
@@ -574,6 +576,7 @@ function allRoots(root: ParentNode): ParentNode[] {
 
 function cleanRoot(root: ParentNode, scrub: Scrubber, doc: Document): void {
   for (const el of root.querySelectorAll(REMOVE_SELECTOR)) el.remove();
+  for (const el of root.querySelectorAll(OWN_UI)) el.remove();
   for (const el of root.querySelectorAll('meta[name]')) {
     if (/csrf|xsrf|token/i.test(el.getAttribute('name') ?? '')) el.remove();
   }

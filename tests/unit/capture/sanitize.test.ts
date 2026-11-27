@@ -99,6 +99,12 @@ describe('sanitizeStaticHtml', () => {
   const clean = (html: string, opts?: { css?: string; terms?: string[] }) =>
     sanitizeStaticHtml(html, new Scrubber({ terms: opts?.terms }), { css: opts?.css });
 
+  it("drops this extension's own button, which a recording made with the extension on finds in the page", () => {
+    const out = clean('<html><body><form><input name="a"></form><raf-fab></raf-fab></body></html>');
+    expect(out).not.toContain('raf-fab');
+    expect(out).toContain('<input name="a">');
+  });
+
   it('removes everything that can execute or fetch', () => {
     const out = clean(`<!doctype html><html><head>
       <base href="https://x.example/"><script>steal()</script><noscript>n</noscript>

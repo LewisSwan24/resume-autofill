@@ -2,8 +2,10 @@
 // and a rewrite by the local AI only when the setting is on.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createRoot } from 'react-dom/client';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import App from '../../../entrypoints/sidepanel/App';
+import { DraftBox } from '../../../entrypoints/sidepanel/DraftBox';
 import type { FieldReport, FillReport } from '../../../src/engine/types';
 import { setLanguage } from '../../../src/i18n';
 import type { UiToBg } from '../../../src/messaging';
@@ -73,6 +75,40 @@ describe('the draft box', () => {
     await waitFor(() => expect(sent.some((m) => m.type === 'field:apply' && m.undo === true)).toBe(true));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull());
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps an edit typed the moment the box appears, before its first effects have run', async () => {
+    // The list reaches the screen from a storage read, outside any act(): React commits the box in one task and runs
+    // its effects in a later one. An edit landing between the two must survive them.
+    const prevAct = (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.body.appendChild(document.createElement('div'));
+    const root = createRoot(host);
+    const run = vi.fn(async () => undefined);
+    try {
+      const edited = new Promise<void>((resolve) => {
+        const watch = new MutationObserver(() => {
+          const box = host.querySelector('textarea');
+          if (!box) return;
+          watch.disconnect();
+          // Runs as a microtask right after the commit, so the box's effects are still pending.
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, `${DRAFT} Edited.`);
+          box.dispatchEvent(new Event('input', { bubbles: true }));
+          resolve();
+        });
+        watch.observe(host, { childList: true, subtree: true });
+      });
+      root.render(<DraftBox field={row} label="Cover letter" busy={false} run={run} />);
+      await edited;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(host.querySelector('textarea')!.value).toBe(`${DRAFT} Edited.`);
+      host.querySelector('form')!.requestSubmit();
+      expect(run).toHaveBeenCalledWith({ text: `${DRAFT} Edited.` });
+    } finally {
+      root.unmount();
+      host.remove();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = prevAct;
+    }
   });
 
   it('offers a rewrite by the local AI only when the setting is on', async () => {

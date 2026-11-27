@@ -1,6 +1,6 @@
 // A drafted long-text answer (note 'draft'): the applicant reads and edits it here, and it reaches the page only on
 // "Fill in". A written draft can be taken back. A rewrite by the local AI is offered only when the setting is on.
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { generateReviewDraft, type AiDraftOutcome } from '../../src/ai';
 import type { FieldReport } from '../../src/engine/types';
 import { useT } from '../../src/i18n';
@@ -25,9 +25,13 @@ export function DraftBox({ field, label, resume, settings, busy, run }: DraftBox
   const [rewrite, setRewrite] = useState<AiDraftOutcome | null>(null);
   const [rewriteEmpty, setRewriteEmpty] = useState(false);
 
-  useEffect(() => {
+  // Follow the field when the page reports a new value, checked while rendering rather than in an effect: an effect
+  // also runs once after the box first appears, and an edit typed before it ran was overwritten with the draft.
+  const [shownValue, setShownValue] = useState(field.value);
+  if (field.value !== shownValue) {
+    setShownValue(field.value);
     setText(field.value ?? '');
-  }, [field.value]);
+  }
 
   const written = field.outcome === 'filled';
   const canRewrite = Boolean(settings?.longTextAiRewrite && resume);

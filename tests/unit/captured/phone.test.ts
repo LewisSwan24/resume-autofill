@@ -73,6 +73,15 @@ describe('phoneShortfalls', () => {
     expect(phoneShortfalls([desk, other])).toMatchObject([{ why: 'no_desktop' }]);
   });
 
+  it('pairs a phone capture Feishu moved to /m/ after its portal segment with the desktop capture of the same page', () => {
+    const desk = row('desk', 'desktop', 10, 10, { url: 'https://acme.jobs.feishu.cn/campus/resume/77/apply' });
+    const phone = row('phone', 'mobile', 2, 10, { url: 'https://acme.jobs.feishu.cn/campus/m/resume/77/apply?jobId=77' });
+    expect(phoneShortfalls([desk, phone])).toMatchObject([{ phone: 'ats/phone', desktop: 'ats/desk', why: 'below' }]);
+    // Another company's site on Feishu is another page.
+    const elsewhere = row('phone', 'mobile', 2, 10, { url: 'https://other.jobs.feishu.cn/campus/m/resume/77/apply' });
+    expect(phoneShortfalls([desk, elsewhere])).toMatchObject([{ why: 'no_desktop' }]);
+  });
+
   it('keeps /m/ in the page of a site Moka does not run, where it can be another page', () => {
     const desk = row('desk', 'desktop', 10, 10, { url: 'https://jobs.example/careers/acme/1' });
     const phone = row('phone', 'mobile', 2, 10, { url: 'https://jobs.example/m/careers/acme/1' });

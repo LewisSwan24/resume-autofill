@@ -558,16 +558,23 @@ const percent = (x: number): string => `${Math.round(1000 * x) / 10}%`;
 
 /** Hosts that send a phone to the same path under /m/: the ones the Moka adapter claims (src/adapters/cnPortals.ts). */
 const PHONE_UNDER_M = /(?:^|\.)mokahr\.com$/;
+// Feishu sends a phone to /m/ just after the portal's own first segment: /campus/resume/… is /campus/m/resume/….
+const PHONE_AFTER_PORTAL = /(?:^|\.)jobs\.feishu\.cn$/;
 
 /**
- * Host and path: a phone capture of a page often lands on it with another query or fragment, and Moka sends a phone
- * to the same path under /m/. On any other site /m/ may be another page, so it stays.
+ * Host and path: a phone capture of a page often lands on it with another query or fragment, Moka sends a phone
+ * to the same path under /m/, and Feishu puts /m/ after the portal's segment. On any other site /m/ may be another
+ * page, so it stays.
  */
 function pageUrl(url: string): string {
   try {
     const u = new URL(url);
     const host = u.hostname.toLowerCase();
-    const route = PHONE_UNDER_M.test(host) ? u.pathname.replace(/^\/m(?=\/)/, '') : u.pathname;
+    const route = PHONE_UNDER_M.test(host)
+      ? u.pathname.replace(/^\/m(?=\/)/, '')
+      : PHONE_AFTER_PORTAL.test(host)
+        ? u.pathname.replace(/^(\/[^/]+)\/m(?=\/)/, '$1')
+        : u.pathname;
     return `${u.host.toLowerCase()}${route.replace(/\/+$/, '')}`;
   } catch {
     return url;

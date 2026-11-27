@@ -78,6 +78,15 @@ describe('resolveValue', () => {
     expect(resolveValue('basics.age', zh, 0, 'basics', { now: new Date(2026, 2, 15) })?.raw).toBe(24);
   });
 
+  it('says of each schooling card whether it is the highest the resume holds, and nothing when that cannot be told', () => {
+    // The sample holds a bachelor's (card 0) and a master's (card 1).
+    expect(resolveValue('education.isHighest', zh, 0, 'education')?.raw).toBe(false);
+    expect(resolveValue('education.isHighest', zh, 1, 'education')?.raw).toBe(true);
+    // A later card with no level written down may be the higher one.
+    const unknown = { ...zh, education: [...zh.education, { ...zh.education[1]!, degree: null, startDate: '2026-09', endDate: '2029-06' }] };
+    expect(resolveValue('education.isHighest', unknown, 1, 'education')).toBeNull();
+  });
+
   it('works out "a full-time student now" from the latest schooling: still going and full-time', () => {
     const now = new Date(2026, 10, 20);
     const latest = (over: Partial<Resume['education'][number]>) => ({ ...zh, education: [zh.education[0]!, { ...zh.education[1]!, ...over }] });

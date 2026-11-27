@@ -118,6 +118,7 @@ export const FIELD_DEPS: Readonly<Record<FieldKey, readonly FieldKey[]>> = {
   'basics.age': ['basics.birthDate'],
   'basics.isAdult': ['basics.birthDate'],
   'education.fullTimeStudent': ['education.startDate', 'education.endDate', 'education.current', 'education.educationType'],
+  'education.isHighest': ['education.degree', 'education.endDate', 'education.current'],
   'workRights.citizenOrResident': ['workRights.status', 'basics.nationality'],
   'workRights.citizen': ['workRights.status'],
   'basics.currentLocation': ['contact.addressCountry', 'contact.addressProvince', 'contact.addressCity'],

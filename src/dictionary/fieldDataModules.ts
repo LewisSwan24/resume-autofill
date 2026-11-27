@@ -44,6 +44,11 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Degree|Degree level|Degree type|Qualification|Qualification level|Level of education|Education level|Highest level of education|Highest level of tertiary education|Highest qualification|Level of study|Type of degree|Degree/qualification',
     '编号|证书|证号|授予|论文|number|certificate|专业|major|name of degree',
   ),
+  // Asked on each schooling card: is this one the highest?
+  'education.isHighest': s(
+    '是否最高学历|是否为最高学历|是否最高学位|是否为最高学位|是否是最高学历|最高学历与否',
+    'Is this your highest degree|Is this your highest qualification|Highest degree?|Highest qualification?',
+  ),
   'education.educationType': s(
     '学历类型|学历性质|学习形式|学习方式|教育形式|学制类型|培养方式|就读方式|教育类型|全日制/非全日制|是否全日制|学习类型',
     'Study mode|Mode of study|Study type|Study load|Education type|Attendance|Attendance mode|Enrolment type|Full-time/part-time study',
@@ -165,7 +170,7 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
     'Project name|Project|Project title|Project name/title|Name of project',
   ),
   'projects.role': s(
-    '项目角色|担任角色|角色|项目中的角色|项目职位|我的角色|项目担任',
+    '项目角色|担任角色|角色|项目中的角色|项目职位|我的角色|项目担任|职责',
     'Role|Project role|Your role|Role in project|Position in project|Responsibility',
   ),
   'projects.startDate': s(
@@ -264,12 +269,12 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
 
   // ------------------------------------------------------------ languages
   'languages.language': s(
-    '语种|语言|外语语种|语言种类|外语|语言名称|语言类型|外语类型|外语种类|语言技能|掌握语言|掌握的语言',
+    '语种|语言|外语语种|语言种类|外语|语言名称|语言类型|外语类型|外语种类|语言技能|掌握语言|掌握的语言|语言类别|外语类别',
     'Language|Language name|Foreign language|Other language|Language spoken',
     '等级|水平|证书|成绩|level|proficiency|certificate|score|test',
   ),
   'languages.proficiency': s(
-    '精通程度|熟练程度|掌握程度|语言水平|语言能力|外语水平|掌握情况|水平|熟练度|语言熟练度|外语能力',
+    '精通程度|熟练程度|掌握程度|语言水平|语言能力|外语水平|掌握情况|水平|熟练度|语言熟练度|外语能力|语言能力等级|外语能力等级|能力等级',
     'Proficiency|Language proficiency|Proficiency level|Fluency|Level|Language level|Skill level',
     '证书|考试|成绩|听说|读写|certificate|test|exam|score|speaking|listening|reading|writing',
   ),

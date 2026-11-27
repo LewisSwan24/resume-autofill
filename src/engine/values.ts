@@ -446,6 +446,11 @@ export function resolveValue(
     if (field === 'endDate' && entry.current === true && !entry.endDate) return null;
     if (field === 'period') return periodOf(entry, source);
     if (field === 'supervisor') return supervisorAt(entry, resume);
+    if (field === 'isHighest') {
+      // Whether this card is the highest schooling: unsaid when which one is highest cannot be told.
+      const top = highestSchooling(rows);
+      return top ? { raw: top.index === row.index, source: `${module}[${top.index}].degree` } : null;
+    }
     // A work with no file of its own goes in with the portfolio file.
     if (module === 'works' && field === 'fileId') {
       return wrap(entry.fileId, `${module}[${row.index}].fileId`) ?? wrap(resume.attachments.portfolioFileId, 'attachments.portfolioFileId');

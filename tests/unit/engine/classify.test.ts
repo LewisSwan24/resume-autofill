@@ -145,6 +145,31 @@ describe('a full-time student now', () => {
   });
 });
 
+// Moka cards as a campus site words them: the language and its level, whether this schooling is the highest, and a
+// project's role asked as 职责 next to a box for the duties in it.
+describe('Moka card labels', () => {
+  const yesNo = (id: string) => `<select id="${id}"><option></option><option>是</option><option>否</option></select>`;
+
+  it('reads 语言类别 and 语言能力等级 as the language and its level', () => {
+    const level = '<select id="b"><option></option><option>精通</option><option>良好</option><option>一般</option></select>';
+    const s = scan(`<h3>语言能力</h3>${row('语言类别', '<select id="a"><option></option><option>英语</option><option>日语</option></select>', 'a')}${row('语言能力等级', level, 'b')}`);
+    expect(keys(s)).toEqual(['languages.language', 'languages.proficiency']);
+    expect(s.cls.every((c) => c.confidence >= FILL_THRESHOLD)).toBe(true);
+  });
+
+  it('reads 是否最高学历 on a schooling card as whether it is the highest, not as the degree', () => {
+    const s = scan(`<h3>教育背景</h3>${text('毕业院校', 'a')}${row('学位', '<select id="b"><option></option><option>学士</option><option>硕士</option></select>', 'b')}${row('是否最高学历', yesNo('c'), 'c')}`);
+    expect(keys(s)).toEqual(['education.school', 'education.degree', 'education.isHighest']);
+    expect(s.cls[2]!.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+  });
+
+  it('reads 职责 on a project card as the role, apart from 项目描述 and 项目中职责', () => {
+    const s = scan(`<h3>项目经验</h3>${text('项目名称', 'a')}${text('职责', 'b')}${row('项目描述', '<textarea id="c"></textarea>', 'c')}${row('项目中职责', '<textarea id="d"></textarea>', 'd')}`);
+    expect(keys(s)).toEqual(['projects.name', 'projects.role', 'projects.description', 'projects.duties']);
+    expect(s.cls[1]!.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+  });
+});
+
 describe('section context', () => {
   it('reads an ambiguous label ("时间") from the awards card', () => {
     const s = scan(`<h3>获奖情况</h3>${text('奖项名称', 'a')}${row('时间', '<input id="b" type="month">', 'b')}`);

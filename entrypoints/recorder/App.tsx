@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { buildCapture, termsFrom, type CaptureBundle } from '../../src/capture/bundle';
 import { CHECKLIST, WARNING_TEXT, looksChinese, pageWarnings, type PageWarning } from '../../src/capture/checklist';
+import type { CaptureDevice } from '../../src/capture/device';
 import { TabRecorder } from '../../src/capture/recorder';
 import type { Finding } from '../../src/capture/sanitize';
 import { loadProfile } from '../../src/storage';
@@ -47,6 +48,7 @@ export default function App() {
   const [ats, setAts] = useState('');
   const [name, setName] = useState('');
   const [cn, setCn] = useState(false);
+  const [device, setDevice] = useState<CaptureDevice>('desktop');
   const [extra, setExtra] = useState('');
   const [resumeTerms, setResumeTerms] = useState<string[] | null>(null);
   const [locked, setLocked] = useState(false);
@@ -78,7 +80,7 @@ export default function App() {
 
   async function start() {
     if (tabId === null) return;
-    const rec = new TabRecorder(chromeRecorderApi, tabId);
+    const rec = new TabRecorder(chromeRecorderApi, tabId, { device });
     rec.onRequest = () => setState({ step: 'recording', requests: rec.requests });
     rec.onEnded = (reason) => setState({ step: 'failed', message: `录制中断（${reason}）：调试横条被关掉或分页已关闭。没有保存任何内容。` });
     recorder.current = rec;
@@ -99,7 +101,7 @@ export default function App() {
       const taken = await rec.stop();
       const terms = [...(resumeTerms ?? []), ...extra.split(/[\n,，]/).map((t) => t.trim()).filter(Boolean)];
       const result = buildCapture({
-        meta: { ats, name, url: taken.url, locale: navigator.language },
+        meta: { ats, name, url: taken.url, locale: navigator.language, device },
         capturedAt: new Date().toISOString(),
         har: taken.har,
         frames: taken.frames,
@@ -160,6 +162,14 @@ export default function App() {
       </Field>
       <Field label="样本名" help="例如 support-engineer">
         {(control) => <Input {...control} value={name} disabled={recording} onChange={(e) => setName(e.target.value.trim())} />}
+      </Field>
+      <Field label="设备" help="选手机时，开始后这个分页会装成一部 Android 手机重新载入，网站会给手机版页面；停止后恢复。">
+        {(control) => (
+          <SelectInput {...control} value={device} disabled={recording} onChange={(e) => setDevice(e.target.value === 'mobile' ? 'mobile' : 'desktop')}>
+            <option value="desktop">电脑</option>
+            <option value="mobile">手机</option>
+          </SelectInput>
+        )}
       </Field>
       <Checkbox label="中国站点：也遮盖手机号和身份证号" checked={cn} disabled={recording} onChange={setCn} />
       <Field label="另外要遮盖的词" help="逗号或换行分隔。已存简历里的值会自动遮盖。">

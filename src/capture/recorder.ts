@@ -4,6 +4,10 @@
 // The order matters. Session storage is read first, while the tab holds the sign-in the applicant made, and before the
 // reload, which may move it. Then the debugger listens, and only then does the tab reload, so the whole load is heard.
 // Only the Network domain is turned on: a page cannot tell that it is being listened to that way.
+//
+// A phone recording makes the tab look like the phone a replay opens it as, before the reload, so the site serves its
+// phone page and the applicant's clicks arrive as taps. The look lasts as long as the debugger holds the tab.
+import { PHONE, type CaptureDevice } from './device.ts';
 import { HarRecorder } from './har.ts';
 import { serializeInPage, type Serialized } from './serialize.ts';
 
@@ -32,6 +36,43 @@ export interface Taken {
 const BUFFERS = { maxTotalBufferSize: 200 * 1024 * 1024, maxResourceBufferSize: 50 * 1024 * 1024 };
 
 // Runs in the page.
+// What a phone tab is told, in the order sent.
+const PHONE_LOOK: [string, object][] = [
+  [
+    'Emulation.setDeviceMetricsOverride',
+    {
+      width: PHONE.width,
+      height: PHONE.height,
+      deviceScaleFactor: PHONE.deviceScaleFactor,
+      mobile: true,
+      screenWidth: PHONE.screenWidth,
+      screenHeight: PHONE.screenHeight,
+    },
+  ],
+  [
+    'Emulation.setUserAgentOverride',
+    {
+      userAgent: PHONE.userAgent,
+      platform: 'Linux armv81',
+      // Client hints, so a site that reads them rather than the user agent sees the same phone.
+      userAgentMetadata: {
+        brands: [
+          { brand: 'Chromium', version: PHONE.chromeMajor },
+          { brand: 'Google Chrome', version: PHONE.chromeMajor },
+          { brand: 'Not_A Brand', version: '24' },
+        ],
+        platform: PHONE.platform,
+        platformVersion: PHONE.platformVersion,
+        architecture: '',
+        model: PHONE.model,
+        mobile: true,
+      },
+    },
+  ],
+  ['Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }],
+  ['Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' }],
+];
+
 function readSessionStorage(): { origin: string; sessionStorage: Record<string, string> } {
   return { origin: location.origin, sessionStorage: { ...sessionStorage } };
 }
@@ -49,6 +90,7 @@ export class TabRecorder {
   constructor(
     private readonly api: RecorderApi,
     private readonly tabId: number,
+    private readonly options: { device?: CaptureDevice } = {},
   ) {
     this.har = new HarRecorder((method, params) => api.send(tabId, method, params));
   }
@@ -73,6 +115,7 @@ export class TabRecorder {
       }),
     );
     await this.api.send(this.tabId, 'Network.enable', BUFFERS);
+    if (this.options.device === 'mobile') for (const [method, params] of PHONE_LOOK) await this.api.send(this.tabId, method, params);
     await this.api.reload(this.tabId);
   }
 

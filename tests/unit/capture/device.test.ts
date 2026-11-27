@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PHONE } from '../../../src/capture/device';
 import { contextOptionsFor, liveContextOptions, parseDevice } from '../../../scripts/capture/device';
 
 describe('live check browser', () => {
@@ -31,6 +32,15 @@ describe('capture device', () => {
     expect(options.userAgent).toMatch(/Android/);
     expect(options.userAgent).toMatch(/Mobile/);
     expect(options.locale).toBe('zh-CN');
+  });
+
+  // The recorder page makes the applicant's own tab look like this phone, so a replay has to open it as the same one.
+  it('mobile is the same phone the recorder page records with', () => {
+    const options = contextOptionsFor('mobile', 'zh-CN');
+    expect(options.viewport).toEqual({ width: PHONE.width, height: PHONE.height });
+    expect(options.screen).toEqual({ width: PHONE.screenWidth, height: PHONE.screenHeight });
+    expect(options.deviceScaleFactor).toBe(PHONE.deviceScaleFactor);
+    expect(options.userAgent).toBe(PHONE.userAgent);
   });
 
   it('accepts only the known devices', () => {

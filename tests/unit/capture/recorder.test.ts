@@ -1,12 +1,14 @@
 // @vitest-environment node
 // The recorder drives one tab through Chrome's APIs, handed in so that this test can stand in for them.
 import { describe, expect, it } from 'vitest';
+import { PHONE } from '../../../src/capture/device';
 import { TabRecorder, type RecorderApi } from '../../../src/capture/recorder';
 
 type Listener = (source: { tabId?: number }, method: string, params?: object) => void;
 
 function fakeApi() {
   const calls: string[] = [];
+  const sent: { method: string; params?: object }[] = [];
   let listener: Listener | null = null;
   let detached: ((source: { tabId?: number }, reason: string) => void) | null = null;
   const api: RecorderApi = {
@@ -18,6 +20,7 @@ function fakeApi() {
     },
     async send(tabId, method, params) {
       calls.push(`send ${tabId} ${method}`);
+      sent.push({ method, ...(params ? { params } : {}) });
       if (method === 'Network.getResponseBody') return { body: `body of ${(params as { requestId: string }).requestId}`, base64Encoded: false };
       return {};
     },
@@ -59,7 +62,7 @@ function fakeApi() {
   };
   const emit = (tabId: number, method: string, params: object) => listener?.({ tabId }, method, params);
   const cancel = (tabId: number) => detached?.({ tabId }, 'canceled_by_user');
-  return { api, calls, emit, cancel };
+  return { api, calls, sent, emit, cancel };
 }
 
 const load = (emit: (tabId: number, method: string, params: object) => void, tabId: number, id: string) => {
@@ -83,6 +86,27 @@ describe('TabRecorder', () => {
     const { api, calls } = fakeApi();
     await new TabRecorder(api, 7).start();
     expect(calls).toEqual(['read storage 7', 'attach 7', 'send 7 Network.enable', 'reload 7']);
+  });
+
+  it('on a phone, makes the tab look like one before the reload, so the site serves its phone page', async () => {
+    const { api, calls, sent } = fakeApi();
+    await new TabRecorder(api, 7, { device: 'mobile' }).start();
+    expect(calls).toEqual([
+      'read storage 7',
+      'attach 7',
+      'send 7 Network.enable',
+      'send 7 Emulation.setDeviceMetricsOverride',
+      'send 7 Emulation.setUserAgentOverride',
+      'send 7 Emulation.setTouchEmulationEnabled',
+      'send 7 Emulation.setEmitTouchEventsForMouse',
+      'reload 7',
+    ]);
+    const params = (method: string) => sent.find((s) => s.method === method)!.params as Record<string, unknown>;
+    // The phone a replay opens a mobile sample with (scripts/capture/device.ts), so the page lays out the same.
+    expect(params('Emulation.setDeviceMetricsOverride')).toMatchObject({ width: PHONE.width, height: PHONE.height, mobile: true });
+    expect(params('Emulation.setUserAgentOverride')).toMatchObject({ userAgent: PHONE.userAgent, userAgentMetadata: { mobile: true } });
+    expect(params('Emulation.setTouchEmulationEnabled')).toMatchObject({ enabled: true });
+    expect(params('Emulation.setEmitTouchEventsForMouse')).toMatchObject({ enabled: true, configuration: 'mobile' });
   });
 
   it('hears only its own tab, and hands back every frame with a web address, the top one first', async () => {

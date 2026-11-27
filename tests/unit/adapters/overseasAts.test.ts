@@ -96,3 +96,55 @@ describe('BambooHR', () => {
     expect(at('input[name="city.value"]')).toMatchObject({ fieldKey: 'contact.addressCity' });
   });
 });
+
+describe('JazzHR', () => {
+  // The form as JazzHR serves it, cut down: one "Address" label over four boxes, the last three named only by
+  // their placeholders, and the resume box behind an "Attach resume" link.
+  const box = (key: string, placeholder: string) =>
+    `<input type="text" id="resumator-${key}-value" name="resumator-${key}-value" class="form-control" placeholder="${placeholder}">`;
+  const FORM = `<form id="form_submit_new_resume" method="POST">
+    <div class="form-group"><label for="resumator-firstname-value">First Name<i class="asterisk">*</i></label>
+      <input type="text" id="resumator-firstname-value" name="resumator-firstname-value" class="form-control"></div>
+    <div class="form-group" id="resumator-address"><label for="resumator-address-value">Address</label>
+      <div class="resumator-input">${box('address', 'Address')}
+        <div class="row"><div class="col">${box('city', 'City')}</div><div class="col">${box('state', 'State/Province')}</div>
+        <div class="col">${box('postal', 'Postal')}</div></div></div></div>
+    <div id="resumator-resume" class="form-group"><label for="resumator-resume-value">Resume<i class="asterisk">*</i></label>
+      <div class="resumator-input"><input type="file" id="resumator-resume-value" name="resumator-resume-value"></div></div>
+  </form>`;
+
+  const classified = () => {
+    const scan = scanDocument(document);
+    return (selector: string) => {
+      const el = document.querySelector(selector);
+      const i = scan.contexts.findIndex((c) => c.control.el === el);
+      return i < 0 ? null : scan.classifications[i]!.fieldKey;
+    };
+  };
+
+  it('is known by its apply pages, and by its form on a company domain of its own', () => {
+    expect(at('https://acme.applytojob.com/apply/AbC123xYz/Junior-Analyst')).toBe('jazzhr');
+    document.body.innerHTML = FORM;
+    expect(at('https://careers.example.com/jobs/junior-analyst')).toBe('jazzhr');
+  });
+
+  it('is not taken for a page that only mentions it', () => {
+    expect(at('https://example.com/blog/applytojob.com/apply')).toBeNull();
+    document.body.innerHTML = '<form><input type="text" id="firstname" name="firstname"></form>';
+    expect(at('https://careers.example.com/apply')).toBeNull();
+  });
+
+  it('reads the four boxes under "Address" as street, city, state and postcode', () => {
+    document.body.innerHTML = FORM;
+    const key = classified();
+    expect(key('#resumator-address-value')).toBe('contact.addressStreet');
+    expect(key('#resumator-city-value')).toBe('contact.addressCity');
+    expect(key('#resumator-state-value')).toBe('contact.addressProvince');
+    expect(key('#resumator-postal-value')).toBe('contact.postcode');
+  });
+
+  it('reads the resume box by its label', () => {
+    document.body.innerHTML = FORM;
+    expect(classified()('#resumator-resume-value')).toBe('attachments.resume');
+  });
+});

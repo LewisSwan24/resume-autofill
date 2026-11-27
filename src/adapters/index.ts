@@ -3,6 +3,7 @@ import { ashby } from './ashby';
 import { bamboohr } from './bamboohr';
 import { beisen, bytedanceCampus, feishu, moka, nowcoderCampus, tencentCareers } from './cnPortals';
 import { greenhouse } from './greenhouse';
+import { jazzhr } from './jazzhr';
 import { lever } from './lever';
 import { pageup } from './pageup';
 import { personio } from './personio';
@@ -25,6 +26,7 @@ export const ADAPTERS: readonly AtsAdapter[] = [
   rippling,
   personio,
   bamboohr,
+  jazzhr,
   moka,
   beisen,
   // Before ByteDance: on a domain of its own, a form of this system is Feishu's.

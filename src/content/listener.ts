@@ -10,7 +10,7 @@ import type { StepHandlers } from './steps';
 
 export type ContentListener = (message: unknown, sender: Sender, sendResponse: (response?: unknown) => void) => boolean;
 
-/** `steps` only in the top frame: it alone reports the step and presses Next (auto-advance). */
+/** `steps`: what step this frame shows, and its own Next button (auto-advance asks every frame). */
 export function createContentListener(handlers: FrameHandlers, steps?: StepHandlers): ContentListener {
   return (message, sender, sendResponse) => {
     if (!isFromExtension(sender) || sender.tab != null || !isValidMessage(message)) return false;

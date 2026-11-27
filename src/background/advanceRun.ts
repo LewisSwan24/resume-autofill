@@ -1,4 +1,4 @@
-// Production wiring of auto-advance: the tab's top frame reads and presses, the normal fill fills, and every
+// Production wiring of auto-advance: every frame of the tab says what it shows and the one with Next presses it, the normal fill fills, and every
 // change of state is stored on the wizard session and broadcast to the FAB and the side panel.
 import { sendToFrame, type FillRequestResponse } from '../messaging';
 import {
@@ -7,30 +7,18 @@ import {
   runAutoAdvance,
   stopAutoAdvance,
   type PressResult,
-  type StepState,
 } from './autoAdvance';
 import { broadcastWizard, keepAlive, runFillRequest } from './fill';
+import { readTabStep } from './frameSteps';
+import { listFrameIds, withTimeout } from './frames';
 import { loadWizardSession, setWizardAdvance } from './wizardSession';
 
 export { stopAutoAdvance };
 
-const ACTIONS = new Set(['next', 'disabled', 'final', 'ambiguous', 'none']);
-const BLOCKERS = new Set(['needs_you', 'verification']);
-
-function parseStepState(raw: unknown): StepState | null {
-  if (typeof raw !== 'object' || raw === null) return null;
-  const r = raw as Record<string, unknown>;
-  if (typeof r.url !== 'string' || typeof r.fingerprint !== 'string') return null;
-  if (typeof r.action !== 'string' || !ACTIONS.has(r.action)) return null;
-  if (r.blocker !== null && (typeof r.blocker !== 'string' || !BLOCKERS.has(r.blocker))) return null;
-  return {
-    url: r.url,
-    fingerprint: r.fingerprint,
-    action: r.action as StepState['action'],
-    blocker: r.blocker as StepState['blocker'],
-    userInputAt: typeof r.userInputAt === 'number' && Number.isFinite(r.userInputAt) ? r.userInputAt : 0,
-  };
-}
+/** A frame that cannot say what it shows this fast is left out of the step. */
+const STEP_TIMEOUT_MS = 2_000;
+/** Per tab, the frame whose Next button the last read found. */
+const pressIn = new Map<number, number>();
 
 /** Start auto-advance in a tab that has a wizard session. Resolves as soon as the run has started. */
 export async function startAutoAdvance(tabId: number): Promise<FillRequestResponse> {
@@ -39,9 +27,14 @@ export async function startAutoAdvance(tabId: number): Promise<FillRequestRespon
   const stop = keepAlive();
   void runAutoAdvance(tabId, {
     ...ADVANCE_DEFAULTS,
-    readStep: async (id) => parseStepState(await sendToFrame(id, 0, { type: 'frame:stepState' })),
+    // Every frame is asked: a step may sit in an iframe. Next is pressed in the one frame that has it.
+    readStep: async (id) => {
+      const read = await readTabStep(id, { listFrameIds, ask: (t, f) => withTimeout(sendToFrame(t, f, { type: 'frame:stepState' }), STEP_TIMEOUT_MS) });
+      pressIn.set(id, read?.pressIn ?? 0);
+      return read?.state ?? null;
+    },
     pressNext: async (id) => {
-      const res = (await sendToFrame(id, 0, { type: 'frame:pressNext' })) as PressResult | undefined;
+      const res = (await sendToFrame(id, pressIn.get(id) ?? 0, { type: 'frame:pressNext' })) as PressResult | undefined;
       return res && typeof res.pressed === 'boolean' ? res : { pressed: false };
     },
     fill: (id, origin) => runFillRequest(id, { expectOrigin: origin }),

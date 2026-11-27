@@ -63,14 +63,12 @@ export function startContentScript(doc: Document = document): () => void {
     },
   });
 
-  // Only the top frame moves a multi-step form on; the FAB that starts it lives there too.
-  const isTop = doc.defaultView === doc.defaultView?.top;
-  const steps = isTop
-    ? createStepHandlers(doc, {
-        adapterStep: () => resolveAdapter(doc)?.stepSignature?.(doc) ?? null,
-        adapterNext: () => resolveAdapter(doc)?.nextButton,
-      })
-    : undefined;
+  // Every frame says what step it shows and can press its own Next: a form may sit in an iframe. The background
+  // merges what the frames say (src/background/frameSteps.ts) and presses in the one frame that has Next.
+  const steps = createStepHandlers(doc, {
+    adapterStep: () => resolveAdapter(doc)?.stepSignature?.(doc) ?? null,
+    adapterNext: () => resolveAdapter(doc)?.nextButton,
+  });
   const listener = createContentListener(handlers, steps);
   browser.runtime.onMessage.addListener(listener);
   watcher.start();
@@ -78,6 +76,6 @@ export function startContentScript(doc: Document = document): () => void {
   return () => {
     browser.runtime.onMessage.removeListener(listener);
     watcher.stop();
-    steps?.stop();
+    steps.stop();
   };
 }

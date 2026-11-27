@@ -17,8 +17,10 @@ import {
   type Finding,
   type HarFile,
   type SidecarIo,
-} from './sanitize.ts';
+} from '../../src/capture/sanitize.ts';
 import { DEFAULT_LOCALE, type CaptureDevice } from './device.ts';
+import { serializeInPage, type Serialized } from '../../src/capture/serialize.ts';
+import { jsdomHtml } from './dom.ts';
 
 /** Long edge limit: larger images get rejected in multi-image model requests. */
 export const SHOT_SEGMENT = 1800;
@@ -53,46 +55,6 @@ export interface CaptureResult {
   frames: { url: string; file: string }[];
   screenshots: string[];
   censusStatic: number;
-}
-
-interface Serialized {
-  html: string;
-  css: string;
-  crossOriginSheets: string[];
-}
-
-// Runs in the page.
-function serializeInPage(): Serialized {
-  const shadowRoots: ShadowRoot[] = [];
-  const walk = (root: ParentNode): void => {
-    for (const el of root.querySelectorAll('*')) {
-      if (el.shadowRoot) {
-        shadowRoots.push(el.shadowRoot);
-        walk(el.shadowRoot);
-      }
-    }
-  };
-  walk(document);
-
-  const css: string[] = [];
-  const crossOriginSheets: string[] = [];
-  const readSheet = (sheet: CSSStyleSheet): void => {
-    try {
-      css.push([...sheet.cssRules].map((r) => r.cssText).join('\n'));
-    } catch {
-      if (sheet.href) crossOriginSheets.push(sheet.href);
-    }
-  };
-  for (const sheet of document.styleSheets) readSheet(sheet);
-  for (const root of shadowRoots) for (const sheet of root.adoptedStyleSheets) readSheet(sheet);
-
-  const rootEl = document.documentElement as HTMLElement & {
-    getHTML(o: { serializableShadowRoots?: boolean; shadowRoots?: ShadowRoot[] }): string;
-  };
-  const shell = rootEl.cloneNode(false) as HTMLElement;
-  shell.innerHTML = '@@BODY@@';
-  const html = `<!doctype html>${shell.outerHTML.replace('@@BODY@@', () => rootEl.getHTML({ serializableShadowRoots: true, shadowRoots }))}`;
-  return { html, css: css.join('\n'), crossOriginSheets };
 }
 
 async function takeScreenshots(page: Page, dir: string): Promise<string[]> {
@@ -205,10 +167,10 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
   const findings: Finding[] = [...auditHar(har, io, scrubOptions)];
   pages.forEach((p, i) => {
     const file = i === 0 ? 'page.html' : `frame-${i}.html`;
-    const html = sanitizeStaticHtml(p.html, scrub, { css: p.css });
+    const html = sanitizeStaticHtml(p.html, scrub, { css: p.css, dom: jsdomHtml });
     writeFileSync(path.join(dir, file), html);
     frames.push({ url: scrub.text(p.url), file });
-    findings.push(...auditHtml(html, scrubOptions).map((f) => ({ ...f, where: `${file}: ${f.where}` })));
+    findings.push(...auditHtml(html, { ...scrubOptions, dom: jsdomHtml }).map((f) => ({ ...f, where: `${file}: ${f.where}` })));
   });
 
   if (storage && Object.keys(storage.sessionStorage).length > 0) {

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { capturePage } from '../../scripts/capture/capture.ts';
 import { contextOptionsFor } from '../../scripts/capture/device.ts';
-import { resumeTerms } from '../../scripts/capture/sanitize.ts';
+import { resumeTerms } from '../../src/capture/sanitize.ts';
 
 const MOBILE = '13900001111';
 const ID_CARD = '123456199001011233';

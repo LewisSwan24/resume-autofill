@@ -25,7 +25,7 @@ import { chromium, type Page } from '@playwright/test';
 import { capturePage } from './capture/capture.ts';
 import { openForm } from './capture/open.ts';
 import { DEFAULT_LOCALE, contextOptionsFor, parseDevice, type CaptureDevice } from './capture/device.ts';
-import { resumeTerms } from './capture/sanitize.ts';
+import { resumeTerms } from '../src/capture/sanitize.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = path.join(homedir(), '.raf-capture');

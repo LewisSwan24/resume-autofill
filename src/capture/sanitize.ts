@@ -7,7 +7,20 @@
 //
 // Regexes cannot recognise a person's name or address. On logged-in pages those come from an explicit
 // term list. The audit walks the parsed structures rather than grepping the file, because a HAR is one line.
-import { JSDOM } from 'jsdom';
+// The HTML parts parse with whatever DOM the caller hands them: jsdom in the command-line tool, the browser's own
+// DOMParser in the extension's recorder. Nothing here may need Node.
+
+/** Parses a page and writes it back out. */
+export interface HtmlDom {
+  parse(html: string): Document;
+  serialize(doc: Document): string;
+}
+
+/** The browser's own parser, which is also what a test environment that emulates a browser provides. */
+export const browserDom: HtmlDom = {
+  parse: (html) => new DOMParser().parseFromString(html, 'text/html'),
+  serialize: (doc) => `${doc.doctype ? `<!DOCTYPE ${doc.doctype.name}>` : ''}${doc.documentElement.outerHTML}`,
+};
 
 // ---------------------------------------------------------------------------------------- text patterns
 
@@ -531,6 +544,10 @@ function scanText(text: string, where: string, terms: RegExp[], cn = false): Fin
 
 // ---------------------------------------------------------------------------------------- static HTML
 
+// NodeFilter's values, which a parsed document's window may not expose.
+const SHOW_TEXT = 0x4;
+const SHOW_COMMENT = 0x80;
+
 const KEEP_VALUE_TYPES = new Set(['radio', 'checkbox', 'submit', 'button', 'reset', 'image']);
 const REMOVE_SELECTOR = 'script,noscript,link,base,object,embed,applet,meta[http-equiv]';
 const VISIBLE_ATTRS = new Set(['href', 'title', 'alt', 'placeholder', 'aria-label', 'value', 'content']);
@@ -542,7 +559,7 @@ function allRoots(root: ParentNode): ParentNode[] {
   return out;
 }
 
-function cleanRoot(root: ParentNode, scrub: Scrubber, win: { NodeFilter: typeof NodeFilter; document: Document }): void {
+function cleanRoot(root: ParentNode, scrub: Scrubber, doc: Document): void {
   for (const el of root.querySelectorAll(REMOVE_SELECTOR)) el.remove();
   for (const el of root.querySelectorAll('meta[name]')) {
     if (/csrf|xsrf|token/i.test(el.getAttribute('name') ?? '')) el.remove();
@@ -557,7 +574,7 @@ function cleanRoot(root: ParentNode, scrub: Scrubber, win: { NodeFilter: typeof 
   for (const el of root.querySelectorAll('option')) el.removeAttribute('selected');
 
   // Comments and text. Templates are walked as their own roots.
-  const walker = win.document.createTreeWalker(root as unknown as Node, win.NodeFilter.SHOW_TEXT | win.NodeFilter.SHOW_COMMENT);
+  const walker = doc.createTreeWalker(root as unknown as Node, SHOW_TEXT | SHOW_COMMENT);
   const comments: Node[] = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     if (n.nodeType === 8) comments.push(n);
@@ -580,26 +597,25 @@ function cleanRoot(root: ParentNode, scrub: Scrubber, win: { NodeFilter: typeof 
 export interface StaticOptions {
   /** Collected page CSS. Inlined so hidden things stay hidden when the snapshot loads offline. */
   css?: string | undefined;
+  dom?: HtmlDom | undefined;
 }
 
 export function sanitizeStaticHtml(html: string, scrub: Scrubber, opts: StaticOptions = {}): string {
-  const dom = new JSDOM(html);
-  const { document } = dom.window;
-  const win = { NodeFilter: dom.window.NodeFilter as unknown as typeof NodeFilter, document: document as unknown as Document };
-  for (const root of allRoots(document as unknown as ParentNode)) cleanRoot(root, scrub, win);
+  const dom = opts.dom ?? browserDom;
+  const document = dom.parse(html);
+  for (const root of allRoots(document)) cleanRoot(root, scrub, document);
   if (opts.css) {
     const style = document.createElement('style');
     style.setAttribute('data-raf-inlined', '');
     style.textContent = scrub.text(opts.css);
     document.head.append(style);
   }
-  return dom.serialize();
+  return dom.serialize(document);
 }
 
-export function auditHtml(html: string, opts: ScrubOptions = {}): Finding[] {
+export function auditHtml(html: string, opts: ScrubOptions & { dom?: HtmlDom | undefined } = {}): Finding[] {
   const out: Finding[] = [];
-  const dom = new JSDOM(html);
-  const roots = allRoots(dom.window.document as unknown as ParentNode);
+  const roots = allRoots((opts.dom ?? browserDom).parse(html));
   for (const root of roots) {
     for (const el of root.querySelectorAll(REMOVE_SELECTOR)) {
       out.push({ kind: 'script', where: 'html', sample: el.tagName.toLowerCase() });

@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Everything captured from a real page passes through these functions before it stays on disk.
 // All values below are fake; the test's job is to prove none of them survive.
 import { describe, expect, it } from 'vitest';
@@ -12,7 +11,7 @@ import {
   sanitizeStaticHtml,
   sanitizeStorage,
   type HarFile,
-} from '../../../scripts/capture/sanitize';
+} from '../../../src/capture/sanitize';
 import { createSampleProfile } from '../../../src/schema/samples';
 
 const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlLXZhbHVl';

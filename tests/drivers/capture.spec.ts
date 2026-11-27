@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { SHOT_SEGMENT, capturePage, sidecarIo } from '../../scripts/capture/capture.ts';
-import { auditHar, type HarFile } from '../../scripts/capture/sanitize.ts';
+import { auditHar, type HarFile } from '../../src/capture/sanitize.ts';
 
 const SECRETS = {
   cookie: 'cookie-secret-value-1',

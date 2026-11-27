@@ -186,6 +186,23 @@ describe('runFill: what became of each entry', () => {
     // The held card's rows name the entry they show.
     expect(report.fields.filter((f) => f.note === 'entry_held').every((f) => f.entry === 1)).toBe(true);
   });
+
+  // A site's own resume, being updated: a card that shows one of the resume's entries is that entry's card. Its empty
+  // boxes take the entry's answers; a box with another answer keeps it and asks, as any box does, so the side panel
+  // can write the resume's over it.
+  it('fills a card that shows one of the resume’s entries from that entry, keeping and asking about answers that differ', async () => {
+    const graded = structuredClone(named);
+    graded.education[1] = { ...graded.education[1]!, gpa: '3.6' };
+    mount();
+    (document.getElementById('s1') as HTMLInputElement).value = '云岭示例大学';
+    (document.getElementById('m1') as HTMLInputElement).value = '旧专业';
+    const { report } = await runFill(document, { resume: graded, files });
+    expect(value('s1')).toBe('云岭示例大学');
+    expect(value('m1')).toBe('旧专业');
+    expect(value('g1')).toBe('3.6');
+    expect(report.fields.find((f) => f.label === '专业' && f.entry === 1)).toMatchObject({ outcome: 'needs_review', note: 'answer_held', observed: '旧专业' });
+    expect(report.entries?.find((e) => e.index === 1)).toMatchObject({ state: 'held', label: '云岭示例大学' });
+  });
 });
 
 describe('a form in several steps', () => {

@@ -1,6 +1,7 @@
 // Entries a page already holds, in sections filled in place. A card that already names its entry (the school, the
-// company, the project, the award) is someone's: nothing in it is touched. When it names one of the resume's
-// entries, that entry is in place already; the others go to the empty cards, in the resume's order.
+// company, the project, the award) is someone's. When it names one of the resume's entries, it is that entry's card:
+// filled from it, answers of its own kept and asked about; the others go to the empty cards, in the resume's order.
+// When it names an entry the resume does not have, nothing in it is touched.
 import { matchOption } from '../dictionary/options';
 import { getDriver } from '../drivers/registry';
 import type { Classification, FieldContext, SectionKey } from '../engine/types';
@@ -98,8 +99,9 @@ export function heldEntries(contexts: readonly FieldContext[], classifications: 
         if (!held.shown.has(b.section)) held.shown.set(b.section, new Set());
         held.shown.get(b.section)!.add(at);
       } else held.foreign.set(b.section, (held.foreign.get(b.section) ?? 0) + 1);
-      // Matched or not, the card is someone's own: it is left alone.
-      map.set(card, null);
+      // A card that shows one of the resume's entries is that entry's card: filled from it, its own answers kept as any
+      // box keeps them (a site's resume being updated). One that shows an entry the resume lacks is left alone.
+      map.set(card, at >= 0 ? at : null);
     }
     let next = 0;
     for (const card of order) {
@@ -124,7 +126,7 @@ export function entryName(resume: Resume, section: SectionKey, index: number, ha
 
 /**
  * The context as the plan should see it: its card's resume entry in place of its place on the page, or null for a
- * card the page already holds.
+ * card holding an entry the resume does not have.
  */
 export function placeInCard(held: HeldEntries, ctx: FieldContext): FieldContext | null {
   const map = ctx.group ? held.cards.get(ctx.group.key) : undefined;

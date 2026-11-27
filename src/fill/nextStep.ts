@@ -1,6 +1,8 @@
 // Multi-step forms: find the page's own "Next" button, tell it apart from the button that sends the application,
 // and say when the page needs the user before it can move on. Pure DOM; the extension never presses "Submit".
+// Open shadow roots are searched as well: forms drawn by web components keep their fields and buttons there.
 import { isPlaceholderOption } from '../dictionary/options';
+import { querySelectorAllDeep } from '../engine/shadow';
 import { isVisible } from '../engine/visibility';
 
 export type StepButtonKind = 'next' | 'submit' | 'other';
@@ -50,7 +52,7 @@ const isDisabled = (el: HTMLElement): boolean =>
  * knows; its label is still read, so a "Submit" in the Next button's place is the final step.
  */
 export function findStepAction(doc: Document, adapterSelector?: string): StepAction {
-  const all = (sel: string) => Array.from(doc.querySelectorAll<HTMLElement>(sel)).filter((el) => isVisible(el));
+  const all = (sel: string) => querySelectorAllDeep(doc, sel).filter((el) => isVisible(el));
   let candidates = adapterSelector ? all(adapterSelector) : [];
   if (candidates.length === 0) candidates = all(BUTTONS);
 
@@ -110,7 +112,7 @@ function shownText(box: HTMLElement): string {
 
 /** The page is showing "a response is required" next to a question it checked itself. */
 function showsRequiredError(doc: Document): boolean {
-  return Array.from(doc.querySelectorAll<HTMLElement>(ERROR_BOXES)).some((box) => {
+  return querySelectorAllDeep(doc, ERROR_BOXES).some((box) => {
     if (!isVisible(box)) return false;
     const text = shownText(box);
     return text.length > 0 && text.length <= MAX_ERROR_CHARS && REQUIRED_ERROR.test(text);
@@ -119,18 +121,19 @@ function showsRequiredError(doc: Document): boolean {
 
 /** Why this step cannot be left to run on its own, or null when nothing on it is waiting for the user. */
 export function pageBlocker(doc: Document): PageBlocker | null {
-  if (Array.from(doc.querySelectorAll<HTMLElement>(VERIFICATION_WIDGETS)).some((el) => isVisible(el))) return 'verification';
+  if (querySelectorAllDeep(doc, VERIFICATION_WIDGETS).some((el) => isVisible(el))) return 'verification';
 
-  const controls = Array.from(doc.querySelectorAll<HTMLElement>(CONTROLS)).filter((el) => isVisible(el));
+  const controls = querySelectorAllDeep(doc, CONTROLS).filter((el) => isVisible(el));
   if (controls.some((el) => VERIFICATION_TEXT.test(describedAs(el)))) return 'verification';
 
-  if (Array.from(doc.querySelectorAll<HTMLElement>('[aria-invalid="true"]')).some((el) => isVisible(el))) return 'needs_you';
+  if (querySelectorAllDeep(doc, '[aria-invalid="true"]').some((el) => isVisible(el))) return 'needs_you';
   if (showsRequiredError(doc)) return 'needs_you';
 
   for (const el of controls) {
     if (!isRequired(el) || (el as HTMLInputElement).disabled) continue;
     if (el instanceof HTMLInputElement && el.type === 'radio') {
-      const scope = el.form ?? doc;
+      // A radio group lives in its form, or in the shadow root that holds it.
+      const scope = el.form ?? (el.getRootNode() as Document | ShadowRoot);
       const group = el.name
         ? Array.from(scope.querySelectorAll<HTMLInputElement>('input[type=radio]')).filter((r) => r.name === el.name)
         : [el];
@@ -160,7 +163,7 @@ function hash(text: string): string {
  */
 export function stepFingerprint(doc: Document, adapterStep: string | null): string {
   if (adapterStep) return `step:${adapterStep}`;
-  const ids = Array.from(doc.querySelectorAll<HTMLElement>(CONTROLS))
+  const ids = querySelectorAllDeep(doc, CONTROLS)
     .filter((el) => isVisible(el))
     .map((el) => `${el.tagName}:${el.getAttribute('name') || el.id || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''}`);
   return `fields:${ids.length}:${hash(ids.join('|'))}`;

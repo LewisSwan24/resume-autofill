@@ -186,3 +186,37 @@ describe('stepTitle', () => {
     expect(stepTitle(page(`<div aria-current="step">${'很长的说明'.repeat(10)}</div>`))).toBeNull();
   });
 });
+
+// A form drawn by web components (Salesforce, SmartRecruiters): its fields and its Next button sit in open shadow roots.
+describe('inside open shadow roots', () => {
+  const host = (html: string, mode: 'open' | 'closed' = 'open'): Document => {
+    document.body.innerHTML = '<main><x-step id="host"></x-step></main>';
+    const el = document.getElementById('host')!;
+    const root = el.attachShadow({ mode });
+    // A second level, as a component inside a component.
+    root.innerHTML = '<x-inner id="inner"></x-inner>';
+    root.getElementById('inner')!.attachShadow({ mode }).innerHTML = html;
+    return document;
+  };
+
+  it('finds the Next button, and still never one that sends', () => {
+    const action = findStepAction(host('<input name="a" value="x"><button id="next">Next</button>'));
+    expect(action.kind === 'next' && action.button.id).toBe('next');
+    expect(findStepAction(host('<button>Submit application</button>')).kind).toBe('final');
+  });
+
+  it('sees a required box left empty and a radio group with nothing chosen', () => {
+    expect(pageBlocker(host('<input name="a" required><button>Next</button>'))).toBe('needs_you');
+    expect(pageBlocker(host('<input type="radio" name="r" required><input type="radio" name="r"><button>Next</button>'))).toBe('needs_you');
+    expect(pageBlocker(host('<input type="radio" name="r" required checked><input type="radio" name="r"><button>Next</button>'))).toBeNull();
+    expect(pageBlocker(host('<div class="g-captcha"></div><button>Next</button>'))).toBe('verification');
+  });
+
+  it('tells one step from the next by the fields showing in them', () => {
+    expect(stepFingerprint(host('<input name="first">'), null)).not.toBe(stepFingerprint(host('<input name="school">'), null));
+  });
+
+  it('cannot see into a closed shadow root, so finds nothing there', () => {
+    expect(findStepAction(host('<button>Next</button>', 'closed')).kind).toBe('none');
+  });
+});

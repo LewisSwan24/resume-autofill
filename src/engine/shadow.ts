@@ -72,6 +72,25 @@ export function querySelectorDeep(root: Document | ShadowRoot | Element, selecto
   return null;
 }
 
+/** Every match of `selector` in `root` and in the open shadow roots under it, the light tree's first (depth guarded). */
+export function querySelectorAllDeep<T extends Element = HTMLElement>(root: Document | ShadowRoot | Element, selector: string): T[] {
+  const out: T[] = [];
+  const seen = new Set<ShadowRoot>();
+  const queue: Array<{ scope: Document | ShadowRoot | Element; depth: number }> = [{ scope: root, depth: 0 }];
+  while (queue.length > 0) {
+    const next = queue.shift()!;
+    out.push(...Array.from(next.scope.querySelectorAll<T>(selector)));
+    if (next.depth >= MAX_SHADOW_DEPTH) continue;
+    for (const el of Array.from(next.scope.querySelectorAll('*'))) {
+      if (el.shadowRoot && !seen.has(el.shadowRoot)) {
+        seen.add(el.shadowRoot);
+        queue.push({ scope: el.shadowRoot, depth: next.depth + 1 });
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * Resolve `<label for>` elements across both the control's own root and any outer Shadow host root
  * (e.g. `<label for="emp-email">Email</label><lwc-input id="emp-email">#shadow<input/></lwc-input>`).

@@ -57,9 +57,18 @@ function splitEscape(m: string, at: number, s: string): { escape: string; addres
   const address = m.slice(escape.length);
   if (!escape) return { escape: '', address: m };
   // With the escape set apart, nothing may be left before the @: the page shows only the domain ("@corp.example").
-  // That is no address, and taking the escape's tail as its name would break the escape.
-  if (/^(?:@|%40)/.test(address)) return { escape, address: '' };
+  // That is no address, and taking the escape's tail as its name would break the escape. Only when the escape stands
+  // for a character no name holds, though: %61@corp.example is a@corp.example, written escaped.
+  if (/^(?:@|%40)/.test(address)) return endsName(escape) ? { escape, address: '' } : { escape: '', address: m };
   return /^[\w.+-]+(?:@|%40)/.test(address) ? { escape, address } : { escape: '', address: m };
+}
+
+/** True when an escape (the part after its backslash or %) stands for a character an address's name cannot hold. */
+function endsName(escape: string): boolean {
+  const code = /^(?:u|x)?([\da-fA-F]{2,4})$/.exec(escape)?.[1];
+  // A one-letter escape: \n, \t and the like are white space; any other letter stands for itself.
+  const ch = code !== undefined ? String.fromCharCode(parseInt(code, 16)) : /^[nrtbfv]$/.test(escape) ? ' ' : escape;
+  return !/[\w.+-]/.test(ch);
 }
 const ASSET_SUFFIX = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|woff2?|ttf|json|html?)$/i;
 const EMAIL_PLACEHOLDER = /^redacted-\d+@example\.invalid$/i;

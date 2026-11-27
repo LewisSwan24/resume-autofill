@@ -838,6 +838,15 @@ describe('pages built with Next.js', () => {
     expect(new Scrubber().text(`${u('>')}jane@corp.example`)).toBe(`${u('>')}redacted-1@example.invalid`);
   });
 
+  it('still takes an escape that spells a letter of the name as part of the address', () => {
+    // %61, \x6a and j are a, j and j: "a@corp.example" written escaped, not a bare domain.
+    for (const escaped of ['%61@corp.example', `${BS}x6a@corp.example`, `${BS}u006a@corp.example`]) {
+      const text = `see ${escaped} now`;
+      expect(new Scrubber().text(text), escaped).not.toContain('@corp.example');
+      expect(auditHtml(`<p>${text}</p>`).map((f) => f.kind), escaped).toContain('email');
+    }
+  });
+
   it('gives a text row the length of its scrubbed text', () => {
     const text = 'Write to jane@corp.example — thanks'; // the dash is three bytes
     const flight = `0:["$","div",null,{}]\n1:T${bytes(text).toString(16)},${text}2:["$","p",null,{}]\n`;

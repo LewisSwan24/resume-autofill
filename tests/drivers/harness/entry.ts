@@ -12,6 +12,11 @@ import { runFill } from '../../../src/fill/runFill';
 import { readStep, pressNext } from './steps';
 import { createSampleFiles, createSampleProfile } from '../../../src/schema';
 import { buildIntent, execIntent, listLabels, locate } from './inpage';
+import { Scrubber, sanitizeStaticHtml } from '../../../src/capture/sanitize';
+import { serializeInPage } from '../../../src/capture/serialize';
+
+/** The static page as the extension's recorder writes it: the browser's own parser, one scrubber. */
+const sanitizeInBrowser = (html: string, css: string, terms: string[]): string => sanitizeStaticHtml(html, new Scrubber({ terms }), { css });
 
 // ---------------------------------------------------------------------------------------------
 // EXTENSION POINT (Task 17 / scan): to expose more of the product code, add an import here and
@@ -24,6 +29,8 @@ const extra = {
   runFill,
   readStep,
   pressNext,
+  serializeInPage,
+  sanitizeInBrowser,
 };
 // ---------------------------------------------------------------------------------------------
 

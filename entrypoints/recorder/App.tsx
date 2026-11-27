@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { buildCapture, termsFrom, type CaptureBundle } from '../../src/capture/bundle';
+import { CHECKLIST, WARNING_TEXT, looksChinese, pageWarnings, type PageWarning } from '../../src/capture/checklist';
 import { TabRecorder } from '../../src/capture/recorder';
 import type { Finding } from '../../src/capture/sanitize';
 import { loadProfile } from '../../src/storage';
@@ -24,7 +25,7 @@ type State =
   | { step: 'recording'; requests: number }
   | { step: 'saving' }
   | { step: 'refused'; findings: Finding[] }
-  | { step: 'saved'; file: string; entries: number; unread: number }
+  | { step: 'saved'; file: string; entries: number; unread: number; warnings: PageWarning[] }
   | { step: 'failed'; message: string };
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -50,6 +51,7 @@ export default function App() {
   const [resumeTerms, setResumeTerms] = useState<string[] | null>(null);
   const [locked, setLocked] = useState(false);
   const [state, setState] = useState<State>({ step: 'idle' });
+  const [checked, setChecked] = useState<string[]>([]);
   const recorder = useRef<TabRecorder | null>(null);
 
   useEffect(() => {
@@ -63,7 +65,16 @@ export default function App() {
     return () => void recorder.current?.cancel();
   }, []);
 
-  const ready = tabId !== null && SLUG.test(ats) && SLUG.test(name) && resumeTerms !== null;
+  const ready = tabId !== null && SLUG.test(ats) && SLUG.test(name) && resumeTerms !== null && checked.length === CHECKLIST.length;
+
+  // A Chinese portal gets the Chinese redaction without being asked; it can still be turned off.
+  async function chooseTab(id: number | null) {
+    setTabId(id);
+    if (id === null) return;
+    const tab = tabs.find((t) => t.id === id);
+    const lang = await chromeRecorderApi.runInTop(id, () => document.documentElement.lang).catch(() => '');
+    if (looksChinese(tab?.url ?? '', lang)) setCn(true);
+  }
 
   async function start() {
     if (tabId === null) return;
@@ -99,7 +110,13 @@ export default function App() {
         setState({ step: 'refused', findings: result.findings });
         return;
       }
-      setState({ step: 'saved', file: download(result.bundle), entries: result.bundle.meta.harEntries, unread: rec.unreadBodies.length });
+      setState({
+        step: 'saved',
+        file: download(result.bundle),
+        entries: result.bundle.meta.harEntries,
+        unread: rec.unreadBodies.length,
+        warnings: pageWarnings(result.bundle.pages),
+      });
     } catch (e) {
       setState({ step: 'failed', message: String(e) });
     } finally {
@@ -128,7 +145,7 @@ export default function App() {
       ) : null}
       <Field label="分页">
         {(control) => (
-          <SelectInput {...control} value={tabId ?? ''} disabled={recording} onChange={(e) => setTabId(e.target.value ? Number(e.target.value) : null)}>
+          <SelectInput {...control} value={tabId ?? ''} disabled={recording} onChange={(e) => void chooseTab(e.target.value ? Number(e.target.value) : null)}>
             <option value="">选一个分页</option>
             {tabs.map((t) => (
               <option key={t.id} value={t.id}>
@@ -148,6 +165,17 @@ export default function App() {
       <Field label="另外要遮盖的词" help="逗号或换行分隔。已存简历里的值会自动遮盖。">
         {(control) => <Textarea {...control} value={extra} disabled={recording} rows={2} onChange={(e) => setExtra(e.target.value)} />}
       </Field>
+      <fieldset aria-label="录制前确认" disabled={recording} style={{ display: 'grid', gap: 6, border: 0, padding: 0 }}>
+        <legend>录制前确认</legend>
+        {CHECKLIST.map((item) => (
+          <Checkbox
+            key={item.id}
+            label={item.text}
+            checked={checked.includes(item.id)}
+            onChange={(on) => setChecked((c) => (on ? [...c, item.id] : c.filter((id) => id !== item.id)))}
+          />
+        ))}
+      </fieldset>
       <div style={{ display: 'flex', gap: 8 }}>
         {recording ? (
           <>
@@ -182,6 +210,9 @@ function Status({ state }: { state: State }) {
         <Notice title="已导出。">
           {state.file}，{state.entries} 个请求。
           {state.unread > 0 ? ` 有 ${state.unread} 个回应 Chrome 已经丢掉，回放时是空的。` : ''}
+          {state.warnings.map((w) => (
+            <span key={w}> {WARNING_TEXT[w]}</span>
+          ))}
         </Notice>
       );
     case 'refused':

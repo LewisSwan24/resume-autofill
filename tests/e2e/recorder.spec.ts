@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect, test } from '@playwright/test';
 import type { CaptureBundle } from '../../src/capture/bundle';
+import { CHECKLIST } from '../../src/capture/checklist';
 import { createSampleProfile } from '../../src/schema/samples';
 import { fixtureUrl } from './helpers';
 
@@ -32,8 +33,15 @@ test('records a tab of its own browser into a bundle with no resume value in it'
     await recorder.getByLabel('分页').selectOption({ label: title });
     await recorder.getByLabel('平台').fill('synthetic');
     await recorder.getByLabel('样本名').fill('native');
+    // An English page: the Chinese redaction stays off.
+    await expect(recorder.getByLabel('中国站点：也遮盖手机号和身份证号', { exact: true })).not.toBeChecked();
     const start = recorder.getByRole('button', { name: '开始' });
-    // Enabled once every kept resume has been read for its values.
+    // Only once the applicant has gone through the checklist, and every kept resume has been read for its values.
+    const items = recorder.getByRole('group', { name: '录制前确认' }).getByRole('checkbox');
+    await expect(items).toHaveCount(CHECKLIST.length);
+    for (let i = 0; i < CHECKLIST.length - 1; i++) await items.nth(i).check();
+    await expect(start).toBeDisabled();
+    await items.nth(CHECKLIST.length - 1).check();
     await expect(start).toBeEnabled({ timeout: 15_000 });
     await start.click();
 
@@ -65,6 +73,26 @@ test('records a tab of its own browser into a bundle with no resume value in it'
     expect(names).toHaveLength(2);
     for (const name of names) expect(JSON.stringify(bundle)).not.toContain(name);
     await expect(recorder.getByText('已导出。')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('turns the Chinese redaction on for a page in Chinese', async ({ headless }) => {
+  const context = await chromium.launchPersistentContext('', {
+    channel: 'chromium',
+    headless: headless && !process.env.HEADED,
+    args: [`--disable-extensions-except=${RECORDER_EXT}`, `--load-extension=${RECORDER_EXT}`],
+  });
+  try {
+    const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+    const target = await context.newPage();
+    await target.goto(fixtureUrl('questions-zh'));
+    const recorder = await context.newPage();
+    await recorder.goto(`chrome-extension://${new URL(worker.url()).host}/recorder.html`);
+    await expect(recorder.getByLabel('中国站点：也遮盖手机号和身份证号', { exact: true })).not.toBeChecked();
+    await recorder.getByLabel('分页').selectOption({ label: await target.title() });
+    await expect(recorder.getByLabel('中国站点：也遮盖手机号和身份证号', { exact: true })).toBeChecked();
   } finally {
     await context.close();
   }

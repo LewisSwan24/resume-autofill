@@ -1,4 +1,4 @@
-// Recorder page: only in a build made with RAF_RECORDER=1. Records one tab of this Chrome into a sanitised sample
+// Recorder page: only in a recorder build (`pnpm build:recorder`). Records one tab of this Chrome into a sanitised sample
 // bundle (src/capture/bundle.ts) for the replay tests. Sign in, pass any captcha and reach the page first; the
 // recording starts with a reload of that tab, and nothing is filled, clicked or sent by this page.
 import { useEffect, useRef, useState } from 'react';

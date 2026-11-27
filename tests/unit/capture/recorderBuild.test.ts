@@ -1,39 +1,38 @@
 // @vitest-environment node
-// The recorder needs the debugger, which a store build must never ask for. Only RAF_RECORDER=1 builds it, into a
-// folder of its own so that no test or release picks that build up by mistake.
-import { afterEach, describe, expect, it } from 'vitest';
+// The recorder needs the debugger, which a store build must never ask for. Only a build in recorder mode
+// (`pnpm build:recorder`) has it, and WXT writes that build to a folder of its own, .output/chrome-mv3-recorder.
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
 import config from '../../../wxt.config';
 
 type Info = { name: string; inputPath: string; type: string };
-type ManifestFn = (env: unknown) => { permissions?: string[] };
-type FoundHook = (wxt: unknown, infos: Info[]) => void;
+type ManifestFn = (env: { mode: string; browser: string }) => { permissions?: string[] };
+type FoundHook = (wxt: { config: { mode: string } }, infos: Info[]) => void;
 
-const manifest = (): { permissions?: string[] } => (config.manifest as unknown as ManifestFn)({ mode: 'production', browser: 'chrome' });
-const found = (): string[] => {
+const manifest = (mode: string) => (config.manifest as unknown as ManifestFn)({ mode, browser: 'chrome' });
+const found = (mode: string): string[] => {
   const infos: Info[] = ['background', 'sidepanel', 'recorder'].map((name) => ({ name, inputPath: `${name}.ts`, type: 'unlisted-page' }));
-  ((config.hooks as Record<string, unknown>)['entrypoints:found'] as FoundHook)({}, infos);
+  ((config.hooks as Record<string, unknown>)['entrypoints:found'] as FoundHook)({ config: { mode } }, infos);
   return infos.map((i) => i.name);
 };
 
-afterEach(() => {
-  delete process.env.RAF_RECORDER;
-});
-
 describe('the recorder build switch', () => {
-  it('leaves the debugger, scripting and the recorder page out of a normal build', () => {
-    expect(manifest().permissions).toEqual(['storage', 'unlimitedStorage', 'sidePanel', 'webNavigation']);
-    expect(found()).toEqual(['background', 'sidepanel']);
+  it('leaves the debugger, scripting and the recorder page out of every other build', () => {
+    for (const mode of ['production', 'development']) {
+      expect(manifest(mode).permissions).toEqual(['storage', 'unlimitedStorage', 'sidePanel', 'webNavigation']);
+      expect(found(mode)).toEqual(['background', 'sidepanel']);
+    }
   });
 
-  it('adds them with RAF_RECORDER=1, built apart from the normal build', () => {
-    process.env.RAF_RECORDER = '1';
-    expect(manifest().permissions).toEqual(['storage', 'unlimitedStorage', 'sidePanel', 'webNavigation', 'debugger', 'scripting']);
-    expect(found()).toEqual(['background', 'sidepanel', 'recorder']);
+  it('adds them in recorder mode', () => {
+    expect(manifest('recorder').permissions).toEqual(['storage', 'unlimitedStorage', 'sidePanel', 'webNavigation', 'debugger', 'scripting']);
+    expect(found('recorder')).toEqual(['background', 'sidepanel', 'recorder']);
   });
 
-  it('writes a recorder build to a folder of its own', async () => {
-    const { recorderBuild } = await import('../../../src/capture/build');
-    expect(recorderBuild({}).outDirTemplate).toBeUndefined();
-    expect(recorderBuild({ RAF_RECORDER: '1' }).outDirTemplate).toBe('{{browser}}-mv{{manifestVersion}}-recorder');
+  it('is built by a script of its own, and the store build script stays as it was', () => {
+    const scripts = (JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }).scripts;
+    expect(scripts['build:recorder']).toBe('wxt build --mode recorder');
+    expect(scripts.build).toBe('wxt build');
+    expect(scripts.zip).toBe('wxt zip');
   });
 });

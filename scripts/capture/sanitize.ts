@@ -680,8 +680,10 @@ export interface SidecarIo {
   remove(name: string): void;
 }
 
+// Besides the standard ones, a header an app names for its own sign-in: Oracle Recruiting sends the candidate's
+// session as Ora-Irc-Access-Code. A replay never checks headers, so dropping one costs nothing.
 const SENSITIVE_HEADER =
-  /^(?:cookie2?|set-cookie2?|authorization|proxy-authorization|x-api-key|x-auth-token|x-amz-security-token|x-goog-api-key|.*(?:csrf|xsrf).*)$/i;
+  /^(?:cookie2?|set-cookie2?|authorization|proxy-authorization|.*(?:csrf|xsrf|token|session|secret|api-?key|access[-_]?code|auth).*)$/i;
 // The stored body is decoded and changes size.
 const STALE_HEADER = /^(?:content-length|content-encoding)$/i;
 const TEXT_MIME = /^text\/|json|javascript|xml|html|css|svg|x-www-form-urlencoded|graphql/i;

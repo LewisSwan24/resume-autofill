@@ -265,6 +265,21 @@ describe('sanitizeHar', () => {
     expect(e!.response.cookies).toEqual([]);
   });
 
+  it("drops a sign-in an app sends in headers of its own naming, and the audit reports one left in", () => {
+    const signIn = ['Ora-Irc-Access-Code', 'X-Session-Id', 'X-Refresh-Token', 'X-Client-Secret', 'X-Apikey', 'x-access_code'];
+    const kept = ['accept', 'Content-Type', 'Ora-Irc-Language', 'X-Requested-With'];
+    const withHeaders = () => {
+      const har = makeHar();
+      har.log.entries[0]!.request.headers = [...signIn, ...kept].map((name) => ({ name, value: '1f2e3d4c-5b6a-4789-8abc-def012345678' }));
+      return har;
+    };
+    const audited = auditHar(withHeaders(), sidecarStore().io).filter((f) => f.kind === 'sensitive-header').map((f) => f.sample);
+    expect(audited).toEqual(expect.arrayContaining(signIn.map((n) => n.toLowerCase())));
+    const har = withHeaders();
+    sanitizeHar(har, new Scrubber(), sidecarStore().io);
+    expect(har.log.entries[0]!.request.headers.map((h) => h.name)).toEqual(kept);
+  });
+
   it('drops content-length and content-encoding, since bodies change size and are stored decoded', () => {
     const har = makeHar();
     sanitizeHar(har, new Scrubber(), sidecarStore().io);

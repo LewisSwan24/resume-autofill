@@ -889,4 +889,12 @@ describe('session storage', () => {
     expect(kinds).toContain('email');
     expect(auditStorage(sanitizeStorage(tab, new Scrubber()))).toEqual([]);
   });
+
+  it('scrubs and audits the keys too: a page may cache an answer under the address it asked', () => {
+    const cached = { '/api/candidate?email=jane@corp.example': '{}', 'draft:Jane': '1' };
+    expect(auditStorage(cached, { terms: ['Jane'] }).map((f) => f.kind)).toEqual(expect.arrayContaining(['email', 'term']));
+    const kept = sanitizeStorage(cached, new Scrubber({ terms: ['Jane'] }));
+    expect(Object.keys(kept).join(' ')).not.toMatch(/jane|Jane/);
+    expect(auditStorage(kept, { terms: ['Jane'] })).toEqual([]);
+  });
 });

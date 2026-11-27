@@ -9,8 +9,9 @@ const PAGE = '<!doctype html><html><head><script>x()</script></head><body><input
 
 describe('shared capture code', () => {
   it('imports nothing that only runs in Node', () => {
-    for (const file of ['src/capture/sanitize.ts', 'src/capture/serialize.ts']) {
+    for (const file of ['src/capture/sanitize.ts', 'src/capture/serialize.ts', 'src/capture/har.ts']) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/from ['"](?:jsdom|node:[\w/]+)['"]/);
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/\bBuffer\.|\bprocess\.|\brequire\(/);
     }
   });
 
@@ -30,6 +31,29 @@ describe('shared capture code', () => {
     expect(out).not.toContain('<!-- c -->');
     expect(auditHtml(out, { dom })).toEqual([]);
     expect(parsed).toHaveLength(2);
+  });
+
+  it('reads and writes a base64 body as UTF-8 without Node', async () => {
+    const { auditHar, sanitizeHar } = await import('../../../src/capture/sanitize');
+    const io = { read: () => null, write: () => {}, remove: () => {} };
+    const text = 'Écrivez à jane@corp.example';
+    const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+    const har = {
+      log: {
+        entries: [
+          {
+            request: { method: 'GET', url: 'https://x.example.com/', headers: [], cookies: [], queryString: [] },
+            response: { status: 200, headers: [], cookies: [], content: { mimeType: 'text/plain', text: b64, encoding: 'base64' } },
+          },
+        ],
+      },
+    };
+    expect(auditHar(har, io).map((f) => f.kind)).toEqual(['email']);
+    sanitizeHar(har, new Scrubber(), io);
+    const content = har.log.entries[0]!.response.content as { text: string; encoding?: string; size?: number };
+    expect(content.text).toBe('Écrivez à redacted-1@example.invalid');
+    expect(content.encoding).toBeUndefined();
+    expect(content.size).toBe(new TextEncoder().encode(content.text).length);
   });
 
   it("parses with the browser's DOMParser when handed nothing", () => {

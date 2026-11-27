@@ -730,6 +730,13 @@ function scrubSidecar(name: string, mime: string | undefined, scrub: Scrubber, i
   if (next !== text) io.write(name, next);
 }
 
+/** A base64 body as UTF-8 text, in Node or a browser. */
+function fromBase64(text: string): string {
+  return new TextDecoder().decode(Uint8Array.from(atob(text), (c) => c.charCodeAt(0)));
+}
+
+const byteLength = (text: string): number => new TextEncoder().encode(text).length;
+
 function scrubContent(c: HarContent, scrub: Scrubber, io: SidecarIo): void {
   if (c._file) {
     scrubSidecar(c._file, c.mimeType, scrub, io);
@@ -737,11 +744,11 @@ function scrubContent(c: HarContent, scrub: Scrubber, io: SidecarIo): void {
   }
   if (c.text === undefined || c.text === '') return;
   const base64 = c.encoding === 'base64';
-  const decoded = base64 ? Buffer.from(c.text, 'base64').toString('utf8') : c.text;
+  const decoded = base64 ? fromBase64(c.text) : c.text;
   if (!isTextBody(c.mimeType, decoded)) return;
   c.text = scrub.body(decoded, c.mimeType);
   delete c.encoding;
-  c.size = Buffer.byteLength(c.text);
+  c.size = byteLength(c.text);
 }
 
 /**
@@ -834,7 +841,7 @@ export function auditHar(har: HarFile, io: SidecarIo, opts: ScrubOptions = {}): 
     if (c._file) {
       scanSidecar(c._file, c.mimeType, `${where} body sidecar`);
     } else if (c.text && isTextBody(c.mimeType, c.text)) {
-      scan(c.encoding === 'base64' ? Buffer.from(c.text, 'base64').toString('utf8') : c.text, `${where} body`, c.mimeType);
+      scan(c.encoding === 'base64' ? fromBase64(c.text) : c.text, `${where} body`, c.mimeType);
     }
   });
   return out;
@@ -847,7 +854,8 @@ const SIGN_IN_STORAGE_KEY = /^(?:vt|st)(?:_ed)?$|token|secret|password|access[-_
 /** A tab's session storage as a replay may start from it: no sign-in, every value scrubbed. */
 export function sanitizeStorage(items: Record<string, string>, scrub: Scrubber): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(items)) if (!SIGN_IN_STORAGE_KEY.test(key)) out[key] = scrub.text(value);
+  // A key may be the address of a request whose answer the page cached.
+  for (const [key, value] of Object.entries(items)) if (!SIGN_IN_STORAGE_KEY.test(key)) out[scrub.text(key)] = scrub.text(value);
   return out;
 }
 
@@ -856,6 +864,7 @@ export function auditStorage(items: Record<string, string>, opts: ScrubOptions =
   const out: Finding[] = [];
   for (const [key, value] of Object.entries(items)) {
     if (SIGN_IN_STORAGE_KEY.test(key)) out.push({ kind: 'sign-in-storage', where: 'sessionStorage', sample: key });
+    out.push(...scanText(key, 'sessionStorage key', terms, opts.cn));
     out.push(...scanText(value, `sessionStorage ${key}`, terms, opts.cn));
   }
   return out;

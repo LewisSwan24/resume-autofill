@@ -6,6 +6,7 @@ import {
   auditHar,
   auditHtml,
   auditStorage,
+  auditText,
   sanitizeHar,
   resumeTerms,
   sanitizeStaticHtml,
@@ -25,6 +26,26 @@ describe('Scrubber.text', () => {
     expect(a).not.toContain('jane.doe');
     expect(a).toContain('@example.invalid');
     expect(b.toLowerCase()).toContain(a.split(' ')[1]!.toLowerCase());
+  });
+
+  // A minified bundle can hold one unbroken run of letters and digits a hundred thousand long (BambooHR's vendor
+  // script holds one of 125,899). Looked for from every point of the run, an address or a phone key takes minutes and
+  // freezes the recorder page; looked for once per run, it takes milliseconds.
+  it('cleans and audits a bundle with a very long unbroken run in linear time, and still finds what sits beside it', () => {
+    const run = 'A'.repeat(200_000);
+    const bundle = `var d="${run}";var ${run}_phone="0412 345 678";mail("${run}.jane@corp.example");x="${'b-'.repeat(50_000)}"`;
+    const started = Date.now();
+    const out = new Scrubber().text(bundle);
+    const findings = auditText(bundle, 'bundle');
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(out).not.toContain('0412 345 678');
+    expect(out).not.toContain('corp.example');
+    expect(findings.map((f) => f.kind)).toEqual(expect.arrayContaining(['email', 'phone']));
+  });
+
+  it('replaces addresses that follow one another with only a dash between them', () => {
+    const out = new Scrubber().text('a@b-corp.example-c@d-corp.example');
+    expect(out).not.toMatch(/corp\.example/);
   });
 
   it('replaces url-encoded e-mail addresses', () => {

@@ -42,8 +42,10 @@ const SECRET_ATTR_REV_RE = new RegExp(
   'gi',
 );
 
-// Matched wherever it starts, so nothing in front of an address can hide it. See `splitEscape`.
-const EMAIL_RE = /[\w.+-]+(?:@|%40)[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}/g;
+// Matched wherever it starts, so nothing in front of an address can hide it. See `splitEscape`. The part before the @
+// is at most 64 long, as an address's is: unbounded, a minified bundle's long runs of letters are each read again
+// from every point (BambooHR's vendor script took five minutes and froze the recorder page).
+const EMAIL_RE = /[\w.+-]{1,64}(?:@|%40)[\w-]+(?:\.[\w-]+)*\.[a-zA-Z]{2,}/g;
 const AFTER_BACKSLASH = /^(?:u[\da-fA-F]{4}|x[\da-fA-F]{2}|[a-zA-Z])/;
 const AFTER_PERCENT = /^[\da-fA-F]{2}/;
 
@@ -73,8 +75,10 @@ function endsName(escape: string): boolean {
 const ASSET_SUFFIX = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|woff2?|ttf|json|html?)$/i;
 const EMAIL_PLACEHOLDER = /^redacted-\d+@example\.invalid$/i;
 
+// A key starts where a run of letters starts: a key found further in is found from the run's start too, and a run
+// read from every point of it takes time growing with its length squared.
 const PHONE_KEYED_RE =
-  /(["']?[\w-]*(?:phone|mobile|cell|tel|手机|电话)[\w-]*["']?\s*[:=]\s*["'])([+\d][\d\s().-]{6,})(["'])/gi;
+  /((?<![\w-])["']?[\w-]*(?:phone|mobile|cell|tel|手机|电话)[\w-]*["']?\s*[:=]\s*["'])([+\d][\d\s().-]{6,})(["'])/gi;
 // The lookbehind also rejects / = ? & # so an id in a URL or query is not mistaken for a phone.
 const PHONE_RES = [
   /(?<![\w.\-/=?&#])\+\d{1,3}[\s.-]?(?:\(?\d{1,5}\)?[\s.-]?){2,}\d/g, // international

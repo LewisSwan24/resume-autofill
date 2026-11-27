@@ -77,6 +77,21 @@ describe('buildCapture', () => {
 });
 
 describe('auditCapture', () => {
+  it('parses the pages with the DOM it is handed, as the command line hands it jsdom', () => {
+    const result = buildCapture(input());
+    if (!result.ok) throw new Error('not ok');
+    const parsed: string[] = [];
+    const dom = {
+      parse: (html: string) => {
+        parsed.push(html);
+        return new DOMParser().parseFromString(html, 'text/html');
+      },
+      serialize: (doc: Document) => doc.documentElement.outerHTML,
+    };
+    expect(auditCapture(result.bundle, { terms: ['Jane'], dom })).toEqual([]);
+    expect(parsed).toHaveLength(result.bundle.pages.length);
+  });
+
   it('finds what was left in any part, and says where', () => {
     const raw = input();
     const findings = auditCapture(

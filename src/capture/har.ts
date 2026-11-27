@@ -4,7 +4,7 @@
 // A body is asked for as soon as its request finishes, before Chrome lets it go. A request still open when recording
 // stops (a stream, a long poll) has no answer to replay and is left out. One that failed is kept with status -1, as
 // Playwright writes it, so a replay aborts it rather than leave the page waiting.
-import type { HarEntry, HarFile, HarPair } from './sanitize';
+import type { HarEntry, HarFile, HarPair } from './sanitize.ts';
 
 export type CdpSend = (method: string, params?: object) => Promise<unknown>;
 

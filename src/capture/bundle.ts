@@ -13,10 +13,11 @@ import {
   sanitizeStorage,
   type Finding,
   type HarFile,
+  type HtmlDom,
   type ScrubOptions,
   type SidecarIo,
-} from './sanitize';
-import type { Serialized } from './serialize';
+} from './sanitize.ts';
+import type { Serialized } from './serialize.ts';
 
 export interface CaptureInput {
   meta: { ats: string; name: string; url: string; locale: string; device?: string | undefined };
@@ -71,7 +72,7 @@ function crossOriginCss(data: Serialized, har: HarFile): string {
   return [...sheets, data.css].filter(Boolean).join('\n');
 }
 
-export function auditCapture(bundle: CaptureBundle, opts: ScrubOptions): Finding[] {
+export function auditCapture(bundle: CaptureBundle, opts: ScrubOptions & { dom?: HtmlDom | undefined }): Finding[] {
   const at = (file: string) => (f: Finding) => ({ ...f, where: `${file}: ${f.where}` });
   return [
     ...auditHar(bundle.har, INLINE, opts).map(at('page.har')),

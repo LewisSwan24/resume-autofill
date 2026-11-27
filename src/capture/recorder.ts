@@ -4,8 +4,8 @@
 // The order matters. Session storage is read first, while the tab holds the sign-in the applicant made, and before the
 // reload, which may move it. Then the debugger listens, and only then does the tab reload, so the whole load is heard.
 // Only the Network domain is turned on: a page cannot tell that it is being listened to that way.
-import { HarRecorder } from './har';
-import { serializeInPage, type Serialized } from './serialize';
+import { HarRecorder } from './har.ts';
+import { serializeInPage, type Serialized } from './serialize.ts';
 
 export interface RecorderApi {
   attach(tabId: number): Promise<void>;

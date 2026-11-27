@@ -4,7 +4,10 @@
 // differs from the recorded one only in a field the recording could not fix (a timestamp, or a value the page
 // read from an answer the recording never held) went unanswered. Neither may ever answer from a different entry.
 import { describe, expect, it } from 'vitest';
-import { pageShell, sameDocument, stableTwin, type RecordedRequest } from '../../shared/harReplay';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { arrival, pageShell, recordedRequests, sameDocument, stableTwin, type RecordedRequest } from '../../shared/harReplay';
 
 const get = (url: string): RecordedRequest => ({ method: 'GET', url, postData: null });
 const post = (url: string, body: unknown): RecordedRequest => ({
@@ -118,5 +121,36 @@ describe('pageShell', () => {
 
   it('gives no answer when the recording holds two documents for the site', () => {
     expect(pageShell('https://jobs.example.test/campus/m/resume/1/apply', [...recorded, doc('https://jobs.example.test/campus/m/position/2/detail')])).toBeNull();
+  });
+});
+
+// A request that failed while recording (a font host that refused, a blocked tracker) has no answer to give. The
+// HAR router leaves it pending, and a pending script stops the page from ever finishing loading.
+describe('recordedRequests', () => {
+  it('marks the requests that failed while recording', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'har-'));
+    const entry = (url: string, status: number) => ({ request: { method: 'GET', url, headers: [] }, response: { status, content: { text: '' } } });
+    const har = path.join(dir, 'page.har');
+    writeFileSync(har, JSON.stringify({ log: { entries: [entry('https://cdn.example.test/app.js', 200), entry('https://ads.example.test/conv.js', -1)] } }));
+    const recorded = recordedRequests(har);
+    expect(recorded.map((r) => r.failed ?? false)).toEqual([false, true]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// A form a site only shows in answer to a gate posted back to the same address: Jobvite's consent. The recording
+// holds the gate (the GET) and the form (the POST that answered it); a replay arrives with that POST.
+describe('arrival', () => {
+  const page = 'https://jobs.example.test/acme/job/abc/apply';
+  const doc = (r: RecordedRequest): RecordedRequest => ({ ...r, document: true });
+
+  it('is the document posted to the page address', () => {
+    const recorded = [doc(get(page)), get('https://cdn.example.test/app.js'), doc(post(page, 'policyIds=1'))];
+    expect(arrival(page, recorded)).toMatchObject({ method: 'POST', url: page, postData: 'policyIds=1' });
+  });
+
+  it('gives none when nothing was posted there, or two different answers were', () => {
+    expect(arrival(page, [doc(get(page)), doc(post('https://jobs.example.test/other', 'a=1'))])).toBeNull();
+    expect(arrival(page, [doc(post(page, 'policyIds=1')), doc(post(page, 'policyIds=2'))])).toBeNull();
   });
 });

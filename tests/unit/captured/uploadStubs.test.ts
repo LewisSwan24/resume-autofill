@@ -98,6 +98,31 @@ describe('upload stubs', () => {
     expect(uploadReply({ ...request, url: 'https://example.com/ajax/files/attachTemporary.php' })).toBeNull();
   });
 
+  it('answers Jobvite: the resume or cover letter it took, with the 200 the page checks for', () => {
+    const boundary = '----replayBoundary';
+    const body = `--${boundary}
+Content-Disposition: form-data; name="file"; filename="Sample-Resume.pdf"
+Content-Type: application/pdf
+
+%PDF-1.4
+--${boundary}--
+`;
+    const request = {
+      method: 'POST',
+      url: 'https://jobs.jobvite.com/careers/resource/resume',
+      postData: body,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+    };
+    const reply = uploadReply(request);
+    expect(reply?.status).toBe(200);
+    expect(json(reply)).toMatchObject({ msgInfo: 200, resourceInfo: { name: 'Sample-Resume.pdf' } });
+    expect(storesItself(request)).toBe(true);
+    expect(json(uploadReply({ ...request, url: 'https://jobs.jobvite.com/careers/resource/coverletter' }))).toMatchObject({ msgInfo: 200 });
+    // A resume pasted as text goes to the same address as a form, with no file in it: the recording's to answer.
+    expect(uploadReply({ ...request, postData: 'pastedResume=text', headers: { 'content-type': 'application/x-www-form-urlencoded' } })).toBeNull();
+    expect(uploadReply({ ...request, url: 'https://example.com/careers/resource/resume' })).toBeNull();
+  });
+
   it('a Moka upload is the file itself, so nothing waits for a storage post after it', () => {
     expect(storesItself({ method: 'POST', url: 'https://app.mokahr.com/api/outer/ats-candidate-extractor/resume/uploadAndParse/candidate' })).toBe(true);
     expect(storesItself({ method: 'GET', url: 'https://apply.workable.com/api/v1/jobs/ABC123/form/upload/resume' })).toBe(false);

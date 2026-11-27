@@ -20,7 +20,7 @@ for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
     // uploads get stub answers.
     let uploads: UploadStubs = { settled: async () => {} };
     if (!sample.readInPlace) {
-      await replayFromHar(context, path.join(sample.dir, 'page.har'), /^https?:\/\//);
+      await replayFromHar(context, path.join(sample.dir, 'page.har'), /^https?:\/\//, sample.expected.__arrive === 'post' ? { arriveAt: sample.url } : {});
       uploads = await answerUploads(context);
       await answerSearches(context);
     } else {

@@ -21,6 +21,8 @@ export interface RecordedRequest {
   answer?: string | undefined;
   /** A page's own document, as a browser loads one. */
   document?: true;
+  /** The request failed while recording (status -1): there is no answer to give. */
+  failed?: true;
 }
 
 /** True when a request asks for the document a page address names. The part after # never reaches the server. */
@@ -154,19 +156,58 @@ export function recordedRequests(harPath: string): RecordedRequest[] {
     const post = request.postData;
     const postData = post?._file ? readFileSync(path.join(path.dirname(harPath), post._file), 'utf8') : post?.text || null;
     const body = response?.content?._file ?? response?.content?.text ?? '';
-    return { method: request.method, url: request.url, postData, answer: `${response?.status ?? 0} ${body}`, ...(_resourceType === 'document' ? { document: true as const } : {}) };
+    return {
+      method: request.method,
+      url: request.url,
+      postData,
+      answer: `${response?.status ?? 0} ${body}`,
+      ...(_resourceType === 'document' ? { document: true as const } : {}),
+      ...(response?.status === -1 ? { failed: true as const } : {}),
+    };
   });
 }
 
 /**
- * Answers the context's requests from the HAR. Anything not in it is aborted, so the page cannot reach the site.
- * Register stubs and saved search answers after this, so they are asked first.
+ * The document a page is reached with when the site only shows it in answer to a form posted back to its own address,
+ * as Jobvite does with its consent: the one POST the recording holds there. None, or two that differ, and null.
  */
-export async function replayFromHar(context: BrowserContext, harPath: string, url: RegExp = /^https?:\/\//): Promise<void> {
+export function arrival(pageUrl: string, recorded: RecordedRequest[]): RecordedRequest | null {
+  const posts = recorded.filter((r) => r.document && r.method === 'POST' && sameDocument(r.url, pageUrl));
+  const bodies = new Set(posts.map((p) => p.postData ?? ''));
+  return bodies.size === 1 ? posts[0]! : null;
+}
+
+export interface ReplayOptions {
+  /** The page to arrive at with the form the recording posted to it, rather than with a plain visit. */
+  arriveAt?: string;
+}
+
+/**
+ * Answers the context's requests from the HAR. Anything not in it is aborted, so the page cannot reach the site, and
+ * so is a request that failed while recording: the HAR router would leave it pending, and a pending script keeps
+ * the page from ever finishing loading. Register stubs and saved search answers after this, so they are asked first.
+ */
+export async function replayFromHar(
+  context: BrowserContext,
+  harPath: string,
+  url: RegExp = /^https?:\/\//,
+  options: ReplayOptions = {},
+): Promise<void> {
   await context.routeFromHAR(harPath, { notFound: 'abort', url });
   const recorded = recordedRequests(harPath);
+  const arrive = options.arriveAt ? arrival(options.arriveAt, recorded) : null;
+  if (options.arriveAt && !arrive) throw new Error(`the recording posted no single form to ${options.arriveAt}`);
+  let arrived = false;
   await context.route(url, (route) => {
     const request = route.request();
+    const same = recorded.filter((r) => r.method === request.method() && r.url === request.url());
+    if (same.length > 0 && same.every((r) => r.failed)) return route.abort();
+    if (arrive && !arrived && request.isNavigationRequest() && request.method() === 'GET' && sameDocument(request.url(), arrive.url)) {
+      arrived = true;
+      const body = arrive.postData ?? '';
+      const type: Record<string, string> = FORM.test(body) ? { 'content-type': 'application/x-www-form-urlencoded' } : {};
+      return route.fallback({ method: 'POST', postData: body, headers: { ...request.headers(), ...type } });
+    }
     const shell = request.isNavigationRequest() ? pageShell(request.url(), recorded) : null;
     if (shell) return route.fallback({ url: shell.url });
     const twin = stableTwin({ method: request.method(), url: request.url(), postData: request.postData() }, recorded);

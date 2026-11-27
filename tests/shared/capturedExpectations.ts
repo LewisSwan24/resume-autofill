@@ -115,6 +115,11 @@ export interface CapturedExpected {
    */
   __open?: string;
   /**
+   * `post`: the site shows the form only in answer to a form posted back to the page's address, as Jobvite does with
+   * its consent, which the applicant gave while recording. A replay arrives with that recorded post.
+   */
+  __arrive?: 'post';
+  /**
    * A step form that keeps every step on the page and hides all but the one showing (Moka on a phone): the boxes of
    * its steps. The static checks show them all, so each control is judged as it will be once its step comes up.
    */

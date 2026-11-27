@@ -47,6 +47,8 @@ interface Service {
   reply(request: StubRequest, url: URL): StubReply;
   /** The file goes up in this request itself, with no storage post to wait for after it. */
   storesItself?: true;
+  /** Only a body carrying a file in this multipart field is an upload; anything else sent there is not. */
+  fileField?: string;
 }
 
 /** The file name of one file part in a multipart body. */
@@ -116,6 +118,19 @@ const SERVICES: Service[] = [
     },
     storesItself: true,
   },
+  {
+    // jobs.jobvite.com: `POST /careers/resource/resume` (or `coverletter`), the file in multipart field `file`. The
+    // page takes it when `msgInfo` is 200 and keeps `resourceInfo` as the attachment. A pasted resume goes to the
+    // same address as a plain form: that one is the recording's.
+    name: 'jobvite',
+    matches: (method, url) => method === 'POST' && url.hostname === 'jobs.jobvite.com' && /^\/careers\/resource\/(?:resume|coverletter)$/.test(url.pathname),
+    fileField: 'file',
+    reply: (request) => {
+      const name = fileName(request.postData ?? '', 'file') ?? 'resume.pdf';
+      return ok({ msgInfo: 200, resourceInfo: { name, fileName: name, fileKind: 'Resume' } });
+    },
+    storesItself: true,
+  },
 ];
 
 /** Whether an upload request carries the file itself, so nothing is left to wait for once it is answered. */
@@ -144,7 +159,9 @@ export function uploadReply(request: StubRequest): StubReply | null {
   const url = new URL(request.url);
   if (url.origin === STORAGE_ORIGIN) return storageReply(request, url);
   const service = SERVICES.find((s) => s.matches(request.method, url));
-  return service ? service.reply(request, url) : null;
+  if (!service) return null;
+  if (service.fileField && fileName(request.postData ?? '', service.fileField) === null) return null;
+  return service.reply(request, url);
 }
 
 export interface UploadStubs {

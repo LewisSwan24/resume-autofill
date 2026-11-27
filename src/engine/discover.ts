@@ -385,7 +385,9 @@ function scanScope(
         group.push(el);
         continue;
       }
-      if (isDisabledEl(el) || !isInputVisible(el)) continue;
+      // A file box an adapter names is a field even inside a menu that stays closed until someone opens it.
+      const named = type === 'file' && (adapter?.labels ?? []).some((l) => el.matches(l.control));
+      if (isDisabledEl(el) || (!isInputVisible(el) && !named)) continue;
       if (type === 'file') {
         candidates.set(el, { el, kind: 'file', lib: 'native', inputType: 'file' });
       } else if (type === 'date' || type === 'month') {

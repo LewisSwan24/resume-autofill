@@ -148,3 +148,57 @@ describe('JazzHR', () => {
     expect(classified()('#resumator-resume-value')).toBe('attachments.resume');
   });
 });
+
+describe('Jobvite', () => {
+  // The form as Jobvite draws it, cut down: plain labelled boxes, an "Add Resume" button that opens a menu, and the
+  // menu itself at the end of the page, closed, holding the file box and a box to paste the resume into instead.
+  const menu = (n: number, what: string) => `<div class="jv-add-attachment ng-hide" style="display:none" aria-hidden="true" role="dialog">
+      <div class="jv-add-attachment-item"><label jv-file-input="" for="file-input-${n}"><span role="button">File</span></label>
+        <input id="file-input-${n}" type="file" style="position:absolute;width:1px;height:1px;clip:rect(0,0,0,0)"></div>
+      <form class="jv-form" ng-submit="savePasteField()"><label for="jv-paste-resume-textarea${n}">Type or paste your ${what} here</label>
+        <textarea id="jv-paste-resume-textarea${n}" placeholder="Type or paste your ${what} here"></textarea></form></div>`;
+  const PAGE = `<form name="scopeData.applyForm" novalidate>
+      <h3 id="jv-resume-header">Add Resume*</h3>
+      <button jv-add-attachment="{ social: true }" attachment-label="Resume" class="jv-button" type="button" aria-haspopup="true"
+        aria-labelledby="jv-resume-header" aria-expanded="false" aria-required="true"> Select <i class="icon icon-arrow-down"></i></button>
+      <label for="jv-field-a1">First Name*</label><input id="jv-field-a1" name="input-a1" type="text">
+      <button jv-add-attachment="" attachment-label="Cover Letter" class="jv-button" type="button" aria-haspopup="true" aria-expanded="false"
+        aria-label="Add Cover Letter"> Add Cover Letter </button>
+      <button type="submit" aria-label="Send Application">Send Application</button>
+    </form>${menu(0, 'Resume')}${menu(1, 'Cover Letter')}`;
+
+  const classified = () => {
+    const scan = scanDocument(document);
+    return (selector: string) => {
+      const el = document.querySelector(selector);
+      const i = scan.contexts.findIndex((c) => c.control.el === el);
+      return i < 0 ? null : scan.classifications[i]!.fieldKey;
+    };
+  };
+
+  it('is known by its apply pages, and by its form on a company domain of its own', () => {
+    expect(at('https://jobs.jobvite.com/acme/job/oAbC123/apply')).toBe('jobvite');
+    document.body.innerHTML = PAGE;
+    expect(at('https://careers.example.com/jobs/apply')).toBe('jobvite');
+  });
+
+  it('is not taken for a page that only mentions it', () => {
+    expect(at('https://example.com/blog/jobs.jobvite.com/acme/job/x')).toBeNull();
+    document.body.innerHTML = '<form name="applyForm"><input type="text" name="first"></form>';
+    expect(at('https://careers.example.com/apply')).toBeNull();
+  });
+
+  it('reads the file boxes in the closed menus as the resume and the cover letter', () => {
+    document.body.innerHTML = PAGE;
+    const key = classified();
+    expect(key('#file-input-0')).toBe('attachments.resume');
+    expect(key('#file-input-1')).toBe('answers.coverLetter');
+  });
+
+  it('leaves the buttons that open those menus out', () => {
+    document.body.innerHTML = PAGE;
+    const scanned = scanDocument(document).contexts.map((c) => c.control.el);
+    expect(scanned).not.toContain(document.querySelector('button[attachment-label="Resume"]'));
+    expect(scanned).not.toContain(document.querySelector('button[attachment-label="Cover Letter"]'));
+  });
+});

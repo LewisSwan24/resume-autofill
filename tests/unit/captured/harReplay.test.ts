@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { arrival, pageShell, recordedRequests, sameDocument, stableTwin, type RecordedRequest } from '../../shared/harReplay';
+import { arrival, pageShell, pastSelfRedirect, recordedRequests, sameDocument, stableTwin, type RecordedRequest } from '../../shared/harReplay';
 
 const get = (url: string): RecordedRequest => ({ method: 'GET', url, postData: null });
 const post = (url: string, body: unknown): RecordedRequest => ({
@@ -189,5 +189,25 @@ describe('arrival', () => {
   it('gives none when nothing was posted there, or two different answers were', () => {
     expect(arrival(page, [doc(get(page)), doc(post('https://jobs.example.test/other', 'a=1'))])).toBeNull();
     expect(arrival(page, [doc(post(page, 'policyIds=1')), doc(post(page, 'policyIds=2'))])).toBeNull();
+  });
+});
+
+// A site that answers its page with a redirect to that same address (Moka, setting a cookie first) and then with the
+// page. The cookie is scrubbed from the recording, so a replay served the redirect again forever and never loaded.
+describe('pastSelfRedirect', () => {
+  const page = 'https://jobs.example.test/campus/acme/41';
+  const redirect = (url: string, to: string): RecordedRequest => ({ ...get(url), document: true, redirect: to });
+  const doc = (url: string): RecordedRequest => ({ ...get(url), document: true });
+
+  it('answers with the page, past the redirect back to its own address', () => {
+    const recorded = [redirect(page, page), doc(page), get('https://cdn.example.test/app.js')];
+    expect(pastSelfRedirect({ method: 'GET', url: `${page}#/job/1/apply` }, recorded)).toBe(1);
+  });
+
+  it('leaves a redirect elsewhere, and an address with no such loop, to the recording', () => {
+    expect(pastSelfRedirect({ method: 'GET', url: page }, [redirect(page, `${page}/home`), doc(page)])).toBeNull();
+    expect(pastSelfRedirect({ method: 'GET', url: page }, [doc(page)])).toBeNull();
+    // Two different pages behind the loop: no telling which one the replay should get.
+    expect(pastSelfRedirect({ method: 'GET', url: page }, [redirect(page, page), { ...doc(page), answer: '200 a' }, { ...doc(page), answer: '200 b' }])).toBeNull();
   });
 });

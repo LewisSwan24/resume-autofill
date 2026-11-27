@@ -23,6 +23,8 @@ export interface RecordedRequest {
   document?: true;
   /** The request failed while recording (status -1): there is no answer to give. */
   failed?: true;
+  /** Where a redirect it was answered with sent the browser, as an absolute address. */
+  redirect?: string;
 }
 
 /** True when a request asks for the document a page address names. The part after # never reaches the server. */
@@ -166,12 +168,29 @@ export function pageShell(url: string, recorded: RecordedRequest[]): RecordedReq
   return distinct.size === 1 ? docs[0]! : null;
 }
 
+/**
+ * The recorded entry to answer a page with when the recording answered its address with a redirect back to that same
+ * address (a site setting a cookie, then asking again) and then with the page. The cookie is scrubbed from the
+ * recording, so the redirect would be served forever. One page behind it, and it is that page's index; else null.
+ */
+export function pastSelfRedirect(request: { method: string; url: string }, recorded: RecordedRequest[]): number | null {
+  const here = recorded.map((r, i) => ({ r, i })).filter(({ r }) => r.document && r.method === request.method && sameDocument(r.url, request.url));
+  if (!here.some(({ r }) => r.redirect !== undefined && sameDocument(r.redirect, request.url))) return null;
+  const pages = here.filter(({ r }) => r.redirect === undefined && !r.failed);
+  return new Set(pages.map(({ r }) => r.answer)).size === 1 ? pages[0]!.i : null;
+}
+
 interface HarFile {
   log: {
     entries: {
       _resourceType?: string;
       request: { method: string; url: string; postData?: { text?: string; _file?: string } };
-      response?: { status?: number; content?: { text?: string; _file?: string } };
+      response?: {
+        status?: number;
+        redirectURL?: string;
+        headers?: { name: string; value: string }[];
+        content?: { text?: string; _file?: string; encoding?: string; mimeType?: string };
+      };
     }[];
   };
 }
@@ -186,6 +205,15 @@ export function recordedRequests(harPath: string): RecordedRequest[] {
     const post = request.postData;
     const postData = post?._file ? readFileSync(path.join(path.dirname(harPath), post._file), 'utf8') : post?.text || null;
     const body = response?.content?._file ?? response?.content?.text ?? '';
+    const status = response?.status ?? 0;
+    let redirect: string | undefined;
+    if (status >= 300 && status < 400 && response?.redirectURL) {
+      try {
+        redirect = new URL(response.redirectURL, request.url).href;
+      } catch {
+        redirect = undefined;
+      }
+    }
     return {
       method: request.method,
       url: request.url,
@@ -193,6 +221,7 @@ export function recordedRequests(harPath: string): RecordedRequest[] {
       answer: `${response?.status ?? 0} ${body}`,
       ...(_resourceType === 'document' ? { document: true as const } : {}),
       ...(response?.status === -1 ? { failed: true as const } : {}),
+      ...(redirect !== undefined ? { redirect } : {}),
     };
   });
 }
@@ -205,6 +234,21 @@ export function arrival(pageUrl: string, recorded: RecordedRequest[]): RecordedR
   const posts = recorded.filter((r) => r.document && r.method === 'POST' && sameDocument(r.url, pageUrl));
   const bodies = new Set(posts.map((p) => p.postData ?? ''));
   return bodies.size === 1 ? posts[0]! : null;
+}
+
+/** A recorded answer, as route.fulfill takes it: its status, headers and body, read from its attached file if any. */
+function answerOf(harPath: string, index: number): { status: number; headers: Record<string, string>; body: Buffer } {
+  const har = JSON.parse(readFileSync(harPath, 'utf8')) as HarFile;
+  const response = har.log.entries[index]!.response!;
+  const content = response.content ?? {};
+  const body = content._file
+    ? readFileSync(path.join(path.dirname(harPath), content._file))
+    : Buffer.from(content.text ?? '', content.encoding === 'base64' ? 'base64' : 'utf8');
+  // The body is given whole and decoded, so a length or an encoding it was sent with no longer holds.
+  const skip = new Set(['content-length', 'content-encoding', 'transfer-encoding', 'set-cookie']);
+  const headers = Object.fromEntries((response.headers ?? []).filter((h) => !skip.has(h.name.toLowerCase())).map((h) => [h.name, h.value]));
+  if (content.mimeType && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['content-type'] = content.mimeType;
+  return { status: response.status ?? 200, headers, body };
 }
 
 export interface ReplayOptions {
@@ -250,6 +294,8 @@ export async function replayFromHar(
       const type: Record<string, string> = FORM.test(body) ? { 'content-type': 'application/x-www-form-urlencoded' } : {};
       return route.fallback({ method: 'POST', postData: body, headers: { ...request.headers(), ...type } });
     }
+    const past = request.isNavigationRequest() ? pastSelfRedirect({ method: request.method(), url: request.url() }, recorded) : null;
+    if (past !== null) return route.fulfill(answerOf(harPath, past));
     const shell = request.isNavigationRequest() ? pageShell(request.url(), recorded) : null;
     if (shell) return route.fallback({ url: shell.url });
     const twin = stableTwin({ method: request.method(), url: request.url(), postData: request.postData() }, recorded);

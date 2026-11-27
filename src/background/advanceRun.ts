@@ -7,6 +7,7 @@ import {
   runAutoAdvance,
   stopAutoAdvance,
   type PressResult,
+  type StepState,
 } from './autoAdvance';
 import { broadcastWizard, keepAlive, runFillRequest } from './fill';
 import { readTabStep } from './frameSteps';
@@ -20,6 +21,14 @@ const STEP_TIMEOUT_MS = 2_000;
 /** Per tab, the frame whose Next button the last read found. */
 const pressIn = new Map<number, number>();
 
+const readFrames = (tabId: number) =>
+  readTabStep(tabId, { listFrameIds, ask: (t, f) => withTimeout(sendToFrame(t, f, { type: 'frame:stepState' }), STEP_TIMEOUT_MS) });
+
+/** What moving on from the tab's step would take, across every frame: the FAB offers to advance on `next`. */
+export async function readStepAction(tabId: number): Promise<StepState['action'] | null> {
+  return (await readFrames(tabId))?.state.action ?? null;
+}
+
 /** Start auto-advance in a tab that has a wizard session. Resolves as soon as the run has started. */
 export async function startAutoAdvance(tabId: number): Promise<FillRequestResponse> {
   if (isAutoAdvancing(tabId)) return { ok: true };
@@ -29,7 +38,7 @@ export async function startAutoAdvance(tabId: number): Promise<FillRequestRespon
     ...ADVANCE_DEFAULTS,
     // Every frame is asked: a step may sit in an iframe. Next is pressed in the one frame that has it.
     readStep: async (id) => {
-      const read = await readTabStep(id, { listFrameIds, ask: (t, f) => withTimeout(sendToFrame(t, f, { type: 'frame:stepState' }), STEP_TIMEOUT_MS) });
+      const read = await readFrames(id);
       pressIn.set(id, read?.pressIn ?? 0);
       return read?.state ?? null;
     },

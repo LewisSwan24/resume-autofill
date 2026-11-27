@@ -303,6 +303,17 @@ describe('wizard auto-advance', () => {
     expect(start).toHaveBeenLastCalledWith(5);
   });
 
+  it("answers the FAB with the step's action across every frame, so it can offer to advance a form in an iframe", async () => {
+    const stepAction = vi.fn().mockResolvedValue('next');
+    route = createRouter({ ...(deps as unknown as RouterDeps), stepAction });
+    expect(route({ type: 'wizard:stepAction' }, contentSender(11, 0), respond)).toBe(true);
+    await flush();
+    expect(stepAction).toHaveBeenCalledWith(11);
+    expect(respond).toHaveBeenCalledWith({ action: 'next' });
+    // Only the FAB's own frame asks.
+    expect(route({ type: 'wizard:stepAction' }, contentSender(11, 4), respond)).toBe(false);
+  });
+
   it('only takes a start from the top frame of a page', () => {
     const start = vi.fn().mockResolvedValue({ ok: true });
     route = createRouter({ ...(deps as unknown as RouterDeps), autoAdvance: start });

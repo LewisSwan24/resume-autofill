@@ -14,7 +14,8 @@ import { frameSaysAlive, listFrameIds } from './frames';
 import { relayApply, relayCaptureFingerprint, relayFocus, type ApplyInput } from './relay';
 import { loadScanTotal, recordScan } from './tabState';
 import { clearWizardSession, loadWizardSession } from './wizardSession';
-import { startAutoAdvance, stopAutoAdvance } from './advanceRun';
+import { readStepAction, startAutoAdvance, stopAutoAdvance } from './advanceRun';
+import type { StepState } from './autoAdvance';
 import type { SiteRecipeFingerprint } from '../schema';
 
 export type BgSender = Omit<Sender, 'tab'> & { frameId?: number; tab?: { id?: number } };
@@ -45,6 +46,8 @@ export interface RouterDeps {
   /** Start auto-advance in a tab; resolves once it has started (or could not), not when it ends. */
   autoAdvance?(tabId: number): Promise<FillRequestResponse>;
   stopAdvance?(tabId: number): void;
+  /** What moving on from the tab's step would take, across its frames; null when the top frame does not answer. */
+  stepAction?(tabId: number): Promise<StepState['action'] | null>;
 }
 
 export const defaultRouterDeps: RouterDeps = {
@@ -68,6 +71,7 @@ export const defaultRouterDeps: RouterDeps = {
   },
   openOptions: (target) => openProfileAt(target),
   autoAdvance: (tabId) => startAutoAdvance(tabId),
+  stepAction: (tabId) => readStepAction(tabId),
   stopAdvance: (tabId) => {
     stopAutoAdvance(tabId);
   },
@@ -214,6 +218,17 @@ export function createRouter(deps: RouterDeps = defaultRouterDeps) {
         if (!isIndex(tabId)) return false;
         const start = deps.autoAdvance ?? defaultRouterDeps.autoAdvance!;
         start(tabId).then(sendResponse, (e) => sendResponse({ ok: false, error: errorMessage(e) }));
+        return true;
+      }
+
+      case 'wizard:stepAction': {
+        // From the FAB, in the top frame of its own tab: the Next button may sit in one of the tab's frames.
+        if (fromPage || sender.frameId !== 0 || !isIndex(contentTabId)) return false;
+        const read = deps.stepAction ?? defaultRouterDeps.stepAction!;
+        read(contentTabId).then(
+          (action) => sendResponse({ action }),
+          () => sendResponse({ action: null }),
+        );
         return true;
       }
 

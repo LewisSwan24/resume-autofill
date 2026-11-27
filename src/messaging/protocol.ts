@@ -58,6 +58,8 @@ export type UiToBg =
   /** Move through the remaining steps on its own, stopping before the final submit. */
   | { type: 'wizard:autoAdvance'; tabId?: number }
   | { type: 'wizard:stopAdvance'; tabId?: number }
+  /** FAB → background: what moving on from this step would take, across every frame of the tab. */
+  | { type: 'wizard:stepAction' }
   | { type: 'inspector:start'; tabId: number }
   | { type: 'inspector:stop'; tabId: number }
   | { type: 'field:focus'; tabId?: number; frameId: number; fieldId: string }
@@ -132,6 +134,7 @@ const TYPE_TABLE = {
   'wizard:updated': true,
   'wizard:autoAdvance': true,
   'wizard:stopAdvance': true,
+  'wizard:stepAction': true,
   'frame:stepState': true,
   'frame:pressNext': true,
   'inspector:start': true,

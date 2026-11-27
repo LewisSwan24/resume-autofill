@@ -233,7 +233,24 @@ export function Fab({ reportTimeoutMs = DEFAULT_REPORT_TIMEOUT_MS }: FabProps) {
   const run = wizard?.advance;
   const running = run?.running === true;
   // The page's own buttons; the FAB's sit in a closed shadow root, out of this query's reach.
-  const offer = !running && wizard !== null && view.kind === 'done' && findStepAction(document).kind === 'next';
+  const nextHere = !running && wizard !== null && view.kind === 'done' && findStepAction(document).kind === 'next';
+  // A form in an iframe has its Next there: the background asks every frame of the tab.
+  const [nextInFrame, setNextInFrame] = useState(false);
+  const askFrames = !running && wizard !== null && view.kind === 'done' && !nextHere;
+  useEffect(() => {
+    setNextInFrame(false);
+    if (!askFrames) return;
+    let live = true;
+    void sendToBackground({ type: 'wizard:stepAction' })
+      .then((res) => {
+        if (live) setNextInFrame((res as { action?: unknown } | undefined)?.action === 'next');
+      })
+      .catch(ignore);
+    return () => {
+      live = false;
+    };
+  }, [askFrames, view]);
+  const offer = nextHere || (askFrames && nextInFrame);
   const advance = wizard
     ? {
         offer,

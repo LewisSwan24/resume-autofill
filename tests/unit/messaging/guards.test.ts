@@ -73,6 +73,7 @@ describe('isValidMessage', () => {
         'wizard:updated',
         'wizard:autoAdvance',
         'wizard:stopAdvance',
+        'wizard:stepAction',
         'frame:stepState',
         'frame:pressNext',
         'frame:needs',

@@ -94,7 +94,9 @@ function stableKey(request: RecordedRequest): string | null {
       body = { form: [...new URLSearchParams(text)].filter(([k, v]) => !ignore(k, v)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) };
     }
   }
-  return canonical([request.method, url.origin, url.pathname, query, body]);
+  // A random (version 4) id in the path is made up on each visit: Oracle Recruiting names its visitor so.
+  const pathname = url.pathname.replace(/\/[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}(?=\/|$)/gi, '/<uuid>');
+  return canonical([request.method, url.origin, pathname, query, body]);
 }
 
 // The HAR router's own rule: a POST matches on its body, unless either side has none.
@@ -180,6 +182,12 @@ export function arrival(pageUrl: string, recorded: RecordedRequest[]): RecordedR
 export interface ReplayOptions {
   /** The page to arrive at with the form the recording posted to it, rather than with a plain visit. */
   arriveAt?: string;
+  /**
+   * What a site keeps in session storage for a signed-in visitor, with made-up values, put in place on the page's
+   * origin before its scripts run. A recording holds the answers a signed-in page got, not the sign-in the page read
+   * them with, and without one Oracle Recruiting sends the visitor back to its job list.
+   */
+  sessionStorage?: { origin: string; items: Record<string, string> };
 }
 
 /**
@@ -194,6 +202,12 @@ export async function replayFromHar(
   options: ReplayOptions = {},
 ): Promise<void> {
   await context.routeFromHAR(harPath, { notFound: 'abort', url });
+  if (options.sessionStorage) {
+    await context.addInitScript(({ origin, items }) => {
+      if (location.origin !== origin) return;
+      for (const [key, value] of Object.entries(items)) if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, value);
+    }, options.sessionStorage);
+  }
   const recorded = recordedRequests(harPath);
   const arrive = options.arriveAt ? arrival(options.arriveAt, recorded) : null;
   if (options.arriveAt && !arrive) throw new Error(`the recording posted no single form to ${options.arriveAt}`);

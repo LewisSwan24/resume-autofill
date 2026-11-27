@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { FillReport, FillTiming } from '../../src/engine/types';
 import { DEFAULT_LOCALE, parseDevice, type CaptureDevice } from '../../scripts/capture/device.ts';
 import { coverageOf, type TriageCounts, type TriageTag } from './coverageTriage.ts';
+import type { ReplayOptions } from './harReplay.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const CAPTURED_DIR = path.join(ROOT, 'fixtures', 'captured');
@@ -120,6 +121,11 @@ export interface CapturedExpected {
    */
   __arrive?: 'post';
   /**
+   * Session storage a signed-in visitor has on the page's origin, with made-up values: the sign-in the recorded page
+   * read its answers with (Oracle Recruiting's `vt`). A replay puts it in place before the page's scripts run.
+   */
+  __sessionStorage?: Record<string, string>;
+  /**
    * A step form that keeps every step on the page and hides all but the one showing (Moka on a phone): the boxes of
    * its steps. The static checks show them all, so each control is judged as it will be once its step comes up.
    */
@@ -142,6 +148,8 @@ export interface CapturedSample {
   device: CaptureDevice;
   locale: string;
   expected: CapturedExpected;
+  /** What the tab held in session storage when recording began, for a logged-in capture. */
+  storage?: CapturedStorage;
 }
 
 /** Every sample with an expected.json. Captures without one are not ready yet and are left out. */
@@ -170,6 +178,7 @@ export function listSamples(root: string = CAPTURED_DIR): CapturedSample[] {
         device: parseDevice(meta.device),
         locale: meta.locale ?? DEFAULT_LOCALE,
         expected: JSON.parse(readFileSync(file, 'utf8')) as CapturedExpected,
+        ...(capturedStorage(dir) ? { storage: capturedStorage(dir)! } : {}),
       });
     }
   }
@@ -676,4 +685,28 @@ export function timingNote(timing: FillTiming | undefined): string {
 export function scoreLine(score: SampleScore): string {
   const revealed = score.revealedOnly?.length ? ` (${score.revealedOnly.length} only once the held-back steps were shown)` : '';
   return `[captured] ${score.sample} (${score.mode}): ${score.correct}/${score.fields + score.gaps.length} = ${accuracyOf(score)}%${revealed}, wrong ${wrongCount(score)}, missing ${score.missing.length + score.gaps.length} (${score.gaps.length} known), false reports ${falseReports(score)}, left empty ${score.leaveEmpty - score.touched.length}/${score.leaveEmpty}, wrong guesses ${score.wrongGuesses.length}, took ${(score.fillMs / 1000).toFixed(1)}s${timingNote(score.timing)}`;
+}
+
+/** A tab's session storage as the capture found it when recording began, scrubbed and without its sign-in. */
+export interface CapturedStorage {
+  origin: string;
+  sessionStorage: Record<string, string>;
+}
+
+/**
+ * How a replay of a sample opens its page: arriving through a recorded post, and with the tab's captured session
+ * storage in place, the sample's own made-up sign-in over it.
+ */
+export function replayOptionsFor(expected: CapturedExpected, url: string, storage?: CapturedStorage): ReplayOptions {
+  const items = { ...(storage?.sessionStorage ?? {}), ...(expected.__sessionStorage ?? {}) };
+  return {
+    ...(expected.__arrive === 'post' ? { arriveAt: url } : {}),
+    ...(Object.keys(items).length > 0 ? { sessionStorage: { origin: storage?.origin ?? new URL(url).origin, items } } : {}),
+  };
+}
+
+/** The storage.json a logged-in capture writes beside its recording, if there is one. */
+export function capturedStorage(dir: string): CapturedStorage | undefined {
+  const file = path.join(dir, 'storage.json');
+  return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as CapturedStorage) : undefined;
 }

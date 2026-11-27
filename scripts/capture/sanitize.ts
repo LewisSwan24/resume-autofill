@@ -454,7 +454,8 @@ export interface Finding {
     | 'id-card'
     | 'unreadable'
     | 'script'
-    | 'control-value';
+    | 'control-value'
+    | 'sign-in-storage';
   where: string;
   /** Masked: a report must not repeat what it found. */
   sample: string;
@@ -820,5 +821,26 @@ export function auditHar(har: HarFile, io: SidecarIo, opts: ScrubOptions = {}): 
       scan(c.encoding === 'base64' ? Buffer.from(c.text, 'base64').toString('utf8') : c.text, `${where} body`, c.mimeType);
     }
   });
+  return out;
+}
+
+// A sign-in a page keeps in session storage: the usual names, and Oracle Recruiting's tokens with the keys that unlock
+// them (vt, st, and each one's _ed). A replay puts a made-up one in their place.
+const SIGN_IN_STORAGE_KEY = /^(?:vt|st)(?:_ed)?$|token|secret|password|access[-_]?code|auth/i;
+
+/** A tab's session storage as a replay may start from it: no sign-in, every value scrubbed. */
+export function sanitizeStorage(items: Record<string, string>, scrub: Scrubber): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(items)) if (!SIGN_IN_STORAGE_KEY.test(key)) out[key] = scrub.text(value);
+  return out;
+}
+
+export function auditStorage(items: Record<string, string>, opts: ScrubOptions = {}): Finding[] {
+  const terms = termRes(opts.terms);
+  const out: Finding[] = [];
+  for (const [key, value] of Object.entries(items)) {
+    if (SIGN_IN_STORAGE_KEY.test(key)) out.push({ kind: 'sign-in-storage', where: 'sessionStorage', sample: key });
+    out.push(...scanText(value, `sessionStorage ${key}`, terms, opts.cn));
+  }
   return out;
 }

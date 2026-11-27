@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '../e2e/fixtures';
 import { fillFixture } from '../e2e/helpers';
-import { listSamples, recordScore, scoreLine, scoreProblems, scoreSample } from '../shared/capturedExpectations';
+import { listSamples, recordScore, replayOptionsFor, scoreLine, scoreProblems, scoreSample } from '../shared/capturedExpectations';
 import { answerUploads, type UploadStubs } from '../shared/uploadStubs';
 import { answerSearches } from '../shared/searchAnswers';
 import { replayFromHar, sameDocument } from '../shared/harReplay';
@@ -20,7 +20,7 @@ for (const sample of listSamples().filter((s) => s.device === 'desktop')) {
     // uploads get stub answers.
     let uploads: UploadStubs = { settled: async () => {} };
     if (!sample.readInPlace) {
-      await replayFromHar(context, path.join(sample.dir, 'page.har'), /^https?:\/\//, sample.expected.__arrive === 'post' ? { arriveAt: sample.url } : {});
+      await replayFromHar(context, path.join(sample.dir, 'page.har'), /^https?:\/\//, replayOptionsFor(sample.expected, sample.url, sample.storage));
       uploads = await answerUploads(context);
       await answerSearches(context);
     } else {

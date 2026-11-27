@@ -469,3 +469,39 @@ test('button combobox: no match closes the list', async () => {
   expect((await fixtureState(page)).employment).toBe('');
   expect(await openLists(page)).toBe(0);
 });
+
+// Oracle Recruiting's picker: a combobox with aria-haspopup="grid" whose list is a grid, one gridcell per row. Typing
+// filters the rows; clicking a cell takes it.
+test('a combobox that pops up a grid of its own: its cells are the choices', async () => {
+  await add(`<label for="g">Nation</label>
+    <input id="g" type="text" role="combobox" aria-haspopup="grid" aria-controls="g-listbox" aria-expanded="false" value="United States">`);
+  await page.evaluate(() => {
+    const input = document.getElementById('g') as HTMLInputElement;
+    const names = ['United States', 'Afghanistan', 'Australia', 'Austria'];
+    let list: HTMLElement | null = null;
+    const draw = (filter: string) => {
+      list?.remove();
+      list = document.createElement('div');
+      list.id = 'g-listbox';
+      list.setAttribute('role', 'grid');
+      const shown = names.filter((n) => !filter || n.toLowerCase().includes(filter.toLowerCase()));
+      list.innerHTML = shown.map((n) => `<div role="row"><div role="gridcell" tabindex="-1"><span>${n}</span></div></div>`).join('');
+      list.addEventListener('click', (ev) => {
+        const cell = (ev.target as Element).closest('[role=gridcell]');
+        if (!cell) return;
+        input.value = cell.textContent!.trim();
+        list?.remove();
+        list = null;
+        input.setAttribute('aria-expanded', 'false');
+      });
+      document.body.append(list);
+      input.setAttribute('aria-expanded', 'true');
+    };
+    input.addEventListener('click', () => draw(''));
+    input.addEventListener('input', () => draw(input.value === 'United States' ? '' : input.value));
+  });
+  const r = await execIntent(page, 'Nation', choice('Australia'));
+  expect(r.outcome).toBe('filled');
+  expect(r.observed).toBe('Australia');
+  expect(await page.locator('#g').inputValue()).toBe('Australia');
+});

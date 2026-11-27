@@ -202,3 +202,43 @@ describe('Jobvite', () => {
     expect(scanned).not.toContain(document.querySelector('button[attachment-label="Cover Letter"]'));
   });
 });
+
+describe('Oracle Recruiting', () => {
+  // The first step as Oracle draws it, cut down: the phone row's label points at the country-code picker, and the
+  // number box beside it is named only by aria-label.
+  const PAGE = `<form class="apply-flow__content apply-flow__content-form"><apply-flow-section id="section-1" aria-hidden="false">
+      <label for="lastName-21">Last Name</label><input id="lastName-21" name="lastName" class="input-row__control">
+      <label class="input-row__label" for="country-codes-dropdownphoneNumber">Phone Number</label>
+      <div class="phone-row"><input autocomplete="none" name="phoneNumber" id="country-codes-dropdownphoneNumber" type="text" role="combobox"
+          aria-haspopup="grid" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-expanded="false" class="cx-select-input" value="+1">
+        <input type="tel" class="input-row__control phone-row__input" aria-label="Phone Number"></div>
+    </apply-flow-section></form>`;
+
+  const classified = () => {
+    const scan = scanDocument(document);
+    return (selector: string) => {
+      const el = document.querySelector(selector);
+      const i = scan.contexts.findIndex((c) => c.control.el === el);
+      return i < 0 ? null : scan.classifications[i]!.fieldKey;
+    };
+  };
+
+  it('is known by its candidate pages, and by its form on a domain of its own', () => {
+    expect(at('https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1')).toBe('oracle');
+    document.body.innerHTML = PAGE;
+    expect(at('https://careers.example.com/apply/section/1')).toBe('oracle');
+  });
+
+  it('is not taken for a page that only mentions it', () => {
+    expect(at('https://example.com/blog/oraclecloud.com/hcmUI/CandidateExperience')).toBeNull();
+    document.body.innerHTML = '<form class="apply"><input name="lastName"></form>';
+    expect(at('https://careers.example.com/apply')).toBeNull();
+  });
+
+  it('reads the picker under the phone label as the country code, and the box beside it as the number', () => {
+    document.body.innerHTML = PAGE;
+    const key = classified();
+    expect(key('#country-codes-dropdownphoneNumber')).toBe('contact.phoneCountryCode');
+    expect(key('input.phone-row__input')).toBe('contact.phone');
+  });
+});

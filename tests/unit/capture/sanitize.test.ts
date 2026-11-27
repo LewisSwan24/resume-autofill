@@ -6,9 +6,11 @@ import {
   Scrubber,
   auditHar,
   auditHtml,
+  auditStorage,
   sanitizeHar,
   resumeTerms,
   sanitizeStaticHtml,
+  sanitizeStorage,
   type HarFile,
 } from '../../../scripts/capture/sanitize';
 import { createSampleProfile } from '../../../src/schema/samples';
@@ -857,5 +859,35 @@ describe('pages built with Next.js', () => {
 
   it('leaves a stream it cannot read to the plain scrub', () => {
     expect(new Scrubber().html(push('not a flight row jane@corp.example'))).not.toContain('jane@corp');
+  });
+});
+
+// A signed-in page reads part of what it shows from the tab's session storage, which a recording of its requests
+// never holds. The capture keeps it, without the sign-in itself, scrubbed like everything else.
+describe('session storage', () => {
+  const tab = {
+    vt: '"[12,34]"',
+    vt_ed: '"eyJrIjoiWzFdIn0="',
+    st: '"[56]"',
+    st_ed: '"eyJpIjoiWzJdIn0="',
+    refreshToken: TOKEN,
+    flowId: '"300000123"',
+    draftUser: JSON.stringify({ email: 'jane@corp.example', firstName: 'Jane' }),
+  };
+
+  it('drops the sign-in and scrubs the rest', () => {
+    const kept = sanitizeStorage(tab, new Scrubber({ terms: ['Jane'] }));
+    expect(Object.keys(kept).sort()).toEqual(['draftUser', 'flowId']);
+    expect(kept.flowId).toBe('"300000123"');
+    expect(kept.draftUser).not.toContain('jane@corp.example');
+    expect(kept.draftUser).not.toContain('Jane');
+    expect(() => JSON.parse(kept.draftUser!)).not.toThrow();
+  });
+
+  it('reports a sign-in key or an address left in', () => {
+    const kinds = auditStorage(tab).map((f) => f.kind);
+    expect(kinds).toContain('sign-in-storage');
+    expect(kinds).toContain('email');
+    expect(auditStorage(sanitizeStorage(tab, new Scrubber()))).toEqual([]);
   });
 });

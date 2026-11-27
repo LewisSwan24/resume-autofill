@@ -11,6 +11,7 @@ import type { FillReport } from '../../src/engine/types';
 import {
   listSamples,
   recordScore,
+  replayOptionsFor,
   scoreLine,
   scoreProblems,
   scoreSample,
@@ -63,7 +64,7 @@ async function openReplay(browser: Browser, sample: CapturedSample): Promise<{ p
   });
   // Anything not in the HAR is aborted, so the page cannot reach the site either. Uploads get stub answers,
   // and a place search the HAR never saw gets the service's own answer from the live page, if one was saved.
-  await replayFromHar(context, path.join(sample.dir, 'page.har'), undefined, sample.expected.__arrive === 'post' ? { arriveAt: sample.url } : {});
+  await replayFromHar(context, path.join(sample.dir, 'page.har'), undefined, replayOptionsFor(sample.expected, sample.url, sample.storage));
   const uploads = await answerUploads(context);
   await answerSearches(context);
   const page = await context.newPage();

@@ -10,6 +10,7 @@ import {
   listSamples,
   recordScore,
   renderAccuracyTable,
+  replayOptionsFor,
   scoreLine,
   scoreProblems,
   scoreSample,
@@ -592,5 +593,22 @@ describe('scoreSample, entries saved into a list', () => {
   it('says nothing about a section row on a sample with no entries', () => {
     const s = scoreSample({ ats: 'x', name: 'y', expected: expected() }, 'harness', emptyPage, emptyPage, report([{ fieldId: 'section:work', label: 'Add', outcome: 'action_failed' }]));
     expect(s.falselyFailed).toEqual([]);
+  });
+});
+
+describe('replayOptionsFor', () => {
+  const url = 'https://jobs.example.test/apply/section/1';
+
+  it("seeds the tab's captured session storage, with the sample's own made-up sign-in over it", () => {
+    const options = replayOptionsFor(
+      expected({ __sessionStorage: { vt: '{"accessCode":"replay"}' } }),
+      url,
+      { origin: 'https://jobs.example.test', sessionStorage: { flowId: '"1"', vt: '"left over"' } },
+    );
+    expect(options.sessionStorage).toEqual({ origin: 'https://jobs.example.test', items: { flowId: '"1"', vt: '{"accessCode":"replay"}' } });
+  });
+
+  it('arrives through a recorded post when the sample says so, and seeds nothing it was not given', () => {
+    expect(replayOptionsFor(expected({ __arrive: 'post' }), url)).toEqual({ arriveAt: url });
   });
 });

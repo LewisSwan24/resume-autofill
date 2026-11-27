@@ -1,10 +1,23 @@
 // Records one application page into fixtures/captured/<ats>/<name>/: a HAR for replay, a static snapshot,
 // screenshots and meta.json, all sanitised and audited. It only loads the page: no filling, no clicks.
-// A `beforeRecord` hook (the manual login) runs before the HAR starts, so credentials are never recorded.
+// A `beforeRecord` hook (the manual login) runs before the HAR starts, so credentials are never recorded. What the
+// tab then holds in session storage is kept too (storage.json, without its sign-in): a signed-in page may read part
+// of what it shows from there rather than ask for it again, and a replay has to start from the same place.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { BrowserContext, Page } from '@playwright/test';
-import { Scrubber, auditHar, auditHtml, sanitizeHar, sanitizeStaticHtml, type Finding, type HarFile, type SidecarIo } from './sanitize.ts';
+import {
+  Scrubber,
+  auditHar,
+  auditHtml,
+  auditStorage,
+  sanitizeHar,
+  sanitizeStaticHtml,
+  sanitizeStorage,
+  type Finding,
+  type HarFile,
+  type SidecarIo,
+} from './sanitize.ts';
 import { DEFAULT_LOCALE, type CaptureDevice } from './device.ts';
 
 /** Long edge limit: larger images get rejected in multi-image model requests. */
@@ -138,6 +151,9 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
     await page.goto(opts.url, { waitUntil: 'load', timeout: 60_000 });
     await opts.beforeRecord(page);
   }
+  const storage = opts.beforeRecord
+    ? await page.evaluate(() => ({ origin: location.origin, sessionStorage: { ...sessionStorage } as Record<string, string> })).catch(() => null)
+    : null;
 
   await context.routeFromHAR(harPath, { update: true, updateContent: 'attach', updateMode: 'full' });
 
@@ -194,6 +210,13 @@ export async function capturePage(context: BrowserContext, opts: CaptureOptions)
     frames.push({ url: scrub.text(p.url), file });
     findings.push(...auditHtml(html, scrubOptions).map((f) => ({ ...f, where: `${file}: ${f.where}` })));
   });
+
+  if (storage && Object.keys(storage.sessionStorage).length > 0) {
+    const kept = sanitizeStorage(storage.sessionStorage, scrub);
+    writeFileSync(path.join(dir, 'storage.json'), `${JSON.stringify({ origin: storage.origin, sessionStorage: kept }, null, 2)}
+`);
+    findings.push(...auditStorage(kept, scrubOptions).map((f) => ({ ...f, where: `storage.json: ${f.where}` })));
+  }
 
   writeFileSync(
     path.join(dir, 'meta.json'),

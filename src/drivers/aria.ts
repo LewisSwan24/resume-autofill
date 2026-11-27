@@ -194,7 +194,11 @@ class Session {
 
   options(): DropdownOption[] {
     const list = this.list();
-    return list ? visibleOptions(list, OPTION).filter((o) => !isLink(o.el)) : [];
+    if (!list) return [];
+    // A combobox may pop up a grid (aria-haspopup="grid", Oracle Recruiting's): its choices are the grid's cells.
+    // Only a grid the combobox points at itself, so a date picker's calendar is never taken for a list.
+    const cells = list.matches('[role=grid]') && referencedList(this.el) === list;
+    return visibleOptions(list, cells ? '[role=gridcell]' : OPTION).filter((o) => !isLink(o.el));
   }
 
   /** What is left of this attempt's time. */

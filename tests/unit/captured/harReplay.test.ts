@@ -85,6 +85,14 @@ describe('stableTwin', () => {
     expect(stableTwin(get(`${status}?random=718271`), recorded)).toEqual(recorded[0]);
   });
 
+  it('answers a request whose path holds an id the page makes up on each visit, as Oracle does for its visitor', () => {
+    const recorded = [get('https://hcm.example.test/api/userSettings/ff245dcb-b4e4-4c9e-803d-88595d32af0b')];
+    const fresh = get('https://hcm.example.test/api/userSettings/1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed');
+    expect(stableTwin(fresh, recorded)?.url).toBe(recorded[0]!.url);
+    // Anything else in the path still has to match.
+    expect(stableTwin(get('https://hcm.example.test/api/otherSettings/1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed'), recorded)).toBeNull();
+  });
+
   it("sets aside ByteDance's per-request signature", () => {
     const posts = 'https://jobs.example.test/api/v1/job/posts/1?portal_type=6&with_recommend=false';
     const recorded = [get(`${posts}&_signature=i1QLPQAAAAA76DgqZLVwwItUCyAAOBi`)];

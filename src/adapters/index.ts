@@ -6,6 +6,7 @@ import { greenhouse } from './greenhouse';
 import { jazzhr } from './jazzhr';
 import { jobvite } from './jobvite';
 import { lever } from './lever';
+import { oracle } from './oracle';
 import { pageup } from './pageup';
 import { personio } from './personio';
 import { rippling } from './rippling';
@@ -29,6 +30,7 @@ export const ADAPTERS: readonly AtsAdapter[] = [
   bamboohr,
   jazzhr,
   jobvite,
+  oracle,
   moka,
   beisen,
   // Before ByteDance: on a domain of its own, a form of this system is Feishu's.

@@ -72,6 +72,8 @@ export interface KnownGap extends CapturedField {
   /** As on `LeaveEmpty`, for a gap with no `fieldKey`. */
   triage?: TriageTag;  /** Matches its report row's label, when the page words it so that the entry's own label is not part of it. */
   labelRe?: string;
+  /** In a card the fill adds, so the snapshot, taken before any fill, has no box for it. */
+  added?: true;
 }
 
 /** A control that is right to leave alone. Every control on a sample's page needs a verdict. */
@@ -82,6 +84,8 @@ export interface LeaveEmpty extends LocatedEntry {
   /** Why it stays empty, for an entry with no `fieldKey`; see `coverageTriage.ts`. */
   triage?: TriageTag;  /** Matches its report row's label, when the page words it so that the entry's own label is not part of it. */
   labelRe?: string;
+  /** In a card the fill adds, so the snapshot, taken before any fill, has no box for it. */
+  added?: true;
 }
 
 /**
@@ -308,7 +312,7 @@ export function verdictSelectors(expected: CapturedExpected): string[] {
     ...Object.values(expected.fields).flatMap(of),
     ...Object.values(expected.__knownGaps ?? {}).flatMap(of),
     ...Object.values(expected.__review ?? {}).flatMap((r) => (r.added ? [] : [r.selector])),
-    ...Object.values(expected.__leaveEmpty ?? {}).map((r) => r.selector),
+    ...Object.values(expected.__leaveEmpty ?? {}).flatMap((r) => (r.added ? [] : [r.selector])),
   ];
 }
 

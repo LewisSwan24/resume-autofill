@@ -64,10 +64,13 @@ function FieldItem({
   const [starPrep, setStarPrep] = useState<StarPrepResult | null>(null);
   const [saveCustom, setSaveCustom] = useState(false);
 
-  // Follow the field when the page reports a new value (e.g. after a refresh), but never while the user types.
-  useEffect(() => {
+  // Follow the field when the page reports a new value (e.g. after a refresh), checked while rendering rather than in
+  // an effect: an effect also runs once after the row first appears, and an edit typed before it ran was overwritten.
+  const [shown, setShown] = useState({ value: field.value, observed: field.observed });
+  if (field.value !== shown.value || field.observed !== shown.observed) {
+    setShown({ value: field.value, observed: field.observed });
     setDraft(field.value ?? field.observed ?? '');
-  }, [field.value, field.observed]);
+  }
 
   const isDraft = field.note === 'draft';
   const supportsAiDraft =

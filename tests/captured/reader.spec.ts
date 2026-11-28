@@ -298,3 +298,22 @@ test('on a phone, a card added to one Feishu section does not renumber the boxes
   const after = await inspect(page, {});
   expect(changedControls(before.snapshot, after.snapshot).map((c) => c.after)).toEqual(['乙大学']);
 });
+
+test('reads Zoho’s Lyte lists, which have no input, and counts a change to one', async ({ page }) => {
+  await page.setContent(`<!doctype html><body>
+    <crux-picklist-component><lyte-dropdown id="one"><lyte-drop-button><span class="lyteDropPlaceholderNormal">-None-</span></lyte-drop-button></lyte-dropdown></crux-picklist-component>
+    <crux-picklist-component><lyte-dropdown id="several"><lyte-drop-button><ul class="lyteMultipleSelect"><li data-value="A"><span>A</span></li><li class="lyteMultiselectInput"><input id="search"></li></ul></lyte-drop-button></lyte-dropdown></crux-picklist-component>
+    <crux-phone-component><lyte-dropdown id="code"><lyte-drop-button><lyte-yield selected-value="US"><span class="flag-drop-code">(+1)</span></lyte-yield></lyte-drop-button></lyte-dropdown><input id="number"></crux-phone-component>
+  </body>`);
+  const locators = { one: '#one', several: '#several', code: '#code' };
+  const before = await inspect(page, locators);
+  expect(before.readings).toEqual({ one: '', several: ['A'], code: 'US' });
+  await page.evaluate(() => {
+    document.querySelector('#one lyte-drop-button')!.innerHTML = '<span class="lyteDropdownLabel">Ms.</span>';
+    document.querySelector('#several .lyteMultiselectInput')!.insertAdjacentHTML('beforebegin', '<li data-value="B"><span>B</span></li>');
+    document.querySelector('#code lyte-yield')!.setAttribute('selected-value', 'AU');
+  });
+  const after = await inspect(page, locators);
+  expect(after.readings).toEqual({ one: 'Ms.', several: ['A', 'B'], code: 'AU' });
+  expect(changedControls(before.snapshot, after.snapshot).map((c) => c.key)).toEqual(['lyte-dropdown#one', 'lyte-dropdown#several', 'lyte-dropdown#code']);
+});

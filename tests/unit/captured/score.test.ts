@@ -242,6 +242,31 @@ describe('scoreSample', () => {
       expect(problems(e, after(''), allFilled([{ label: 'Pronouns', outcome: 'unmatched' }])).join()).toMatch(/reported unmatched/);
     });
 
+    describe('one the page answered before the fill', () => {
+      // Zoho starts its work-rights list on an answer of its own: the fill must leave it and say so.
+      const held = expected({ __review: { Rights: { selector: '#r', labelRe: 'rights', held: true } } });
+      const page = (rights: string[]): Inspection => ({
+        snapshot: { ...emptyPage.snapshot, 'lyte#r': JSON.stringify(rights) },
+        readings: { ...emptyPage.readings, Rights: rights },
+        coverage: { ...emptyPage.coverage, Rights: ['lyte#r'] },
+      });
+      const after = (rights: string[]): Inspection => {
+        const f = filled();
+        return { snapshot: { ...f.snapshot, 'lyte#r': JSON.stringify(rights) }, readings: { ...f.readings, Rights: rights }, coverage: { ...f.coverage, Rights: ['lyte#r'] } };
+      };
+      const score = (now: string[], row: Partial<FieldReport>) =>
+        scoreProblems(scoreSample(sample(held), 'harness', page(['Permanent']), after(now), allFilled([{ label: 'Rights', ...row }])), held);
+
+      it('passes when it still shows that answer and the row says the answer was held', () => {
+        expect(score(['Permanent'], { outcome: 'needs_review', note: 'answer_held', observed: 'Permanent' })).toEqual([]);
+      });
+
+      it('fails when the answer changed, or the row does not say it was held', () => {
+        expect(score(['Permanent', 'Temporary'], { outcome: 'needs_review', note: 'answer_held' }).join()).toMatch(/changed/);
+        expect(score(['Permanent'], { outcome: 'needs_review' }).join()).toMatch(/not reported as held/);
+      });
+    });
+
     it('pick their report row by resume path, when entries of a section share a label', () => {
       const e2 = expected({ __review: { 'Dates 2': { selector: '#d2', labelRe: '^dates$', source: 'work[1].period' } } });
       const page = filled({ readings: { 'Dates 2': '' }, coverage: { 'Dates 2': ['text#d2'] } });

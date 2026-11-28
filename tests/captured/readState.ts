@@ -65,6 +65,16 @@ export function inspectInPage(locators: Locators): Inspection {
     return squash(byLabel || el.getAttribute('aria-label') || el.value);
   };
 
+  // Zoho's Lyte lists have no input: one answer shows as a label, several as tags, the phone's country as its code.
+  const LYTE_LIST = 'crux-picklist-component lyte-dropdown, crux-phone-component lyte-dropdown';
+  const lyteShown = (el: Element): string | string[] => {
+    const tags = el.querySelector('ul.lyteMultipleSelect');
+    if (tags) return [...tags.querySelectorAll(':scope > li[data-value]')].map((li) => li.getAttribute('data-value') ?? '');
+    const country = el.querySelector('lyte-yield[selected-value]');
+    if (country) return country.getAttribute('selected-value') ?? '';
+    return squash(el.querySelector('.lyteDropdownLabel')?.textContent);
+  };
+
   // Moka's lists keep their input empty: the choice is shown beside it, several choices as tags.
   const mokaShown = (el: FormEl): string | string[] | null => {
     const label = el.closest('label[class*="sd-Select-container"]');
@@ -74,6 +84,7 @@ export function inspectInPage(locators: Locators): Inspection {
   };
 
   const single = (el: FormEl): string | boolean | string[] => {
+    if (el.matches(LYTE_LIST)) return lyteShown(el);
     const type = typeOf(el);
     const moka = type === 'text' ? mokaShown(el) : null;
     if (moka !== null) return moka;
@@ -120,7 +131,7 @@ export function inspectInPage(locators: Locators): Inspection {
       .flatMap((s) => queryAll(s).filter((el) => el.hasAttribute('contenteditable'))),
   );
   const isControl = (el: Element): el is FormEl =>
-    /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton) || namedButtons.has(el) || namedEditables.has(el) || shownBoxes.has(el);
+    /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) || el.matches(listButton) || el.matches(LYTE_LIST) || namedButtons.has(el) || namedEditables.has(el) || shownBoxes.has(el);
   const included = (el: FormEl): boolean => typeOf(el) !== 'hidden' && !/^g-recaptcha-response|^h-captcha-response/.test(el.name || el.id || '');
   // Feishu's formily form gives its boxes no id or name. The field's id on the row, and the card's place in its own
   // list, say which box it is, so a card added to one list does not renumber the boxes of the next.
@@ -136,7 +147,7 @@ export function inspectInPage(locators: Locators): Inspection {
   const keys = new Map<Element, string>();
   const used = new Map<string, number>();
   const snapshot: Record<string, string> = {};
-  for (const el of [...queryAll(`input,select,textarea,${listButton}`), ...namedButtons, ...namedEditables, ...shownBoxes]) {
+  for (const el of [...queryAll(`input,select,textarea,${listButton},${LYTE_LIST}`), ...namedButtons, ...namedEditables, ...shownBoxes]) {
     if (keys.has(el)) continue;
     if (!isControl(el) || !included(el)) continue;
     const type = typeOf(el);

@@ -96,6 +96,11 @@ export interface ReviewEntry extends LocatedEntry, Pick<CapturedField, 'shown' |
   labelRe: string;
   /** The row's resume path, as `work[1].period`, when entries of a section put several rows under one label. */
   source?: string;
+  /**
+   * The page showed an answer of its own before the fill (Zoho starts its work-rights list on one): instead of staying
+   * empty, the box must show that same answer after the fill, and the row must say the answer was held.
+   */
+  held?: true;
 }
 
 export interface CapturedExpected {
@@ -451,11 +456,15 @@ export function scoreSample(
 
   const reviewProblems = Object.entries(expected.__review ?? {}).flatMap(([label, entry]) => {
     const problems: string[] = [];
-    if (!isEmptyReading(after.readings[label] ?? null)) problems.push(`${label}: not empty`);
+    const now = after.readings[label] ?? null;
+    if (entry.held) {
+      if (isEmptyReading(now) || JSON.stringify(now) !== JSON.stringify(before.readings[label] ?? null)) problems.push(`${label}: the answer the page showed changed`);
+    } else if (!isEmptyReading(now)) problems.push(`${label}: not empty`);
     const regex = new RegExp(entry.labelRe, 'i');
     const row = report.fields.find((f) => regex.test(f.label) && (entry.source === undefined || f.source === entry.source));
     if (!row) problems.push(`${label}: no report row`);
     else if (row.outcome !== 'needs_review' && row.outcome !== 'no_option') problems.push(`${label}: reported ${row.outcome}`);
+    else if (entry.held && row.note !== 'answer_held') problems.push(`${label}: not reported as held`);
     return problems;
   });
 

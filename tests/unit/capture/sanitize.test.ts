@@ -87,6 +87,16 @@ describe('Scrubber.text', () => {
     expect(new Scrubber().text(code)).toBe(code);
   });
 
+  it('leaves a key spliced into a string by code alone, which Zoho does, so the script still parses', () => {
+    const code = `a='<script src="in.js">api_key:'+t.awliApiKey+'\\nextensions:x<\\/script>'`;
+    expect(new Scrubber().text(code)).toBe(code);
+    expect(new Scrubber().text(`b="api_key:"+cfg.linkedinApiKey+"&x=1"`)).toBe(`b="api_key:"+cfg.linkedinApiKey+"&x=1"`);
+  });
+
+  it('still replaces a key whose value merely contains a plus', () => {
+    expect(new Scrubber().text(`{"api_key":"abc+def/ghi"}`)).not.toContain('abc+def/ghi');
+  });
+
   it('in keyed mode replaces phones only under a phone-like key and keeps numeric ids', () => {
     const s = new Scrubber();
     const out = s.text('{"phone":"0412 345 678","mobileNumber":"13812345678","id":19000000001,"q":"question_19000000001"}');

@@ -305,7 +305,7 @@ test.describe('Moka entries', () => {
     expect(rows.filter((r) => r.note !== 'draft' && (r.outcome === 'action_failed' || r.outcome === 'needs_review'))).toEqual([]);
   });
 
-  test('an entry the page already holds is left as it is, and the resume’s go into entries of their own', async () => {
+  test('an entry the page already holds keeps its own answers, one showing a resume entry gets that entry’s blanks, and the rest go into entries of their own', async () => {
     await mountMoka(MOKA_LISTS, MOKA_ENTRY_FORM);
     await page.evaluate(() => {
       const entryOf = (title: string) =>
@@ -326,9 +326,11 @@ test.describe('Moka entries', () => {
     expect(held).toEqual({ 学历: '博士', 学校名称: '他人大学', 专业名称: '', 就读时间: '/ ~ /' });
     expect(schools.map((s) => s['学校名称'])).toEqual(['示例大学', '示例研究院']);
     expect(await mokaEntries('工作经历')).toEqual([
-      { 公司名称: '样例数据有限公司', 职位名称: '原有职位', 起止时间: '/ ~ /', 工作职责: '' },
+      // The resume's second internship: its empty boxes are filled from it, the title it shows is kept and asked about.
+      { 公司名称: '样例数据有限公司', 职位名称: '原有职位', 起止时间: '2025/10 至今', 工作职责: '示例工作内容二。' },
       { 公司名称: '示例科技有限公司', 职位名称: '示例实习生', 起止时间: '2022/7 ~ 2022/9', 工作职责: '示例工作内容一。' },
     ]);
+    expect(rows.filter((r) => r.note === 'answer_held').map((r) => r.label)).toEqual(['职位名称']);
     expect(rows.filter((r) => r.outcome === 'action_failed')).toEqual([]);
   });
 
@@ -464,7 +466,7 @@ test.describe('Feishu entries', () => {
     expect(await feishuEntries('项目经历')).toEqual([
       expect.objectContaining({ 项目名称: '示例项目', 起止时间: '2021-03 ~ 2021-06', 描述: '示例项目描述。' }),
     ]);
-    expect(await feishuEntries('获奖经历')).toEqual([{ 奖项名称: '示例奖学金', 获奖时间: '2021-10', 描述: '' }]);
+    expect(await feishuEntries('获奖经历')).toEqual([{ 奖项名称: '示例奖学金', 获奖时间: '2021-10', 描述: '专业成绩排名前 5%，获评年度国家奖学金。' }]);
     expect(rows.filter((r) => r.outcome === 'action_failed')).toEqual([]);
   });
 

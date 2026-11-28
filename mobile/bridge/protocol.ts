@@ -72,7 +72,7 @@ const FieldReportShape = z.strictObject({
     )
     .max(MAX_CANDIDATES)
     .optional(),
-  note: z.enum(['same_file_held', 'entry_held', 'answer_held', 'picked_other_name', 'sensitive_held', 'sensitive_filled', 'draft']).optional(),
+  note: z.enum(['same_file_held', 'entry_held', 'answer_held', 'picked_other_name', 'sensitive_held', 'sensitive_filled', 'draft', 'day_missing']).optional(),
   entry: z.number().int().min(0).max(MAX_ENTRY_INDEX).optional(),
 });
 

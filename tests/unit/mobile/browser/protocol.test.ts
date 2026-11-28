@@ -81,6 +81,12 @@ describe('decodePageMessage', () => {
     expect(out?.kind === 'report' && out.report.fields.map((f) => f.note)).toEqual(['sensitive_held', 'sensitive_filled']);
   });
 
+  it('accepts a report row left for a day the resume does not hold', () => {
+    const date = { ...row(1), outcome: 'needs_review', note: 'day_missing', value: '2021-09' };
+    const out = decodePageMessage(JSON.stringify({ ...(valid.report as object), report: report([date]) }));
+    expect(out?.kind === 'report' && out.report.fields[0]?.note).toBe('day_missing');
+  });
+
   it('drops a step whose action or blocker it does not know, and a pressed with an unknown reason', () => {
     const step = valid.step as { state: object };
     expect(decodePageMessage(JSON.stringify({ ...step, state: { ...step.state, action: 'jump' } }))).toBeNull();

@@ -478,6 +478,8 @@ function rowMeta(t: ReturnType<typeof useMT>, row: ReportRow): { place: string; 
       ? t('fab.item.sensitiveHeld')
       : row.note === 'sensitive_filled'
         ? t('panel.note.sensitiveFilled')
+        : row.note === 'day_missing'
+          ? t('fab.item.dayMissing')
         : row.picked
           ? t('m.br.report.picked', { name: row.picked })
           : row.value !== null

@@ -353,6 +353,7 @@ export const en: Record<MessageKey, string> = {
   'fab.item.unnamed': 'Unnamed field',
   'fab.item.locate': 'Locate this field',
   'fab.item.sensitiveHeld': 'Reminder only, not filled',
+  'fab.item.dayMissing': 'Needs a day, not filled',
   'fab.resumeChip': 'Filling with the {current} resume. Switch to {target}',
 
   // ---------------------------------------------------------------- panel.* (Task 20 appends below)
@@ -397,6 +398,7 @@ export const en: Record<MessageKey, string> = {
   'panel.note.sameFileHeld': 'The page already has a file with the same name, and it may be an older version. To replace it, delete it on the page and fill again.',
   'panel.note.sensitiveHeld': 'Your setting is "Only remind me", so this box was left empty. Fill it yourself, choose "Fill this one", or change the setting to "Fill them".',
   'panel.note.sensitiveFilled': 'A sensitive field, filled because your setting is "Fill them".',
+  'panel.note.dayMissing': 'The form wants a day, and your resume has only the month ({value}). Pick the date yourself.',
   'panel.save': 'Save',
   'panel.locate': 'Locate this field',
   'panel.applied': 'Updated',

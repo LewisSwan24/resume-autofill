@@ -81,6 +81,16 @@ export const MOKA_FORM =
   `</div>`;
 
 /** Every Moka page carries this hidden version tag, on a company's own domain too. */
+/** A certificate's date as the real page asks it: the box says it wants a day as well (日期（年月日）). */
+export const MOKA_DAY_FORM =
+  `<div class="apply-blocks-ir_MrIodtj">` +
+  block(
+    '证书',
+    field('string_info-UOJxKN5mtC', '证书名称', text('证书名称')) +
+      field('day_info-S5Nug1w6IL', '取得日期', `<div class="sd-Dropdown-container-1CigZ"><label class="sd-Input-container-2S_vM day_info sd-Input-lg-3X8ma"><input type="text" class="${INPUT} sd-Input-has-addon-3djHe" readonly="" placeholder="日期（年月日）"><span class="sd-Input-addon-1Dv-z sd-picker-addon-1SMM0"><div></div></span></label><span></span></div>`, false),
+  ) +
+  `</div>`;
+
 export const MOKA_MARKER =
   '<input style="display: none" id="moka-version" data-gray-released="0" data-version="20260101-0000-00000-release">';
 

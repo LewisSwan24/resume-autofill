@@ -193,6 +193,7 @@ function FieldItem({
           {field.note === 'answer_held' ? <p className="raf-help raf-field-note">{t('panel.note.answerHeld')}</p> : null}
           {field.note === 'sensitive_held' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveHeld')}</p> : null}
           {field.note === 'sensitive_filled' ? <p className="raf-help raf-field-note">{t('panel.note.sensitiveFilled')}</p> : null}
+          {field.note === 'day_missing' ? <p className="raf-help raf-field-note">{t('panel.note.dayMissing', { value: field.value ?? '' })}</p> : null}
           {held ? <p className="raf-help raf-field-note">{t('panel.note.entryHeld')}</p> : null}
 
           {canFillThis ? (

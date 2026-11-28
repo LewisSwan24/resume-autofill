@@ -66,6 +66,8 @@ export interface FillResult {
   /** Set when !ok. */
   outcome?: 'no_option' | 'needs_review' | 'action_failed';
   candidates?: string[];
+  /** Why a `needs_review` left the box to the applicant, carried to the report row. */
+  note?: 'day_missing';
   detail?: string;
 }
 

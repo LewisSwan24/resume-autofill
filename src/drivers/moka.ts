@@ -199,6 +199,8 @@ async function fillParts(control: Control, intent: FillIntent, ctx: DriverContex
 
 // ---- a date as a panel of months -------------------------------------------------------------------------------
 
+const WANTS_DAY = /年月日/;
+
 const shownYear = (panel: Element): number | null => {
   const m = /(\d{4})/.exec(panel.querySelector(YEAR_SHOWN)?.textContent ?? '');
   return m ? Number(m[1]) : null;
@@ -208,6 +210,10 @@ async function fillMonthPanel(control: Control, intent: FillIntent, ctx: DriverC
   const input = inputOf(control.el);
   const read = () => clean(input?.value) || null;
   if (intent.kind !== 'date') return failed(`a ${intent.kind} answer on one date`, read());
+  // The box says it wants the day too (日期（年月日）): a month alone would make one up.
+  if (intent.day === undefined && WANTS_DAY.test(input?.placeholder ?? '')) {
+    return { ok: false, observed: read(), outcome: 'needs_review', note: 'day_missing', detail: 'the box wants a day; the resume holds only the month' };
+  }
   const panel = await openPanel(control.el, ctx, 1500);
   if (!panel) return failed('the date panel did not open', read());
   try {

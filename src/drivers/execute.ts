@@ -209,6 +209,7 @@ export async function executeStep(
       }
     } else {
       report.outcome = result.outcome ?? 'action_failed';
+      if (result.note) report.note = result.note;
       if (result.candidates && result.candidates.length > 0) {
         report.candidates = result.candidates.map((label) => ({ label }));
       }

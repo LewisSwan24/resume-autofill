@@ -156,8 +156,9 @@ export interface FieldReport {
    * `sensitive_held`: a sensitive field the settings say to leave to the applicant. `sensitive_filled`: one they
    * said to fill, and it was.
    * `draft`: a long-text answer drafted from the resume (`value`), written only when the applicant says so.
+   * `day_missing`: the box wants a day and the resume holds only the month (`value`), so it was left to the applicant.
    */
-  note?: 'same_file_held' | 'entry_held' | 'answer_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled' | 'draft';
+  note?: 'same_file_held' | 'entry_held' | 'answer_held' | 'picked_other_name' | 'sensitive_held' | 'sensitive_filled' | 'draft' | 'day_missing';
   /** Which entry of its section (0-based, in the resume's order for that section) this field belongs to. */
   entry?: number;
   /** How long filling this box took, in ms (rows the fill wrote to, or tried to). */

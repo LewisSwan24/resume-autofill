@@ -82,6 +82,7 @@ function ItemRow({
     item.outcome === 'action_failed' ? t('status.action_failed') : '',
     item.note === 'same_file_held' ? t('fab.item.sameFile') : '',
     item.note === 'sensitive_held' ? t('fab.item.sensitiveHeld') : '',
+    item.note === 'day_missing' ? t('fab.item.dayMissing') : '',
   ].filter(Boolean);
   return (
     <li

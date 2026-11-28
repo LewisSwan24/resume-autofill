@@ -351,6 +351,7 @@ export const zh = {
   'fab.item.unnamed': '未命名字段',
   'fab.item.locate': '定位到该字段',
   'fab.item.sensitiveHeld': '只提醒，没有写入',
+  'fab.item.dayMissing': '要填到日，没有写入',
   'fab.resumeChip': '填写用简历：{current}，点一下换成{target}',
 
   // ---------------------------------------------------------------- panel.* (Task 20 appends below)
@@ -395,6 +396,7 @@ export const zh = {
   'panel.note.sameFileHeld': '页面上已有同名文件，它可能是旧版本。要换的话，先在页面上删掉，再填写一次。',
   'panel.note.sensitiveHeld': '你的设置是「只提醒」，这一格没有写入。请自己填，点「填入这一格」，或在设置里改成「直接填」。',
   'panel.note.sensitiveFilled': '这是敏感字段，按你的设置「直接填」写入了。',
+  'panel.note.dayMissing': '表单要填到日，简历里只有年月（{value}），请自己选日期。',
   'panel.save': '保存',
   'panel.locate': '定位到该字段',
   'panel.applied': '已更新',

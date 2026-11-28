@@ -2,7 +2,7 @@
 // the end of <body>, the box staying empty until something is picked. The real pages are still the real proof.
 import { expect, test, type Page } from '@playwright/test';
 import { FEISHU_ENTRY_FORM, FEISHU_FORM } from '../shared/feishuForm';
-import { MOKA_ENTRY_FORM, MOKA_FORM } from '../shared/mokaForm';
+import { MOKA_DAY_FORM, MOKA_ENTRY_FORM, MOKA_FORM } from '../shared/mokaForm';
 import { fillEntries as fillCnEntries } from './cnEntries';
 import { execIntent, injectHarness } from './helpers';
 
@@ -138,6 +138,15 @@ test.describe('Moka', () => {
     });
     const r = await execIntent(page, '出生日期 (年龄)', { kind: 'date', ...month(2000, 5) });
     expect(r.outcome).not.toBe('filled');
+    await expect(page.locator('.sd-Dropdown-dropdown-GmACl')).toHaveCount(0);
+  });
+
+  test('a box that wants a day is left for the applicant when the resume holds only the month', async () => {
+    await mountMoka({}, MOKA_DAY_FORM);
+    const r = await execIntent(page, '取得日期', { kind: 'date', ...month(2021, 9) });
+    expect(r.outcome).toBe('needs_review');
+    expect(r.note).toBe('day_missing');
+    await expect(mokaField('取得日期').locator('input')).toHaveValue('');
     await expect(page.locator('.sd-Dropdown-dropdown-GmACl')).toHaveCount(0);
   });
 

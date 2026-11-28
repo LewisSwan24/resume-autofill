@@ -141,6 +141,22 @@ describe('matchOption: canonical codes via synonym groups', () => {
     const o = opts('Temporary visa with full work rights', 'Citizen');
     expect(pick('workRightsStatus', 'other_temporary', o)).toBe('none');
   });
+  it('workRightsStatus on a list worded by what the rights allow, typos kept (Zoho)', () => {
+    const o = opts(
+      'I have permanent work right no restritions',
+      'I have tempory work rights with no restrictions',
+      'I have tempory work rights with restrictions',
+      'I require sponcership to work for a new employer',
+    );
+    expect(pick('workRightsStatus', 'citizen', o)).toBe('I have permanent work right no restritions');
+    expect(pick('workRightsStatus', 'permanent_resident', o)).toBe('I have permanent work right no restritions');
+    expect(pick('workRightsStatus', 'graduate_visa', o)).toBe('I have tempory work rights with no restrictions');
+    expect(pick('workRightsStatus', 'student_visa', o)).toBe('I have tempory work rights with restrictions');
+    expect(pick('workRightsStatus', 'working_holiday', o)).toBe('I have tempory work rights with restrictions');
+    // Whether another visa needs a sponsor, or has rights at all, the resume does not say.
+    expect(pick('workRightsStatus', 'other_temporary', o)).toBe('none');
+    expect(pick('workRightsStatus', 'no_rights', o)).toBe('none');
+  });
   it('workRightsStatus citizen satisfies "Australian citizen or permanent resident"', () => {
     const o = opts('Australian citizen or permanent resident', 'Visa holder');
     expect(pick('workRightsStatus', 'citizen', o)).toBe('Australian citizen or permanent resident');

@@ -28,9 +28,11 @@ const SECRET_KEY =
   '(?:x[-_])?(?:csrf|xsrf)(?:[-_]?token)?|authenticity[-_]?token|access[-_]?token|refresh[-_]?token|id[-_]token|session[-_]?id|jsessionid|auth[-_]?token|api[-_]?key';
 
 const JWT_RE = /eyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]{6,}/g;
+/** The whole value is `+name.path+` up to its quote: code splicing a variable into a string, not a key. */
+const SPLICE = String.raw`\+[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\+["']`;
 // `"csrfToken":"value"`. The value must be quoted, so code such as `csrfToken:e.token` is left alone. Nor is a
 // value written `'+t.apiKey+'`: that is code splicing the key into a string, and replacing it ends the string early.
-const SECRET_QUOTED_RE = new RegExp(`((?<![\\w-])["']?(?:${SECRET_KEY})["']?\\s*[:=]\\s*["'])(?!\\+)([^"'\\s]{8,})(?<!\\+)(["'])`, 'gi');
+const SECRET_QUOTED_RE = new RegExp(`((?<![\\w-])["']?(?:${SECRET_KEY})["']?\\s*[:=]\\s*["'])(?!${SPLICE})([^"'\\s]{8,})(["'])`, 'gi');
 // `?access_token=value`. Only in a query string, so `var csrfToken=document.foo` is left alone.
 const SECRET_QUERY_RE = new RegExp(`([?&](?:${SECRET_KEY})=)([^&#"'\\s;<>]{8,})`, 'gi');
 const SECRET_COOKIE_RE = /((?:^|[\s;])jsessionid=)([^&#"'\s;<>]{8,})/gi;

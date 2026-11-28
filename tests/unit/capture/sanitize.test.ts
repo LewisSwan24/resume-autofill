@@ -93,8 +93,8 @@ describe('Scrubber.text', () => {
     expect(new Scrubber().text(`b="api_key:"+cfg.linkedinApiKey+"&x=1"`)).toBe(`b="api_key:"+cfg.linkedinApiKey+"&x=1"`);
   });
 
-  it('still replaces a key whose value merely contains a plus', () => {
-    expect(new Scrubber().text(`{"api_key":"abc+def/ghi"}`)).not.toContain('abc+def/ghi');
+  it.each(['abc+def/ghi', '+abcdef/ghi', 'abcdef/gh+', '+ab/cd+ef+'])('still replaces a key %s that only has a plus in it', (key) => {
+    expect(new Scrubber().text(`{"api_key":"${key}"}`)).not.toContain(key);
   });
 
   it('in keyed mode replaces phones only under a phone-like key and keeps numeric ids', () => {

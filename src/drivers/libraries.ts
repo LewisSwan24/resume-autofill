@@ -46,6 +46,15 @@ export const MOKA_PHONE_LISTS = ['select', 'select_info', 'bool_info', 'multi_se
 
 // NOTE: antd v5 Cascader root is `.ant-select.ant-cascader`, so cascader must precede select.
 export const LIBRARY_WIDGETS: LibraryWidget[] = [
+  // ---- Zoho's Lyte components. A list's box moves to the end of <body> when it opens; one that takes several
+  // shows each answer as a tag. Lists inside a suggesting text box (lyte-autocomplete) are no lists: see below.
+  {
+    lib: 'lyte',
+    kind: 'select',
+    root: 'crux-picklist-component lyte-dropdown, crux-phone-component lyte-dropdown',
+    multiple: 'ul.lyteMultipleSelect',
+  },
+
   // ---- Moka. Build hashes end every class, so these go by what comes before ----
   { lib: 'moka', kind: 'date', root: '.month-range-select' },
   { lib: 'moka', kind: 'date', root: 'label[class*="sd-Input-container"].day_info' },
@@ -198,6 +207,9 @@ export const LIBRARY_ROOT_SELECTOR = [
   ...LIBRARY_UNSUPPORTED.map((u) => u.root),
   ...LIBRARY_WIDGETS.map((w) => w.root),
 ].join(', ');
+
+/** A text box that suggests answers as you type and keeps whatever is typed: its combobox is no list. */
+export const FREE_TEXT_SUGGESTIONS = 'lyte-autocomplete';
 
 /** Comboboxes outside the libraries above. A native select says role=combobox too, but is handled as a select. */
 /** What a button says or shows when "pick one" really means a list opens. */

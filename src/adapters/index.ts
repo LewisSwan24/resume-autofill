@@ -15,6 +15,7 @@ import { successfactors } from './successfactors';
 import type { AtsAdapter } from './types';
 import { workable } from './workable';
 import { workday } from './workday';
+import { zoho } from './zoho';
 
 export const ADAPTERS: readonly AtsAdapter[] = [
   greenhouse,
@@ -31,6 +32,7 @@ export const ADAPTERS: readonly AtsAdapter[] = [
   jazzhr,
   jobvite,
   oracle,
+  zoho,
   moka,
   beisen,
   // Before ByteDance: on a domain of its own, a form of this system is Feishu's.

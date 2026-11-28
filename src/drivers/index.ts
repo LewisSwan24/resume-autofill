@@ -4,6 +4,7 @@ import { ariaAnswerButtonsDriver, ariaDriver } from './aria';
 import { elementDrivers } from './element';
 import { beisenDrivers } from './beisen';
 import { feishuDrivers } from './feishu';
+import { lyteDrivers } from './lyte';
 import { feishuDesktopDrivers } from './feishuDesktop';
 import { feishuMobileDrivers } from './feishuMobile';
 import { mokaDrivers } from './moka';
@@ -17,5 +18,5 @@ let registered = false;
 export function registerAllDrivers(): void {
   if (registered) return;
   registered = true;
-  for (const d of [...antdDrivers, ...elementDrivers, ...mokaDrivers, ...mokaMobileDrivers, ...feishuDrivers, ...feishuMobileDrivers, ...feishuDesktopDrivers, ...beisenDrivers, ariaDriver, ariaAnswerButtonsDriver, searchBoxDriver, workdayPromptDriver]) registerDriver(d);
+  for (const d of [...antdDrivers, ...elementDrivers, ...mokaDrivers, ...mokaMobileDrivers, ...feishuDrivers, ...feishuMobileDrivers, ...feishuDesktopDrivers, ...beisenDrivers, ...lyteDrivers, ariaDriver, ariaAnswerButtonsDriver, searchBoxDriver, workdayPromptDriver]) registerDriver(d);
 }

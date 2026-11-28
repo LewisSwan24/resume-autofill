@@ -12,6 +12,7 @@ import {
   LIBRARY_ROOT_SELECTOR,
   detectDateGranularity,
   isDateRangeRoot,
+  FREE_TEXT_SUGGESTIONS,
   isMokaDialCode,
   isAriaMultiple,
   isUnsupportedLibraryRoot,
@@ -302,6 +303,8 @@ function scanScope(
   // 2. Comboboxes outside those libraries consume their inner inputs too.
   for (const el of Array.from(scope.querySelectorAll<HTMLElement>(ARIA_COMBOBOX_SELECTOR))) {
     if (insideAny(el, blocked) || el.closest(LIBRARY_OVERLAY_SELECTOR)) continue;
+    // Its input is a plain text box: suggestions aside, what is typed stays.
+    if (el.closest(FREE_TEXT_SUGGESTIONS)) continue;
     blocked.add(el);
     if (isDisabledEl(el) || !isVisible(el)) continue;
     // A language switcher or site search: part of the page around the form.

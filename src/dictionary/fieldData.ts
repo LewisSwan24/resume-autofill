@@ -64,7 +64,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'basics.gender': s(
     '性别|您的性别|性别(男/女)|性别男女',
-    'Gender|Sex|Your gender|Gender (male/female)|Legal sex',
+    'Gender|Sex|Your gender|Gender (male/female)|Legal sex|Please indicate your gender|Indicate your gender|What is your gender',
     '认同|identity|identify|orientation|pronoun',
   ),
   'basics.birthDate': s(
@@ -376,7 +376,7 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'questions.workedHereBefore': s(
     '是否曾在本公司工作|是否在我司工作过|是否曾在本公司任职|是否曾就职于本公司|曾在本公司工作|是否为前员工|是否曾在我司实习|是否曾在本集团工作',
-    'Have you previously worked for this company|Have you previously worked for us|Have you worked for us before|Have you worked for us|Have you worked here before|Have you been employed here before|Previously employed by us|Former employee|Are you a former employee|Have you ever worked for|Have you previously worked for or are you currently working for|previously worked for or are you currently working for',
+    'Have you previously worked for this company|Have you previously worked for us|Have you worked for us before|Have you worked for us|Have you worked here before|Have you been employed here before|Previously employed by us|Former employee|Are you a former employee|Have you ever worked for|Have you previously worked for or are you currently working for|previously worked for or are you currently working for|Have you previously been employed by|Have you ever been employed by|Have you been employed by',
   ),
   'questions.referrerName': s(
     '内推人姓名|内推人|内推员工姓名|内推员工|推荐员工姓名|内部推荐人',
@@ -407,7 +407,9 @@ export const PERSONAL_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   ),
   'questions.englishWorkingLanguage': s(
     '英语是否可作为工作语言|英语能否作为工作语言|能否使用英语工作|是否能用英语工作|英文可否作为工作语言|是否可用英语办公',
-    'English as a working language|Can you use English as your working language|Are you comfortable using English as your working language|Can you work in English|Is English your working language',
+    'English as a working language|Can you use English as your working language|Are you comfortable using English as your working language|Can you work in English|Is English your working language|Are you fluent in English|Fluent in English|Are you fluent in English (speaking, writing, reading)',
+    // Asked of English and another language at once: a yes for English alone would answer for both.
+    '普通话|粤语|日语|韩语|法语|德语|西班牙语|其他语言|mandarin|cantonese|chinese|japanese|korean|french|german|spanish|other language',
   ),
   'questions.yearsExperience': s(
     '工作年限|工作年数|工作经验年限|相关工作年限|从业年限|累计工作年限',

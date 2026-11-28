@@ -47,7 +47,8 @@ export const MODULE_FIELD_SYNONYMS: Record<string, FieldSynonym> = {
   // Asked on each schooling card: is this one the highest?
   'education.isHighest': s(
     '是否最高学历|是否为最高学历|是否最高学位|是否为最高学位|是否是最高学历|最高学历与否',
-    'Is this your highest degree|Is this your highest qualification|Highest degree?|Highest qualification?',
+    // Not "Highest qualification?": with its mark dropped it reads as the degree asked over a list of degrees.
+    'Is this your highest degree|Is this your highest qualification|Is this the highest degree you hold',
   ),
   'education.educationType': s(
     '学历类型|学历性质|学习形式|学习方式|教育形式|学制类型|培养方式|就读方式|教育类型|全日制/非全日制|是否全日制|学习类型',

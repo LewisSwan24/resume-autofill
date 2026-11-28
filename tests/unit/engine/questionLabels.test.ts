@@ -41,6 +41,8 @@ const asked: [string, string, string?][] = [
   ['Have you previously worked for this company?', 'questions.workedHereBefore', YES_NO],
   ['Have you worked for us before?', 'questions.workedHereBefore', YES_NO],
   ['Have you previously worked for or are you currently working for Acme as an employee or contractor?', 'questions.workedHereBefore', YES_NO],
+  ['Have you previously been employed by Acme?', 'questions.workedHereBefore', YES_NO],
+  ['Have you ever been employed by Acme Pty Ltd?', 'questions.workedHereBefore', YES_NO],
   ['内推人姓名', 'questions.referrerName'],
   ['Who referred you to this role?', 'questions.referrerName'],
   ['是否愿意成为校园大使', 'questions.campusAmbassador', YES_NO],
@@ -50,6 +52,8 @@ const asked: [string, string, string?][] = [
   ['是否持有驾驶证', 'questions.driversLicence', YES_NO],
   ["Do you hold a current driver's licence?", 'questions.driversLicence', YES_NO],
   ['英语是否可作为工作语言', 'questions.englishWorkingLanguage', YES_NO],
+  ['Are you fluent in English (speaking, writing, reading)?', 'questions.englishWorkingLanguage', YES_NO],
+  ['Are you fluent in English?', 'questions.englishWorkingLanguage', YES_NO],
   ['工作年限', 'questions.yearsExperience'],
   ['How many years of professional experience do you have?', 'questions.yearsExperience'],
   ['带团队年限', 'questions.yearsLeading'],
@@ -85,10 +89,58 @@ describe('fields the resume already had, asked in longer words', () => {
     expect(c.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
   });
 
+  it('"Highest Level of Qualification" over a list of degrees is the degree, not whether a card is the highest', () => {
+    const degrees = `<select id="q"><option>Select an option...</option>${["High School Diploma", "Bachelor's Degree", "Master's Degree"]
+      .map((d) => `<option>${d}</option>`)
+      .join('')}</select>`;
+    for (const label of ['Highest Level of Qualification', 'Highest qualification']) {
+      const c = classify(label, degrees);
+      expect(c.fieldKey, label).toBe('education.degree');
+      expect(c.confidence, label).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+    }
+  });
+
+  it('whether a schooling card is the highest is still asked as such', () => {
+    for (const label of ['Is this your highest qualification?', '是否最高学历']) {
+      expect(classify(label, YES_NO).fieldKey, label).toBe('education.isHighest');
+    }
+  });
+
   it('an availability for a call or an interview is not the start date', () => {
     for (const label of ['Earliest availability for a video call', 'When are you available for an interview?']) {
       expect(classify(label).fieldKey, label).not.toBe('jobIntention.availableFrom');
     }
+  });
+});
+
+describe('fluency asked of English and another language at once', () => {
+  // Yes to English alone would answer for the other language too.
+  it.each(['Are you fluent in English and Mandarin?', 'Are you fluent in English and Japanese (speaking, writing)?', '英语和日语能否作为工作语言'])(
+    '"%s" is not English as a working language',
+    (label) => {
+      expect(classify(label, YES_NO).fieldKey).not.toBe('questions.englishWorkingLanguage');
+    },
+  );
+});
+
+describe('gender asked in a radio group’s legend', () => {
+  // Jobvite writes the question as the legend of a fieldset of radios, one of which says the applicant does not
+  // identify as either: that answer is not the question asking about gender identity.
+  const group = (legend: string) =>
+    `<fieldset><legend>${legend}</legend>${['Male', 'Female', 'I do not identify as either Male or Female', 'Prefer not to Answer']
+      .map((v, i) => `<label for="g${i}"><input id="g${i}" name="g" type="radio" value="${v}">${v}</label>`)
+      .join('')}</fieldset>`;
+
+  it.each(['Please Indicate Your Gender', 'Please indicate your gender:', 'Gender'])('"%s" is the gender', (legend) => {
+    document.body.innerHTML = `<form>${group(legend)}</form>`;
+    const c = scanDocument(document).classifications[0]!;
+    expect(c.fieldKey).toBe('basics.gender');
+    expect(c.confidence).toBeGreaterThanOrEqual(FILL_THRESHOLD);
+  });
+
+  it('a legend asking about gender identity still is not', () => {
+    document.body.innerHTML = `<form>${group('How do you identify your gender identity?')}</form>`;
+    expect(scanDocument(document).classifications[0]!.fieldKey).not.toBe('basics.gender');
   });
 });
 
